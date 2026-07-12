@@ -497,13 +497,36 @@ function renderBlocksSection(todoId, blocks) {
       'block w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
     box.appendChild(contentArea);
 
+    const saveErrEl = document.createElement('p');
+    saveErrEl.className = 'text-xs text-red-600 hidden';
+    box.appendChild(saveErrEl);
+
+    // A block's own save is purely a field-level update: no block/subtask is
+    // created or deleted and no ids change, so there is nothing structural to
+    // reload. Re-fetching and rebuilding the whole blocks section here would
+    // recreate this exact input/textarea from scratch, which — since save
+    // fires on blur and runs async — could wipe out keystrokes the user has
+    // already typed into this (or another) block by the time the response
+    // comes back. Instead, on success we just keep the in-memory
+    // detailData.blocks entry (this same `block` object) in sync with what's
+    // already on screen and stop; on failure we show an inline error without
+    // touching the field's value so the user's input is preserved.
     const saveBlock = async () => {
-      await put('/api/todo_blocks/' + block.id, {
-        header: headerInput.value,
-        content: contentArea.value,
+      const header = headerInput.value;
+      const content = contentArea.value;
+      const res = await put('/api/todo_blocks/' + block.id, {
+        header,
+        content,
         sort_order: block.sort_order,
       });
-      await loadTodoDetails(todoId);
+      if (res.ok) {
+        saveErrEl.classList.add('hidden');
+        block.header = header;
+        block.content = content;
+        return;
+      }
+      saveErrEl.textContent = res.error ?? 'Failed to save.';
+      saveErrEl.classList.remove('hidden');
     };
     headerInput.addEventListener('blur', saveBlock);
     contentArea.addEventListener('blur', saveBlock);
