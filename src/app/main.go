@@ -70,6 +70,15 @@ func main() {
 	r.Put("/api/journal_entries/{id}", handlers.JournalEntriesUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/journal_entries/{id}", handlers.JournalEntriesDeleteDELETE(database.Read, database.Write, appCache))
 
+	r.Get("/api/vision_board", handlers.VisionBoardGET(database.Read, database.Write, appCache))
+	r.Post("/api/vision_categories_create", handlers.VisionCategoriesCreatePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/vision_categories/{id}", handlers.VisionCategoriesDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/vision_goals_create", handlers.VisionGoalsCreatePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/vision_goals/{id}", handlers.VisionGoalsDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/vision_milestones_create", handlers.VisionMilestonesCreatePOST(database.Read, database.Write, appCache))
+	r.Post("/api/vision_milestones/{id}/toggle", handlers.VisionMilestonesTogglePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/vision_milestones/{id}", handlers.VisionMilestonesDeleteDELETE(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
