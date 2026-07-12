@@ -12,6 +12,7 @@ func TodosGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		listModel := models.NewTodoListModel(readDB, writeDB, appCache)
 		todoModel := models.NewTodoModel(readDB, writeDB, appCache)
+		subtaskModel := models.NewSubtaskModel(readDB, writeDB, appCache)
 		lists, err := listModel.GetAll()
 		if err != nil {
 			jsonError(w, "failed to load", 500)
@@ -22,6 +23,11 @@ func TodosGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFunc {
 			jsonError(w, "failed to load", 500)
 			return
 		}
-		jsonOK(w, map[string]any{"lists": lists, "todos": todos})
+		subtasks, err := subtaskModel.GetAll()
+		if err != nil {
+			jsonError(w, "failed to load", 500)
+			return
+		}
+		jsonOK(w, map[string]any{"lists": lists, "todos": todos, "subtasks": subtasks})
 	}
 }

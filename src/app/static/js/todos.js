@@ -177,10 +177,13 @@ let editingTodoIsDone = false;
 let editingTodoSortOrder = 0;
 let todoFormTitleEl, todoListSelect, todoTitleInput, todoDescriptionInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
 
-// Inline subtasks state — which todos are expanded, and their cached
-// subtask lists (fetched lazily on first expand, keyed by todo id). Several
-// todos can be expanded at once; each one's expand area lives inside that
-// todo's own <li> so it never disturbs the sidebar, other todos, or forms.
+// Inline subtasks state. The bulk /api/todos response now includes every
+// subtask up front (grouped here by todo_id), so every todo's subtasks are
+// already in memory on page load — needed so mobile can show them all by
+// default with no per-item fetch. `expandedTodoIds` still tracks the
+// desktop show/hide toggle (several todos can be expanded independently);
+// on mobile the toggle button is hidden and subtasks always render
+// regardless of this set (see the `md:hidden` class logic below).
 let expandedTodoIds = new Set();
 let subtasksByTodoId = new Map();
 
@@ -196,6 +199,15 @@ async function loadList() {
   }
   lists = res.data?.lists ?? [];
   todos = res.data?.todos ?? [];
+
+  subtasksByTodoId = new Map();
+  (res.data?.subtasks ?? []).forEach((sub) => {
+    if (!subtasksByTodoId.has(sub.todo_id)) subtasksByTodoId.set(sub.todo_id, []);
+    subtasksByTodoId.get(sub.todo_id).push(sub);
+  });
+  // The bulk endpoint orders subtasks newest-first overall; sort each
+  // todo's own group back to oldest-first, matching prior per-todo order.
+  subtasksByTodoId.forEach((subs) => subs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
 
   if (activeListId === null || !lists.some((l) => l.id === activeListId)) {
     activeListId = lists.length ? lists[0].id : null;
@@ -380,24 +392,24 @@ function renderMain() {
     const actions = document.createElement('div');
     actions.className = 'flex items-center gap-2 shrink-0';
 
+    // Hidden on mobile: subtasks always render there (see subWrap below),
+    // so a toggle with no visible effect at that width would just confuse.
     const subtasksBtn = document.createElement('button');
     subtasksBtn.type = 'button';
     subtasksBtn.className =
-      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+      'hidden md:inline-block px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     subtasksBtn.textContent = expandedTodoIds.has(item.id)
       ? 'Hide Subtasks'
       : item.subtask_count > 0
         ? `Subtasks (${item.subtask_count})`
         : 'Subtasks';
-    subtasksBtn.addEventListener('click', async () => {
+    subtasksBtn.addEventListener('click', () => {
       if (expandedTodoIds.has(item.id)) {
         expandedTodoIds.delete(item.id);
-        render();
-        return;
+      } else {
+        expandedTodoIds.add(item.id);
       }
-      expandedTodoIds.add(item.id);
       render();
-      await loadSubtasks(item.id);
     });
     actions.appendChild(subtasksBtn);
 
@@ -427,13 +439,15 @@ function renderMain() {
     topRow.appendChild(actions);
     li.appendChild(topRow);
 
-    if (expandedTodoIds.has(item.id)) {
-      const subWrap = document.createElement('div');
-      subWrap.id = 'subtasks-inline-' + item.id;
-      subWrap.className = 'pl-8 border-t border-hairline pt-3';
-      subWrap.appendChild(renderInlineSubtasks(item.id));
-      li.appendChild(subWrap);
-    }
+    // Always in the DOM (data's already loaded — see loadList) so mobile
+    // can show it unconditionally. On mobile it's always visible; on
+    // desktop `md:hidden` hides it unless this todo is expanded.
+    const subWrap = document.createElement('div');
+    subWrap.id = 'subtasks-inline-' + item.id;
+    subWrap.className =
+      'pl-8 border-t border-hairline pt-3' + (expandedTodoIds.has(item.id) ? '' : ' md:hidden');
+    subWrap.appendChild(renderInlineSubtasks(item.id));
+    li.appendChild(subWrap);
 
     li.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', String(item.id));
@@ -467,12 +481,11 @@ function renderMain() {
   return section;
 }
 
-// Fetches one todo's subtasks and caches them, then refreshes just that
-// todo's inline expand area. Reuses the existing combined details endpoint
-// but only keeps the subtasks — blocks aren't shown here.
+// Refetches one todo's subtasks after a create/toggle/delete and refreshes
+// just that todo's inline block. Not used for the initial render — the
+// bulk /api/todos response already has every todo's subtasks (see loadList).
 async function loadSubtasks(todoId) {
   const res = await get('/api/todos/' + todoId + '/details');
-  if (!expandedTodoIds.has(todoId)) return; // collapsed before the response arrived
   subtasksByTodoId.set(todoId, res.ok ? (res.data.subtasks ?? []) : []);
   refreshSubtasksInline(todoId);
 }
@@ -488,16 +501,9 @@ function refreshSubtasksInline(todoId) {
 }
 
 function renderInlineSubtasks(todoId) {
-  const subtasks = subtasksByTodoId.get(todoId);
-
-  if (subtasks === undefined) {
-    const wrap = document.createElement('div');
-    const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
-    p.textContent = 'Loading...';
-    wrap.appendChild(p);
-    return wrap;
-  }
+  // No "loading" state needed — every todo's subtasks arrive with the
+  // initial bulk load (loadList); a todo with none simply isn't in the map.
+  const subtasks = subtasksByTodoId.get(todoId) ?? [];
 
   const wrap = document.createElement('div');
   wrap.className = 'space-y-2';

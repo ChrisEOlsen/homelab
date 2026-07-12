@@ -102,3 +102,22 @@
 .collapsible-mobile > summary.collapsible-toggle::-webkit-details-marker {
   display: none;
 }
+
+/*
+ * Mobile density
+ * --------------
+ * Tailwind's whole spacing scale (p-4, gap-2, space-y-3, …) is
+ * `calc(var(--spacing) * N)`, and its text-size scale is rem-based off the
+ * root font-size — so overriding both here tightens every section's
+ * padding/gaps AND nudges body text down slightly, app-wide, on every page,
+ * without touching a single className. Content gets more room to actually
+ * show instead of truncating behind oversized touch-device padding.
+ */
+@media (max-width: 767px) {
+  html {
+    font-size: 15px;
+  }
+  :root {
+    --spacing: 0.2rem;
+  }
+}
