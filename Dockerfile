@@ -9,16 +9,20 @@ RUN ARCH=$(uname -m) && \
         -o /usr/local/bin/tailwindcss \
     && chmod +x /usr/local/bin/tailwindcss
 
-# Build MCP server binary
+# Build MCP server binary — copy go.mod/go.sum first so the dependency
+# download layer only invalidates when dependencies actually change,
+# not on every source edit.
 WORKDIR /src/builder
-COPY src/builder/ ./
+COPY src/builder/go.mod src/builder/go.sum ./
 RUN go mod tidy
+COPY src/builder/ ./
 RUN CGO_ENABLED=1 go build -o /usr/local/bin/mcp-server .
 
-# Pre-download app dependencies
+# Pre-download app dependencies — same layering trick.
 WORKDIR /src/app
-COPY src/app/ ./
+COPY src/app/go.mod src/app/go.sum ./
 RUN go mod tidy
+COPY src/app/ ./
 
 # ---- app: unchanged runtime, live-builds the Go app on every container start ----
 FROM builder AS app
