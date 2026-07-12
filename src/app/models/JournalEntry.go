@@ -42,9 +42,11 @@ func (m *JournalEntryModel) GetAll() ([]JournalEntry, error) {
 	var items []JournalEntry
 	for rows.Next() {
 		var item JournalEntry
-		if err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.Mood, &item.EntryDate, &item.CreatedAt); err != nil {
+		var title sql.NullString
+		if err := rows.Scan(&item.ID, &title, &item.Content, &item.Mood, &item.EntryDate, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Title = title.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -56,10 +58,12 @@ func (m *JournalEntryModel) GetAll() ([]JournalEntry, error) {
 func (m *JournalEntryModel) Find(id int64) (*JournalEntry, error) {
 	row := m.readDB.QueryRow("SELECT id, title, content, mood, entry_date, created_at FROM journal_entries WHERE id = ?", id)
 	var item JournalEntry
-	err := row.Scan(&item.ID, &item.Title, &item.Content, &item.Mood, &item.EntryDate, &item.CreatedAt)
+	var title sql.NullString
+	err := row.Scan(&item.ID, &title, &item.Content, &item.Mood, &item.EntryDate, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.Title = title.String
 	return &item, nil
 }
 
