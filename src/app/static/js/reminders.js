@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -119,7 +164,7 @@ function renderList(items) {
     info.appendChild(titleEl);
 
     const metaEl = document.createElement('p');
-    metaEl.className = 'font-mono text-xs text-ink-dim';
+    metaEl.className = 'text-xs text-ink-dim';
     metaEl.textContent = `${formatRemindAt(item.remind_at)} · ${recurrenceLabel(item)}`;
     info.appendChild(metaEl);
 
@@ -131,7 +176,7 @@ function renderList(items) {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     toggleBtn.textContent = item.is_active ? 'Active' : 'Inactive';
     toggleBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -144,7 +189,7 @@ function renderList(items) {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
+      'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -216,19 +261,17 @@ async function init() {
 init();
 
 function setupRemindersForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  formTitleEl = document.createElement('h3');
-  formTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  formTitleEl.textContent = 'New Reminder';
-  wrapper.appendChild(formTitleEl);
+  const { details, body, labelEl } = makeCollapsibleSection(
+    'New Reminder',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
+  formTitleEl = labelEl;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -240,7 +283,7 @@ function setupRemindersForm(container) {
   form.appendChild(titleInput);
 
   const remindAtLabel = document.createElement('label');
-  remindAtLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  remindAtLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   remindAtLabel.textContent = 'Remind At';
   remindAtInput = document.createElement('input');
   remindAtInput.type = 'datetime-local';
@@ -252,7 +295,7 @@ function setupRemindersForm(container) {
   form.appendChild(remindAtInput);
 
   const recurrenceFieldLabel = document.createElement('label');
-  recurrenceFieldLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  recurrenceFieldLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   recurrenceFieldLabel.textContent = 'Recurrence';
   recurrenceSelect = document.createElement('select');
   recurrenceSelect.name = 'recurrence_type';
@@ -298,14 +341,14 @@ function setupRemindersForm(container) {
 
   submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Reminder';
   btnRow.appendChild(submitBtn);
 
   cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', resetFormToCreateMode);
   btnRow.appendChild(cancelBtn);
@@ -347,6 +390,6 @@ function setupRemindersForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 }

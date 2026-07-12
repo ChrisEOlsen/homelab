@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 const formsContainer = document.getElementById('forms-container');
 
@@ -158,7 +203,12 @@ function render() {
 
       tabsWrap.appendChild(tab);
     });
-    app.appendChild(tabsWrap);
+    const { details: tabsDetails, body: tabsBody } = makeCollapsibleSection(
+      'Categories',
+      'border border-hairline bg-surface p-5'
+    );
+    tabsBody.appendChild(tabsWrap);
+    app.appendChild(tabsDetails);
   }
 
   const selected = getSelectedCategory();
@@ -169,7 +219,7 @@ function render() {
     entriesSection.className = 'mt-6 space-y-4';
 
     const heading = document.createElement('h2');
-    heading.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
+    heading.className = 'text-xs tracking-widest text-ink-dim uppercase';
     heading.textContent = selected.title + ' entries';
     entriesSection.appendChild(heading);
 
@@ -207,13 +257,13 @@ function renderEntryTable(schema) {
 
   schema.forEach((field) => {
     const th = document.createElement('th');
-    th.className = 'text-left px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink-dim';
+    th.className = 'text-left px-4 py-2 text-xs uppercase tracking-wide text-ink-dim';
     th.textContent = field.name;
     headRow.appendChild(th);
   });
 
   const actionsTh = document.createElement('th');
-  actionsTh.className = 'text-left px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink-dim';
+  actionsTh.className = 'text-left px-4 py-2 text-xs uppercase tracking-wide text-ink-dim';
   actionsTh.textContent = 'Actions';
   headRow.appendChild(actionsTh);
 
@@ -246,7 +296,7 @@ function renderEntryTable(schema) {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
+      'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
@@ -272,20 +322,14 @@ function renderEntryTable(schema) {
 }
 
 function renderEntryForm(category, schema) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3';
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  titleEl.textContent = 'New Entry';
-  wrapper.appendChild(titleEl);
+  const { details, body } = makeCollapsibleSection('New Entry', 'border border-hairline bg-surface p-5 space-y-3');
 
   if (schema.length === 0) {
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
     p.textContent = 'Add fields to this category to start logging entries.';
-    wrapper.appendChild(p);
-    return wrapper;
+    body.appendChild(p);
+    return details;
   }
 
   const form = document.createElement('form');
@@ -295,7 +339,7 @@ function renderEntryForm(category, schema) {
 
   schema.forEach((field) => {
     const label = document.createElement('label');
-    label.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+    label.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
     label.textContent = field.name;
 
     const input = document.createElement('input');
@@ -312,7 +356,7 @@ function renderEntryForm(category, schema) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Entry';
   form.appendChild(submitBtn);
 
@@ -345,8 +389,8 @@ function renderEntryForm(category, schema) {
     }
   });
 
-  wrapper.appendChild(form);
-  return wrapper;
+  body.appendChild(form);
+  return details;
 }
 
 function addFieldRow() {
@@ -395,19 +439,16 @@ function resetCategoryForm() {
 }
 
 function setupLogCategoriesCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  titleEl.textContent = 'New Log Category';
-  wrapper.appendChild(titleEl);
+  const { details, body } = makeCollapsibleSection(
+    'New Log Category',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   catTitleInput = document.createElement('input');
   catTitleInput.type = 'text';
@@ -419,7 +460,7 @@ function setupLogCategoriesCreateForm(container) {
   form.appendChild(catTitleInput);
 
   const fieldsLabel = document.createElement('label');
-  fieldsLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  fieldsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   fieldsLabel.textContent = 'Fields';
   form.appendChild(fieldsLabel);
 
@@ -430,7 +471,7 @@ function setupLogCategoriesCreateForm(container) {
   const addFieldBtn = document.createElement('button');
   addFieldBtn.type = 'button';
   addFieldBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   addFieldBtn.textContent = '+ Add field';
   addFieldBtn.addEventListener('click', () => addFieldRow());
   form.appendChild(addFieldBtn);
@@ -438,7 +479,7 @@ function setupLogCategoriesCreateForm(container) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'block px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'block px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Category';
   form.appendChild(submitBtn);
 
@@ -470,8 +511,8 @@ function setupLogCategoriesCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 
   addFieldRow();
 }

@@ -10,12 +10,12 @@
 
   <header class="sticky top-0 z-20 border-b border-hairline bg-surface">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-      <a href="/static/pages/home.html" class="flex items-center gap-2 font-mono text-sm tracking-wide shrink-0">
+      <a href="/static/pages/home.html" class="flex items-center gap-2 text-sm tracking-wide shrink-0">
         <span class="h-2 w-2 rounded-full bg-accent led-pulse" aria-hidden="true"></span>
         HOMELAB
       </a>
 
-      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline font-mono text-xs tracking-wide overflow-x-auto">
+      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline text-xs tracking-wide overflow-x-auto">
         <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">DASHBOARD</a>
         <a href="/static/pages/reminders.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">REMINDERS</a>
         <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
@@ -29,7 +29,7 @@
         <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">LOGGER</a>
       </nav>
 
-      <div class="hidden md:flex items-center gap-1.5 shrink-0 font-mono text-xs text-ink-dim tabular-nums">
+      <div class="hidden md:flex items-center gap-1.5 shrink-0 text-xs text-ink-dim tabular-nums">
         <span>LOCAL</span>
         <time id="clock">--:--:--</time>
       </div>
@@ -47,13 +47,13 @@
 
   <aside id="mobile-drawer" class="md:hidden fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-surface border-l border-hairline z-40 translate-x-full transition-transform duration-200 ease-out flex flex-col">
     <div class="h-14 flex items-center justify-between px-4 border-b border-hairline shrink-0">
-      <span class="font-mono text-xs tracking-widest text-ink-dim">MENU</span>
+      <span class="text-xs tracking-widest text-ink-dim">MENU</span>
       <button id="nav-close" type="button" class="text-ink-dim hover:text-ink text-lg leading-none px-2 py-1">
         <span aria-hidden="true">&times;</span>
         <span class="sr-only">Close menu</span>
       </button>
     </div>
-    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 font-mono text-sm tracking-wide overflow-y-auto">
+    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 text-sm tracking-wide overflow-y-auto">
       <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">DASHBOARD</a>
       <a href="/static/pages/reminders.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">REMINDERS</a>
       <span class="px-3 py-3 flex items-center gap-2 text-ink border-b border-hairline">
@@ -66,7 +66,7 @@
       <a href="/static/pages/vision_board.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">VISION BOARD</a>
       <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">LOGGER</a>
     </nav>
-    <div class="mt-auto px-4 py-3 border-t border-hairline font-mono text-xs text-ink-dim flex items-center gap-1.5 tabular-nums shrink-0">
+    <div class="mt-auto px-4 py-3 border-t border-hairline text-xs text-ink-dim flex items-center gap-1.5 tabular-nums shrink-0">
       <span>LOCAL</span>
       <time id="clock-mobile">--:--:--</time>
     </div>
@@ -78,7 +78,7 @@
     <div id="forms-container"></div>
   </main>
 
-  <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim font-mono">
+  <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim">
     HOMELAB
   </footer>
 

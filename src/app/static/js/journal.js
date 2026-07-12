@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 
 const MONTH_NAMES = [
@@ -107,7 +152,7 @@ function renderSidebar() {
 
   jNewBtn = document.createElement('button');
   jNewBtn.type = 'button';
-  jNewBtn.className = 'w-full px-3 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  jNewBtn.className = 'w-full px-3 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   jNewBtn.textContent = 'New Entry';
   jNewBtn.addEventListener('click', async () => {
     jNewBtn.disabled = true;
@@ -120,11 +165,14 @@ function renderSidebar() {
   });
   sidebar.appendChild(jNewBtn);
 
+  const { details, body } = makeCollapsibleSection('Entries', 'border border-hairline bg-surface p-4');
+  sidebar.appendChild(details);
+
   if (entries.length === 0) {
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
     p.textContent = 'No entries yet.';
-    sidebar.appendChild(p);
+    body.appendChild(p);
     return sidebar;
   }
 
@@ -134,7 +182,7 @@ function renderSidebar() {
     monthWrap.className = 'space-y-1';
 
     const header = document.createElement('p');
-    header.className = 'text-xs font-mono uppercase tracking-wide text-ink-dim pt-2';
+    header.className = 'text-xs uppercase tracking-wide text-ink-dim pt-2';
     header.textContent = monthLabel(key);
     monthWrap.appendChild(header);
 
@@ -160,7 +208,7 @@ function renderSidebar() {
     });
 
     monthWrap.appendChild(list);
-    sidebar.appendChild(monthWrap);
+    body.appendChild(monthWrap);
   });
 
   return sidebar;
@@ -181,7 +229,7 @@ function renderDetail() {
   }
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   jTitleInput = document.createElement('input');
   jTitleInput.type = 'text';
@@ -196,7 +244,7 @@ function renderDetail() {
   const moodWrap = document.createElement('div');
   moodWrap.className = 'flex-1';
   const moodLabel = document.createElement('label');
-  moodLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  moodLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   moodLabel.textContent = 'Mood';
   jMoodSelect = document.createElement('select');
   jMoodSelect.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
@@ -214,7 +262,7 @@ function renderDetail() {
   const dateWrap = document.createElement('div');
   dateWrap.className = 'flex-1';
   const dateLabel = document.createElement('label');
-  dateLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  dateLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   dateLabel.textContent = 'Date';
   jDateInput = document.createElement('input');
   jDateInput.type = 'date';
@@ -227,7 +275,7 @@ function renderDetail() {
   detail.appendChild(metaRow);
 
   const contentLabel = document.createElement('label');
-  contentLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  contentLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   contentLabel.textContent = 'Content';
   jContentInput = document.createElement('textarea');
   jContentInput.rows = 10;
@@ -245,7 +293,7 @@ function renderDetail() {
 
   jSaveBtn = document.createElement('button');
   jSaveBtn.type = 'button';
-  jSaveBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  jSaveBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   jSaveBtn.textContent = 'Save';
   jSaveBtn.addEventListener('click', async () => {
     jSaveBtn.disabled = true;
@@ -269,7 +317,7 @@ function renderDetail() {
 
   jDeleteBtn = document.createElement('button');
   jDeleteBtn.type = 'button';
-  jDeleteBtn.className = 'px-4 py-2 text-xs font-mono uppercase tracking-wide border border-danger text-danger hover:bg-danger/10 transition-colors';
+  jDeleteBtn.className = 'px-4 py-2 text-xs uppercase tracking-wide border border-danger text-danger hover:bg-danger/10 transition-colors';
   jDeleteBtn.textContent = 'Delete';
   jDeleteBtn.addEventListener('click', async () => {
     jDeleteBtn.disabled = true;

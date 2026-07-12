@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -154,7 +199,12 @@ function render() {
     tabsWrap.appendChild(tab);
   });
 
-  app.appendChild(tabsWrap);
+  const { details: tabsDetails, body: tabsBody } = makeCollapsibleSection(
+    'Categories',
+    'border border-hairline bg-surface p-5'
+  );
+  tabsBody.appendChild(tabsWrap);
+  app.appendChild(tabsDetails);
 
   const goalMap = goalsByCategory();
   const milestoneMap = milestonesByGoal();
@@ -189,7 +239,7 @@ function renderGoalCard(goal, goalMilestones) {
   titleEl.className = 'text-sm font-semibold text-ink';
   titleEl.textContent = goal.title;
   const yearEl = document.createElement('p');
-  yearEl.className = 'font-mono text-xs text-ink-dim';
+  yearEl.className = 'text-xs text-ink-dim';
   yearEl.textContent = 'Target: ' + goal.target_year;
   titleWrap.appendChild(titleEl);
   titleWrap.appendChild(yearEl);
@@ -198,7 +248,7 @@ function renderGoalCard(goal, goalMilestones) {
   const goalDelBtn = document.createElement('button');
   goalDelBtn.type = 'button';
   goalDelBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors shrink-0';
+    'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors shrink-0';
   goalDelBtn.textContent = 'Delete';
   goalDelBtn.addEventListener('click', async () => {
     goalDelBtn.disabled = true;
@@ -230,7 +280,7 @@ function renderGoalCard(goal, goalMilestones) {
   card.appendChild(barOuter);
 
   const pctLabel = document.createElement('p');
-  pctLabel.className = 'font-mono text-xs text-ink-dim';
+  pctLabel.className = 'text-xs text-ink-dim';
   pctLabel.textContent = pct + '% complete';
   card.appendChild(pctLabel);
 
@@ -337,19 +387,16 @@ async function init() {
 init();
 
 function setupVisionCategoriesCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  titleEl.textContent = 'New Category';
-  wrapper.appendChild(titleEl);
+  const { details, body } = makeCollapsibleSection(
+    'New Category',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -362,7 +409,7 @@ function setupVisionCategoriesCreateForm(container) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Category';
   form.appendChild(submitBtn);
 
@@ -386,24 +433,21 @@ function setupVisionCategoriesCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 }
 
 function setupVisionGoalsCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  titleEl.textContent = 'New Goal';
-  wrapper.appendChild(titleEl);
+  const { details, body } = makeCollapsibleSection(
+    'New Goal',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const categoryLabel = document.createElement('label');
-  categoryLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  categoryLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   categoryLabel.textContent = 'Category';
   vgCategorySelect = document.createElement('select');
   vgCategorySelect.name = 'category_id';
@@ -414,7 +458,7 @@ function setupVisionGoalsCreateForm(container) {
   form.appendChild(vgCategorySelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -426,7 +470,7 @@ function setupVisionGoalsCreateForm(container) {
   form.appendChild(titleInput);
 
   const targetYearLabel = document.createElement('label');
-  targetYearLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  targetYearLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   targetYearLabel.textContent = 'Target Year';
   const targetYearInput = document.createElement('input');
   targetYearInput.type = 'number';
@@ -439,7 +483,7 @@ function setupVisionGoalsCreateForm(container) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Goal';
   form.appendChild(submitBtn);
 
@@ -467,26 +511,23 @@ function setupVisionGoalsCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 
   populateCategorySelect();
 }
 
 function setupVisionMilestonesCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  const titleEl = document.createElement('h3');
-  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  titleEl.textContent = 'New Milestone';
-  wrapper.appendChild(titleEl);
+  const { details, body } = makeCollapsibleSection(
+    'New Milestone',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const goalLabel = document.createElement('label');
-  goalLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  goalLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   goalLabel.textContent = 'Goal';
   vmGoalSelect = document.createElement('select');
   vmGoalSelect.name = 'goal_id';
@@ -497,7 +538,7 @@ function setupVisionMilestonesCreateForm(container) {
   form.appendChild(vmGoalSelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -510,7 +551,7 @@ function setupVisionMilestonesCreateForm(container) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Milestone';
   form.appendChild(submitBtn);
 
@@ -537,8 +578,8 @@ function setupVisionMilestonesCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 
   populateGoalSelect();
 }

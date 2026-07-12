@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -101,15 +146,17 @@ function render() {
 }
 
 function renderSidebar() {
-  const aside = document.createElement('aside');
-  aside.className = 'w-full sm:w-56 shrink-0 space-y-2';
+  const { details, body } = makeCollapsibleSection(
+    'Lists',
+    'w-full sm:w-56 shrink-0 border border-hairline bg-surface p-4 space-y-2'
+  );
 
   if (lists.length === 0) {
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
     p.textContent = 'No lists yet.';
-    aside.appendChild(p);
-    return aside;
+    body.appendChild(p);
+    return details;
   }
 
   const ul = document.createElement('ul');
@@ -177,8 +224,8 @@ function renderSidebar() {
     ul.appendChild(li);
   });
 
-  aside.appendChild(ul);
-  return aside;
+  body.appendChild(ul);
+  return details;
 }
 
 function renderMain() {
@@ -207,7 +254,7 @@ function renderMain() {
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
   clearBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   clearBtn.textContent = 'Clear Completed';
   clearBtn.addEventListener('click', async () => {
     if (!window.confirm('Delete all completed todos in this list?')) return;
@@ -257,7 +304,7 @@ function renderMain() {
     info.appendChild(titleEl);
     if (item.description) {
       const descEl = document.createElement('p');
-      descEl.className = 'font-mono text-xs text-ink-dim truncate';
+      descEl.className = 'text-xs text-ink-dim truncate';
       descEl.textContent = item.description;
       info.appendChild(descEl);
     }
@@ -269,7 +316,7 @@ function renderMain() {
     const detailsBtn = document.createElement('button');
     detailsBtn.type = 'button';
     detailsBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     detailsBtn.textContent = detailTodoId === item.id ? 'Hide Details' : 'Details';
     detailsBtn.addEventListener('click', async () => {
       if (detailTodoId === item.id) {
@@ -288,7 +335,7 @@ function renderMain() {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     editBtn.textContent = 'Edit';
     editBtn.addEventListener('click', () => populateTodoFormForEdit(item));
     actions.appendChild(editBtn);
@@ -296,7 +343,7 @@ function renderMain() {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
+      'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
@@ -391,13 +438,13 @@ function renderDetailPanel() {
   headerRow.className = 'flex items-center justify-between gap-4';
 
   const heading = document.createElement('h3');
-  heading.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
+  heading.className = 'text-xs tracking-widest text-ink-dim uppercase';
   heading.textContent = detailData ? 'Details: ' + detailData.todo.title : 'Loading details...';
   headerRow.appendChild(heading);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'font-mono text-xs text-ink-dim hover:text-ink';
+  closeBtn.className = 'text-xs text-ink-dim hover:text-ink';
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => {
     detailTodoId = null;
@@ -428,7 +475,7 @@ function renderSubtasksSection(todoId, subtasks) {
   wrap.className = 'space-y-2';
 
   const heading = document.createElement('h4');
-  heading.className = 'text-xs font-mono text-ink-dim uppercase tracking-wide';
+  heading.className = 'text-xs text-ink-dim uppercase tracking-wide';
   heading.textContent = 'Subtasks';
   wrap.appendChild(heading);
 
@@ -458,7 +505,7 @@ function renderSubtasksSection(todoId, subtasks) {
 
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
-      deleteBtn.className = 'font-mono text-xs text-ink-dim hover:text-danger shrink-0';
+      deleteBtn.className = 'text-xs text-ink-dim hover:text-danger shrink-0';
       deleteBtn.textContent = 'Delete';
       deleteBtn.addEventListener('click', async () => {
         deleteBtn.disabled = true;
@@ -518,7 +565,7 @@ function renderBlocksSection(todoId, blocks) {
   wrap.className = 'space-y-2';
 
   const heading = document.createElement('h4');
-  heading.className = 'text-xs font-mono text-ink-dim uppercase tracking-wide';
+  heading.className = 'text-xs text-ink-dim uppercase tracking-wide';
   heading.textContent = 'Sections';
   wrap.appendChild(heading);
 
@@ -545,7 +592,7 @@ function renderBlocksSection(todoId, blocks) {
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
-    deleteBtn.className = 'font-mono text-xs text-ink-dim hover:text-danger shrink-0';
+    deleteBtn.className = 'text-xs text-ink-dim hover:text-danger shrink-0';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
@@ -610,7 +657,7 @@ function renderBlocksSection(todoId, blocks) {
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   addBtn.textContent = 'Add Section';
   addBtn.addEventListener('click', async () => {
     addBtn.disabled = true;
@@ -704,19 +751,17 @@ async function init() {
 init();
 
 function setupTodoListsCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  listFormTitleEl = document.createElement('h3');
-  listFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  listFormTitleEl.textContent = 'New List';
-  wrapper.appendChild(listFormTitleEl);
+  const { details, body, labelEl } = makeCollapsibleSection(
+    'New List',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
+  listFormTitleEl = labelEl;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   listTitleInput = document.createElement('input');
   listTitleInput.type = 'text';
@@ -732,14 +777,14 @@ function setupTodoListsCreateForm(container) {
 
   listSubmitBtn = document.createElement('button');
   listSubmitBtn.type = 'submit';
-  listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   listSubmitBtn.textContent = 'Add List';
   btnRow.appendChild(listSubmitBtn);
 
   listCancelBtn = document.createElement('button');
   listCancelBtn.type = 'button';
   listCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   listCancelBtn.textContent = 'Cancel';
   listCancelBtn.addEventListener('click', resetListFormToCreateMode);
   btnRow.appendChild(listCancelBtn);
@@ -770,24 +815,22 @@ function setupTodoListsCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 }
 
 function setupTodosCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  todoFormTitleEl = document.createElement('h3');
-  todoFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  todoFormTitleEl.textContent = 'New Todo';
-  wrapper.appendChild(todoFormTitleEl);
+  const { details, body, labelEl } = makeCollapsibleSection(
+    'New Todo',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
+  todoFormTitleEl = labelEl;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const listLabel = document.createElement('label');
-  listLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  listLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   listLabel.textContent = 'List';
   todoListSelect = document.createElement('select');
   todoListSelect.name = 'list_id';
@@ -798,7 +841,7 @@ function setupTodosCreateForm(container) {
   form.appendChild(todoListSelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   todoTitleInput = document.createElement('input');
   todoTitleInput.type = 'text';
@@ -810,7 +853,7 @@ function setupTodosCreateForm(container) {
   form.appendChild(todoTitleInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  descriptionLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   todoDescriptionInput = document.createElement('input');
   todoDescriptionInput.type = 'text';
@@ -825,14 +868,14 @@ function setupTodosCreateForm(container) {
 
   todoSubmitBtn = document.createElement('button');
   todoSubmitBtn.type = 'submit';
-  todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   todoSubmitBtn.textContent = 'Add Todo';
   btnRow.appendChild(todoSubmitBtn);
 
   todoCancelBtn = document.createElement('button');
   todoCancelBtn.type = 'button';
   todoCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   todoCancelBtn.textContent = 'Cancel';
   todoCancelBtn.addEventListener('click', resetTodoFormToCreateMode);
   btnRow.appendChild(todoCancelBtn);
@@ -876,6 +919,6 @@ function setupTodosCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 }

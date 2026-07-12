@@ -37,6 +37,51 @@ document.addEventListener('keydown', (e) => {
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
+// ---- Collapsible-mobile section helper ----
+// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
+// makes a section collapse on mobile (native <details> disclosure; CSS in
+// input.css hides the toggle and forces the body open at 768px+). Returns
+// the pieces so callers can mount content into `body` and keep updating
+// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
+function makeCollapsibleSection(labelText, detailsClassName) {
+  const details = document.createElement('details');
+  details.className = 'collapsible-mobile ' + detailsClassName;
+  details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className =
+    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'text-sm font-medium text-ink';
+  labelEl.textContent = labelText;
+  summary.appendChild(labelEl);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  summary.appendChild(svg);
+
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'collapsible-body pt-2';
+  details.appendChild(body);
+
+  return { details, body, labelEl };
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -104,7 +149,7 @@ function renderGroupCard(items, key) {
 
   if (items.length > 1) {
     const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 font-mono text-xs text-ink-dim';
+    header.className = 'flex items-center gap-2 text-xs text-ink-dim';
     const label = document.createElement('span');
     label.className = 'font-medium uppercase tracking-wide';
     label.textContent = 'Bundle';
@@ -141,13 +186,13 @@ function renderSnippet(item) {
   info.appendChild(titleEl);
 
   const metaEl = document.createElement('p');
-  metaEl.className = 'font-mono text-xs text-ink-dim';
+  metaEl.className = 'text-xs text-ink-dim';
   metaEl.textContent = item.language + (item.tags ? ' · ' + item.tags : '');
   info.appendChild(metaEl);
 
   if (item.description) {
     const descEl = document.createElement('p');
-    descEl.className = 'font-mono text-xs text-ink-dim mt-1';
+    descEl.className = 'text-xs text-ink-dim mt-1';
     descEl.textContent = item.description;
     info.appendChild(descEl);
   }
@@ -160,7 +205,7 @@ function renderSnippet(item) {
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
   editBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   editBtn.textContent = 'Edit';
   editBtn.addEventListener('click', () => populateFormForEdit(item));
   actions.appendChild(editBtn);
@@ -168,7 +213,7 @@ function renderSnippet(item) {
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className =
-    'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
+    'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
   deleteBtn.textContent = 'Delete';
   deleteBtn.addEventListener('click', async () => {
     deleteBtn.disabled = true;
@@ -236,19 +281,17 @@ init();
 
 
 function setupCodexEntriesCreateForm(container) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
-
-  cxFormTitleEl = document.createElement('h3');
-  cxFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
-  cxFormTitleEl.textContent = 'New Snippet';
-  wrapper.appendChild(cxFormTitleEl);
+  const { details, body, labelEl } = makeCollapsibleSection(
+    'New Snippet',
+    'border border-hairline bg-surface p-5 space-y-3 mt-4'
+  );
+  cxFormTitleEl = labelEl;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   cxTitleInput = document.createElement('input');
   cxTitleInput.type = 'text';
@@ -259,7 +302,7 @@ function setupCodexEntriesCreateForm(container) {
   form.appendChild(cxTitleInput);
 
   const languageLabel = document.createElement('label');
-  languageLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  languageLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   languageLabel.textContent = 'Language';
   cxLanguageInput = document.createElement('input');
   cxLanguageInput.type = 'text';
@@ -269,18 +312,18 @@ function setupCodexEntriesCreateForm(container) {
   form.appendChild(cxLanguageInput);
 
   const codeLabel = document.createElement('label');
-  codeLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  codeLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   codeLabel.textContent = 'Code';
   cxCodeInput = document.createElement('textarea');
   cxCodeInput.name = 'code';
   cxCodeInput.rows = 8;
-  cxCodeInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm font-mono text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  cxCodeInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   cxCodeInput.required = true;
   form.appendChild(codeLabel);
   form.appendChild(cxCodeInput);
 
   const tagsLabel = document.createElement('label');
-  tagsLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  tagsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   tagsLabel.textContent = 'Tags';
   cxTagsInput = document.createElement('input');
   cxTagsInput.type = 'text';
@@ -290,7 +333,7 @@ function setupCodexEntriesCreateForm(container) {
   form.appendChild(cxTagsInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  descriptionLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   cxDescriptionInput = document.createElement('textarea');
   cxDescriptionInput.name = 'description';
@@ -300,7 +343,7 @@ function setupCodexEntriesCreateForm(container) {
   form.appendChild(cxDescriptionInput);
 
   const bundleIdLabel = document.createElement('label');
-  bundleIdLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
+  bundleIdLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   bundleIdLabel.textContent = 'Bundle Id';
   cxBundleIdInput = document.createElement('input');
   cxBundleIdInput.type = 'text';
@@ -314,14 +357,14 @@ function setupCodexEntriesCreateForm(container) {
 
   cxSubmitBtn = document.createElement('button');
   cxSubmitBtn.type = 'submit';
-  cxSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  cxSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   cxSubmitBtn.textContent = 'Save Snippet';
   btnRow.appendChild(cxSubmitBtn);
 
   cxCancelBtn = document.createElement('button');
   cxCancelBtn.type = 'button';
   cxCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   cxCancelBtn.textContent = 'Cancel';
   cxCancelBtn.addEventListener('click', resetSnippetFormToCreateMode);
   btnRow.appendChild(cxCancelBtn);
@@ -360,6 +403,6 @@ function setupCodexEntriesCreateForm(container) {
     }
   });
 
-  wrapper.appendChild(form);
-  container.appendChild(wrapper);
+  body.appendChild(form);
+  container.appendChild(details);
 }
