@@ -1,4 +1,4 @@
-import { get, post, del } from '/static/js/lib/api.js';
+import { get, post, put, del } from '/static/js/lib/api.js';
 
 const focusListEl = document.getElementById('focus-list');
 const remindersListEl = document.getElementById('reminders-list');
@@ -176,7 +176,33 @@ function renderShortcuts(items) {
   const frag = document.createDocumentFragment();
   items.forEach((item) => {
     const tile = document.createElement('div');
-    tile.className = 'relative border border-hairline bg-surface-raised hover:border-accent transition-colors p-3';
+    tile.draggable = true;
+    tile.dataset.id = String(item.id);
+    tile.className = 'relative border border-hairline bg-surface-raised hover:border-accent transition-colors p-3 cursor-grab';
+
+    tile.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', String(item.id));
+      e.dataTransfer.effectAllowed = 'move';
+      tile.classList.add('opacity-50');
+    });
+    tile.addEventListener('dragend', () => tile.classList.remove('opacity-50'));
+    tile.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    tile.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const draggedId = Number(e.dataTransfer.getData('text/plain'));
+      if (!draggedId || draggedId === item.id) return;
+      const draggedEl = shortcutsGridEl.querySelector(`[data-id="${draggedId}"]`);
+      if (!draggedEl) return;
+      const rect = tile.getBoundingClientRect();
+      const insertBefore = e.clientX - rect.left < rect.width / 2;
+      shortcutsGridEl.insertBefore(draggedEl, insertBefore ? tile : tile.nextSibling);
+      const order = Array.from(shortcutsGridEl.children).map((el) => Number(el.dataset.id));
+      await put('/api/shortcuts_reorder', { order });
+      await loadDashboard();
+    });
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';

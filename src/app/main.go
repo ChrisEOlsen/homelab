@@ -109,6 +109,7 @@ func main() {
 	r.Get("/api/dashboard", handlers.DashboardGET(database.Read, database.Write, appCache))
 	r.Post("/api/shortcuts_create", handlers.ShortcutsCreatePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/shortcuts/{id}", handlers.ShortcutsDeleteDELETE(database.Read, database.Write, appCache))
+	r.Put("/api/shortcuts_reorder", handlers.ShortcutsReorderPUT(database.Read, database.Write, appCache))
 	r.Post("/api/focuses_create", handlers.FocusesCreatePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/focuses/{id}", handlers.FocusesDeleteDELETE(database.Read, database.Write, appCache))
 

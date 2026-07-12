@@ -24,7 +24,7 @@ func ShortcutsCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Ha
 			body.Url = "https://" + body.Url
 		}
 		model := models.NewShortcutModel(readDB, writeDB, appCache)
-		id, err := model.Create(body.Title, body.Url)
+		id, err := model.Create(body.Title, body.Url, 0)
 		if err != nil {
 			jsonError(w, "failed to create", 500)
 			return
