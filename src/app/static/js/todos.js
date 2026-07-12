@@ -108,9 +108,12 @@ let editingTodoIsDone = false;
 let editingTodoSortOrder = 0;
 let todoFormTitleEl, todoListSelect, todoTitleInput, todoDescriptionInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
 
-// Detail panel state (subtasks + todo blocks for one expanded todo)
-let detailTodoId = null;
-let detailData = null;
+// Inline subtasks state — which todos are expanded, and their cached
+// subtask lists (fetched lazily on first expand, keyed by todo id). Several
+// todos can be expanded at once; each one's expand area lives inside that
+// todo's own <li> so it never disturbs the sidebar, other todos, or forms.
+let expandedTodoIds = new Set();
+let subtasksByTodoId = new Map();
 
 async function loadList() {
   const res = await get('/api/todos');
@@ -175,8 +178,6 @@ function renderSidebar() {
     titleSpan.textContent = list.title;
     titleSpan.addEventListener('click', () => {
       activeListId = list.id;
-      detailTodoId = null;
-      detailData = null;
       render();
     });
     li.appendChild(titleSpan);
@@ -282,8 +283,16 @@ function renderMain() {
     li.draggable = true;
     li.dataset.id = String(item.id);
     li.className =
-      'border border-hairline bg-surface-raised p-3 flex items-center gap-3' +
+      'border border-hairline bg-surface-raised p-3 flex flex-col gap-3' +
       (item.is_done ? ' opacity-60' : '');
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex items-center gap-3';
+
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'text-ink-dim cursor-grab select-none shrink-0';
+    dragHandle.textContent = '⠿';
+    topRow.appendChild(dragHandle);
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -294,7 +303,7 @@ function renderMain() {
       await post('/api/todos/' + item.id + '/toggle');
       await loadList();
     });
-    li.appendChild(checkbox);
+    topRow.appendChild(checkbox);
 
     const info = document.createElement('div');
     info.className = 'flex-1 min-w-0';
@@ -308,29 +317,27 @@ function renderMain() {
       descEl.textContent = item.description;
       info.appendChild(descEl);
     }
-    li.appendChild(info);
+    topRow.appendChild(info);
 
     const actions = document.createElement('div');
     actions.className = 'flex items-center gap-2 shrink-0';
 
-    const detailsBtn = document.createElement('button');
-    detailsBtn.type = 'button';
-    detailsBtn.className =
+    const subtasksBtn = document.createElement('button');
+    subtasksBtn.type = 'button';
+    subtasksBtn.className =
       'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-    detailsBtn.textContent = detailTodoId === item.id ? 'Hide Details' : 'Details';
-    detailsBtn.addEventListener('click', async () => {
-      if (detailTodoId === item.id) {
-        detailTodoId = null;
-        detailData = null;
+    subtasksBtn.textContent = expandedTodoIds.has(item.id) ? 'Hide Subtasks' : 'Subtasks';
+    subtasksBtn.addEventListener('click', async () => {
+      if (expandedTodoIds.has(item.id)) {
+        expandedTodoIds.delete(item.id);
         render();
         return;
       }
-      detailTodoId = item.id;
-      detailData = null;
+      expandedTodoIds.add(item.id);
       render();
-      await loadTodoDetails(item.id);
+      await loadSubtasks(item.id);
     });
-    actions.appendChild(detailsBtn);
+    actions.appendChild(subtasksBtn);
 
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
@@ -351,10 +358,8 @@ function renderMain() {
       const res = await del('/api/todos/' + item.id);
       if (res.ok) {
         if (editingTodoId === item.id) resetTodoFormToCreateMode();
-        if (detailTodoId === item.id) {
-          detailTodoId = null;
-          detailData = null;
-        }
+        expandedTodoIds.delete(item.id);
+        subtasksByTodoId.delete(item.id);
         await loadList();
       } else {
         deleteBtn.disabled = false;
@@ -364,12 +369,16 @@ function renderMain() {
     });
     actions.appendChild(deleteBtn);
 
-    li.appendChild(actions);
+    topRow.appendChild(actions);
+    li.appendChild(topRow);
 
-    const dragHandle = document.createElement('span');
-    dragHandle.className = 'text-ink-dim cursor-grab select-none shrink-0';
-    dragHandle.textContent = '⠿';
-    li.insertBefore(dragHandle, li.firstChild);
+    if (expandedTodoIds.has(item.id)) {
+      const subWrap = document.createElement('div');
+      subWrap.id = 'subtasks-inline-' + item.id;
+      subWrap.className = 'pl-8 border-t border-hairline pt-3';
+      subWrap.appendChild(renderInlineSubtasks(item.id));
+      li.appendChild(subWrap);
+    }
 
     li.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', String(item.id));
@@ -400,84 +409,43 @@ function renderMain() {
 
   section.appendChild(ul);
 
-  if (detailTodoId !== null && listTodos.some((t) => t.id === detailTodoId)) {
-    const detailContainer = document.createElement('div');
-    detailContainer.id = 'todo-detail-panel';
-    detailContainer.appendChild(renderDetailPanel());
-    section.appendChild(detailContainer);
-  }
-
   return section;
 }
 
-async function loadTodoDetails(id) {
-  const res = await get('/api/todos/' + id + '/details');
-  if (detailTodoId !== id) return; // stale response from an already-closed/changed panel
-  detailData = res.ok ? res.data : null;
-  refreshDetailPanel();
+// Fetches one todo's subtasks and caches them, then refreshes just that
+// todo's inline expand area. Reuses the existing combined details endpoint
+// but only keeps the subtasks — blocks aren't shown here.
+async function loadSubtasks(todoId) {
+  const res = await get('/api/todos/' + todoId + '/details');
+  if (!expandedTodoIds.has(todoId)) return; // collapsed before the response arrived
+  subtasksByTodoId.set(todoId, res.ok ? (res.data.subtasks ?? []) : []);
+  refreshSubtasksInline(todoId);
 }
 
-// Refreshes only the detail panel's own subtree (subtasks + blocks) in place,
-// without touching the sidebar or todo list. Used by actions scoped entirely
-// to the detail panel (subtask/block create, toggle, update, delete) so an
-// in-flight edit elsewhere on the page (e.g. another block's focused
-// textarea, a list rename form) is never destroyed by an unrelated
-// full-page rebuild. Falls back to a no-op if the panel isn't currently
-// mounted (e.g. it was closed while a request was in flight).
-function refreshDetailPanel() {
-  const container = document.getElementById('todo-detail-panel');
+// Refreshes only one todo's inline subtasks block in place, without
+// touching the sidebar, the todo list, or any other todo's expand area or
+// in-progress form — mirrors the scoped-refresh pattern used elsewhere on
+// this page so an unrelated action never destroys focused input elsewhere.
+function refreshSubtasksInline(todoId) {
+  const container = document.getElementById('subtasks-inline-' + todoId);
   if (!container) return;
-  container.replaceChildren(renderDetailPanel());
+  container.replaceChildren(renderInlineSubtasks(todoId));
 }
 
-function renderDetailPanel() {
-  const panel = document.createElement('div');
-  panel.className = 'border border-hairline bg-surface-raised p-4 space-y-4';
+function renderInlineSubtasks(todoId) {
+  const subtasks = subtasksByTodoId.get(todoId);
 
-  const headerRow = document.createElement('div');
-  headerRow.className = 'flex items-center justify-between gap-4';
-
-  const heading = document.createElement('h3');
-  heading.className = 'text-xs tracking-widest text-ink-dim uppercase';
-  heading.textContent = detailData ? 'Details: ' + detailData.todo.title : 'Loading details...';
-  headerRow.appendChild(heading);
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'text-xs text-ink-dim hover:text-ink';
-  closeBtn.textContent = 'Close';
-  closeBtn.addEventListener('click', () => {
-    detailTodoId = null;
-    detailData = null;
-    render();
-  });
-  headerRow.appendChild(closeBtn);
-
-  panel.appendChild(headerRow);
-
-  if (!detailData) {
+  if (subtasks === undefined) {
+    const wrap = document.createElement('div');
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
     p.textContent = 'Loading...';
-    panel.appendChild(p);
-    return panel;
+    wrap.appendChild(p);
+    return wrap;
   }
 
-  const todoId = detailData.todo.id;
-  panel.appendChild(renderSubtasksSection(todoId, detailData.subtasks ?? []));
-  panel.appendChild(renderBlocksSection(todoId, detailData.blocks ?? []));
-
-  return panel;
-}
-
-function renderSubtasksSection(todoId, subtasks) {
   const wrap = document.createElement('div');
   wrap.className = 'space-y-2';
-
-  const heading = document.createElement('h4');
-  heading.className = 'text-xs text-ink-dim uppercase tracking-wide';
-  heading.textContent = 'Subtasks';
-  wrap.appendChild(heading);
 
   if (subtasks.length > 0) {
     const list = document.createElement('ul');
@@ -494,7 +462,7 @@ function renderSubtasksSection(todoId, subtasks) {
       checkbox.addEventListener('change', async () => {
         checkbox.disabled = true;
         await post('/api/subtasks/' + sub.id + '/toggle');
-        await loadTodoDetails(todoId);
+        await loadSubtasks(todoId);
       });
       li.appendChild(checkbox);
 
@@ -512,7 +480,7 @@ function renderSubtasksSection(todoId, subtasks) {
         deleteErrEl.classList.add('hidden');
         const res = await del('/api/subtasks/' + sub.id);
         if (res.ok) {
-          await loadTodoDetails(todoId);
+          await loadSubtasks(todoId);
         } else {
           deleteBtn.disabled = false;
           deleteErrEl.textContent = res.error ?? 'Failed to delete.';
@@ -553,119 +521,12 @@ function renderSubtasksSection(todoId, subtasks) {
     if (!input.value.trim()) return;
     addBtn.disabled = true;
     await post('/api/subtasks_create', { todo_id: todoId, title: input.value });
-    await loadTodoDetails(todoId);
+    input.value = '';
+    addBtn.disabled = false;
+    await loadSubtasks(todoId);
   });
 
   wrap.appendChild(form);
-  return wrap;
-}
-
-function renderBlocksSection(todoId, blocks) {
-  const wrap = document.createElement('div');
-  wrap.className = 'space-y-2';
-
-  const heading = document.createElement('h4');
-  heading.className = 'text-xs text-ink-dim uppercase tracking-wide';
-  heading.textContent = 'Sections';
-  wrap.appendChild(heading);
-
-  if (blocks.length === 0) {
-    const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
-    p.textContent = 'No sections yet.';
-    wrap.appendChild(p);
-  }
-
-  blocks.forEach((block) => {
-    const box = document.createElement('div');
-    box.className = 'bg-surface-raised border border-hairline p-3 space-y-2';
-
-    const rowTop = document.createElement('div');
-    rowTop.className = 'flex items-center gap-2';
-
-    const headerInput = document.createElement('input');
-    headerInput.type = 'text';
-    headerInput.value = block.header;
-    headerInput.className =
-      'flex-1 bg-canvas border border-hairline px-2 py-1 text-sm font-medium text-ink focus:outline-none focus:border-accent';
-    rowTop.appendChild(headerInput);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'text-xs text-ink-dim hover:text-danger shrink-0';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', async () => {
-      deleteBtn.disabled = true;
-      deleteErrEl.classList.add('hidden');
-      const res = await del('/api/todo_blocks/' + block.id);
-      if (res.ok) {
-        await loadTodoDetails(todoId);
-      } else {
-        deleteBtn.disabled = false;
-        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-        deleteErrEl.classList.remove('hidden');
-      }
-    });
-    rowTop.appendChild(deleteBtn);
-
-    box.appendChild(rowTop);
-
-    const contentArea = document.createElement('textarea');
-    contentArea.value = block.content;
-    contentArea.rows = 3;
-    contentArea.className =
-      'block w-full bg-canvas border border-hairline px-2 py-1 text-sm text-ink focus:outline-none focus:border-accent';
-    box.appendChild(contentArea);
-
-    const saveErrEl = document.createElement('p');
-    saveErrEl.className = 'text-xs text-danger hidden';
-    box.appendChild(saveErrEl);
-
-    // A block's own save is purely a field-level update: no block/subtask is
-    // created or deleted and no ids change, so there is nothing structural to
-    // reload. Re-fetching and rebuilding the whole blocks section here would
-    // recreate this exact input/textarea from scratch, which — since save
-    // fires on blur and runs async — could wipe out keystrokes the user has
-    // already typed into this (or another) block by the time the response
-    // comes back. Instead, on success we just keep the in-memory
-    // detailData.blocks entry (this same `block` object) in sync with what's
-    // already on screen and stop; on failure we show an inline error without
-    // touching the field's value so the user's input is preserved.
-    const saveBlock = async () => {
-      const header = headerInput.value;
-      const content = contentArea.value;
-      const res = await put('/api/todo_blocks/' + block.id, {
-        header,
-        content,
-        sort_order: block.sort_order,
-      });
-      if (res.ok) {
-        saveErrEl.classList.add('hidden');
-        block.header = header;
-        block.content = content;
-        return;
-      }
-      saveErrEl.textContent = res.error ?? 'Failed to save.';
-      saveErrEl.classList.remove('hidden');
-    };
-    headerInput.addEventListener('blur', saveBlock);
-    contentArea.addEventListener('blur', saveBlock);
-
-    wrap.appendChild(box);
-  });
-
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className =
-    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  addBtn.textContent = 'Add Section';
-  addBtn.addEventListener('click', async () => {
-    addBtn.disabled = true;
-    await post('/api/todo_blocks_create', { todo_id: todoId });
-    await loadTodoDetails(todoId);
-  });
-  wrap.appendChild(addBtn);
-
   return wrap;
 }
 
