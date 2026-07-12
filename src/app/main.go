@@ -47,6 +47,12 @@ func main() {
 	// Pages
 	r.Get("/", handlers.HomeGET())
 
+	r.Get("/api/reminders", handlers.RemindersGET(database.Read, database.Write, appCache))
+	r.Post("/api/reminders_create", handlers.RemindersCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/reminders/{id}", handlers.RemindersUpdatePUT(database.Read, database.Write, appCache))
+	r.Delete("/api/reminders/{id}", handlers.RemindersDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/reminders/{id}/toggle", handlers.RemindersTogglePOST(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
