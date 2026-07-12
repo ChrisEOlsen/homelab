@@ -2676,6 +2676,44 @@ git commit -m "feat: rebuild dashboard with shortcuts, focuses, and reminders wi
 
 ---
 
+### Task 9.5: Apply Design System App-Wide
+
+**Added after initial planning:** the original plan only invoked `frontend-design` in Task 9 for the dashboard, with no task applying that direction to the other 7 feature pages — they were left on the generic scaffolded look (`create_page`/`scaffold_list`'s default gray-50/white/blue-600 Tailwind boilerplate, generic "GOVA" nav). SEED.md asks for a redesigned UI across the whole app, not just the homepage. This task closes that gap.
+
+**Files:**
+- Modify: `src/app/static/pages/reminders.html`, `bookmarks.html`, `codex.html`, `journal.html`, `vision_board.html`, `todos.html`, `logger.html`
+- Modify: `src/app/static/js/reminders.js`, `bookmarks.js`, `codex.js`, `journal.js`, `vision_board.js`, `todos.js`, `logger.js` (only class-name/DOM-structure changes for visual consistency — no data flow, endpoint, or event-handling logic changes)
+- Modify: `src/app/static/pages/home.html` if the nav component needs extracting/adjusting for consistency across pages
+
+**Constraints:**
+- Styling only. Do not change any API calls, route paths, event handler logic, or data shapes — this is a pure visual pass.
+- Reuse the exact visual direction (palette, type scale, spacing, nav pattern, component shapes) established in Task 9's `frontend-design` invocation for the dashboard — don't invent a second, different direction.
+- Must remain desktop- and mobile-responsive per SEED.md's hard requirement, matching whatever responsive pattern the dashboard nav uses.
+- No `innerHTML` introduced anywhere during this pass — any DOM restructuring still goes through `createElement`/`textContent`.
+
+Steps:
+
+- [ ] **Step 1: Extract or identify the shared nav pattern**
+
+If Task 9 built a reusable nav structure (e.g. a shared set of classes, or a small JS helper that renders the nav), identify it. If it's just inline HTML/JS repeated per-page, that's fine too — the goal here is visual consistency, not necessarily deduplication (don't introduce a shared component abstraction unless Task 9 already did — YAGNI).
+
+- [ ] **Step 2: Apply the direction to each of the 7 pages, one at a time**
+
+For each page: replace the generic scaffolded classes (default nav/background/card/button/form styling) with the dashboard's established look — same color palette, spacing scale, border-radius, shadow depth, typography. Keep each page's existing DOM structure (sidebars, tabs, detail panels, forms) intact — this is a re-skin, not a re-architecture. Update the nav on every page to match the dashboard's (linking to all 8 pages consistently).
+
+- [ ] **Step 3: Verify each page after restyling**
+
+`docker compose restart app` once after all 7 pages are updated (CSS recompiles from all `.html`/`.js` files' Tailwind classes in one pass). Visit each of the 8 pages (including dashboard) and confirm: consistent nav/look across all of them, no broken layout, mobile-width check on at least 2-3 representative pages (one flat list like Bookmarks, one master-detail like TaskMaster, one dynamic-table like Logger). Confirm no functional regression — spot-check one CRUD action per page still works (the styling pass must not have broken any event listener or class-based selector the JS relies on).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "style: apply consistent design system across all feature pages"
+```
+
+---
+
 ### Task 10: Data Migration (MySQL dump → SQLite)
 
 **Files:**
