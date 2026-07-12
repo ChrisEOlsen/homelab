@@ -24,9 +24,12 @@ func BookmarksUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Han
 			Url         string `json:"url"`
 			Description string `json:"description"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" || body.Url == "" {
-			jsonError(w, "title and url are required", 400)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" || body.Url == "" || body.CategoryID == 0 {
+			jsonError(w, "category_id, title and url are required", 400)
 			return
+		}
+		if !strings_hasScheme(body.Url) {
+			body.Url = "https://" + body.Url
 		}
 		model := models.NewBookmarkModel(readDB, writeDB, appCache)
 		if err := model.Update(id, body.CategoryID, body.Title, body.Url, body.Description); err != nil {
