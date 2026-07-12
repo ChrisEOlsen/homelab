@@ -295,7 +295,10 @@ function renderMain() {
   section.appendChild(ul);
 
   if (detailTodoId !== null && listTodos.some((t) => t.id === detailTodoId)) {
-    section.appendChild(renderDetailPanel());
+    const detailContainer = document.createElement('div');
+    detailContainer.id = 'todo-detail-panel';
+    detailContainer.appendChild(renderDetailPanel());
+    section.appendChild(detailContainer);
   }
 
   return section;
@@ -305,7 +308,20 @@ async function loadTodoDetails(id) {
   const res = await get('/api/todos/' + id + '/details');
   if (detailTodoId !== id) return; // stale response from an already-closed/changed panel
   detailData = res.ok ? res.data : null;
-  render();
+  refreshDetailPanel();
+}
+
+// Refreshes only the detail panel's own subtree (subtasks + blocks) in place,
+// without touching the sidebar or todo list. Used by actions scoped entirely
+// to the detail panel (subtask/block create, toggle, update, delete) so an
+// in-flight edit elsewhere on the page (e.g. another block's focused
+// textarea, a list rename form) is never destroyed by an unrelated
+// full-page rebuild. Falls back to a no-op if the panel isn't currently
+// mounted (e.g. it was closed while a request was in flight).
+function refreshDetailPanel() {
+  const container = document.getElementById('todo-detail-panel');
+  if (!container) return;
+  container.replaceChildren(renderDetailPanel());
 }
 
 function renderDetailPanel() {
