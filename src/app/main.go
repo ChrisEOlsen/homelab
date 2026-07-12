@@ -65,6 +65,11 @@ func main() {
 	r.Put("/api/codex_entries/{id}", handlers.CodexEntriesUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/codex_entries/{id}", handlers.CodexEntriesDeleteDELETE(database.Read, database.Write, appCache))
 
+	r.Get("/api/journal", handlers.JournalGET(database.Read, database.Write, appCache))
+	r.Post("/api/journal_entries_create", handlers.JournalEntriesCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/journal_entries/{id}", handlers.JournalEntriesUpdatePUT(database.Read, database.Write, appCache))
+	r.Delete("/api/journal_entries/{id}", handlers.JournalEntriesDeleteDELETE(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
