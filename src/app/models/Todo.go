@@ -15,6 +15,7 @@ type Todo struct {
 	Description string `json:"description"`
 	SortOrder int64 `json:"sort_order"`
 	CreatedAt time.Time `json:"created_at"`
+	SubtaskCount int64 `json:"subtask_count"`
 }
 
 type TodoModel struct {
@@ -35,7 +36,11 @@ func (m *TodoModel) GetAll() ([]Todo, error) {
 			return items, nil
 		}
 	}
-	rows, err := m.readDB.Query("SELECT id, list_id, title, is_done, description, sort_order, created_at FROM todos ORDER BY sort_order ASC, created_at DESC")
+	rows, err := m.readDB.Query(
+		"SELECT id, list_id, title, is_done, description, sort_order, created_at, " +
+			"(SELECT COUNT(*) FROM subtasks WHERE subtasks.todo_id = todos.id) AS subtask_count " +
+			"FROM todos ORDER BY sort_order ASC, created_at DESC",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +49,7 @@ func (m *TodoModel) GetAll() ([]Todo, error) {
 	for rows.Next() {
 		var item Todo
 		var description sql.NullString
-		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &description, &item.SortOrder, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &description, &item.SortOrder, &item.CreatedAt, &item.SubtaskCount); err != nil {
 			return nil, err
 		}
 		item.Description = description.String

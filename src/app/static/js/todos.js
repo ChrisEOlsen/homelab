@@ -326,7 +326,11 @@ function renderMain() {
     subtasksBtn.type = 'button';
     subtasksBtn.className =
       'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-    subtasksBtn.textContent = expandedTodoIds.has(item.id) ? 'Hide Subtasks' : 'Subtasks';
+    subtasksBtn.textContent = expandedTodoIds.has(item.id)
+      ? 'Hide Subtasks'
+      : item.subtask_count > 0
+        ? `Subtasks (${item.subtask_count})`
+        : 'Subtasks';
     subtasksBtn.addEventListener('click', async () => {
       if (expandedTodoIds.has(item.id)) {
         expandedTodoIds.delete(item.id);

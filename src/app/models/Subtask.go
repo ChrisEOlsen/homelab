@@ -76,6 +76,9 @@ func (m *SubtaskModel) Create(todo_id int64, title string, is_done bool, descrip
 		return 0, err
 	}
 	m.cache.Bust("subtasks:")
+	// The bulk todos list embeds a per-todo subtask count, so a new subtask
+	// must also invalidate that cache or the count goes stale for up to 5min.
+	m.cache.Bust("todos:")
 	return res.LastInsertId()
 }
 
@@ -83,6 +86,7 @@ func (m *SubtaskModel) Delete(id int64) error {
 	_, err := m.writeDB.Exec("DELETE FROM subtasks WHERE id = ?", id)
 	if err == nil {
 		m.cache.Bust("subtasks:")
+		m.cache.Bust("todos:")
 	}
 	return err
 }
