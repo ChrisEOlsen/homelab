@@ -12,3 +12,4 @@ logs/
 opencode.json
 .gemini/settings.json
 data/
+sync.sh
