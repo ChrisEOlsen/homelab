@@ -43,9 +43,11 @@ func (m *TodoModel) GetAll() ([]Todo, error) {
 	var items []Todo
 	for rows.Next() {
 		var item Todo
-		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &item.Description, &item.SortOrder, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &description, &item.SortOrder, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -57,10 +59,12 @@ func (m *TodoModel) GetAll() ([]Todo, error) {
 func (m *TodoModel) Find(id int64) (*Todo, error) {
 	row := m.readDB.QueryRow("SELECT id, list_id, title, is_done, description, sort_order, created_at FROM todos WHERE id = ?", id)
 	var item Todo
-	err := row.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &item.Description, &item.SortOrder, &item.CreatedAt)
+	var description sql.NullString
+	err := row.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &description, &item.SortOrder, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.Description = description.String
 	return &item, nil
 }
 
@@ -96,9 +100,11 @@ func (m *TodoModel) GetByList(listID int64) ([]Todo, error) {
 	var items []Todo
 	for rows.Next() {
 		var item Todo
-		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &item.Description, &item.SortOrder, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.ListId, &item.Title, &item.IsDone, &description, &item.SortOrder, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	return items, nil

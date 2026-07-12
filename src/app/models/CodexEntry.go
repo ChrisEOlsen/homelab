@@ -44,9 +44,14 @@ func (m *CodexEntryModel) GetAll() ([]CodexEntry, error) {
 	var items []CodexEntry
 	for rows.Next() {
 		var item CodexEntry
-		if err := rows.Scan(&item.ID, &item.Title, &item.Language, &item.Code, &item.Tags, &item.Description, &item.BundleId, &item.CreatedAt); err != nil {
+		var language, tags, description, bundleId sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &language, &item.Code, &tags, &description, &bundleId, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Language = language.String
+		item.Tags = tags.String
+		item.Description = description.String
+		item.BundleId = bundleId.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -58,10 +63,15 @@ func (m *CodexEntryModel) GetAll() ([]CodexEntry, error) {
 func (m *CodexEntryModel) Find(id int64) (*CodexEntry, error) {
 	row := m.readDB.QueryRow("SELECT id, title, language, code, tags, description, bundle_id, created_at FROM codex_entries WHERE id = ?", id)
 	var item CodexEntry
-	err := row.Scan(&item.ID, &item.Title, &item.Language, &item.Code, &item.Tags, &item.Description, &item.BundleId, &item.CreatedAt)
+	var language, tags, description, bundleId sql.NullString
+	err := row.Scan(&item.ID, &item.Title, &language, &item.Code, &tags, &description, &bundleId, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.Language = language.String
+	item.Tags = tags.String
+	item.Description = description.String
+	item.BundleId = bundleId.String
 	return &item, nil
 }
 

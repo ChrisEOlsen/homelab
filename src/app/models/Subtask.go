@@ -42,9 +42,11 @@ func (m *SubtaskModel) GetAll() ([]Subtask, error) {
 	var items []Subtask
 	for rows.Next() {
 		var item Subtask
-		if err := rows.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &item.Description, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &description, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -56,10 +58,12 @@ func (m *SubtaskModel) GetAll() ([]Subtask, error) {
 func (m *SubtaskModel) Find(id int64) (*Subtask, error) {
 	row := m.readDB.QueryRow("SELECT id, todo_id, title, is_done, description, created_at FROM subtasks WHERE id = ?", id)
 	var item Subtask
-	err := row.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &item.Description, &item.CreatedAt)
+	var description sql.NullString
+	err := row.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &description, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.Description = description.String
 	return &item, nil
 }
 
@@ -95,9 +99,11 @@ func (m *SubtaskModel) GetByTodo(todoID int64) ([]Subtask, error) {
 	var items []Subtask
 	for rows.Next() {
 		var item Subtask
-		if err := rows.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &item.Description, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.TodoId, &item.Title, &item.IsDone, &description, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	return items, nil

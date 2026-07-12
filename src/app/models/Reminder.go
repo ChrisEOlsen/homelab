@@ -43,9 +43,11 @@ func (m *ReminderModel) GetAll() ([]Reminder, error) {
 	var items []Reminder
 	for rows.Next() {
 		var item Reminder
-		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &item.RecurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
+		var recurrenceDays sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.RecurrenceDays = recurrenceDays.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -57,10 +59,12 @@ func (m *ReminderModel) GetAll() ([]Reminder, error) {
 func (m *ReminderModel) Find(id int64) (*Reminder, error) {
 	row := m.readDB.QueryRow("SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders WHERE id = ?", id)
 	var item Reminder
-	err := row.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &item.RecurrenceDays, &item.IsActive, &item.CreatedAt)
+	var recurrenceDays sql.NullString
+	err := row.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.RecurrenceDays = recurrenceDays.String
 	return &item, nil
 }
 
@@ -96,9 +100,11 @@ func (m *ReminderModel) GetUpcoming(limit int) ([]Reminder, error) {
 	var items []Reminder
 	for rows.Next() {
 		var item Reminder
-		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &item.RecurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
+		var recurrenceDays sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.RecurrenceDays = recurrenceDays.String
 		items = append(items, item)
 	}
 	return items, nil
