@@ -6,6 +6,16 @@ const shortcutsGridEl = document.getElementById('shortcuts-grid');
 const focusFormMount = document.getElementById('focus-form-mount');
 const shortcutFormMount = document.getElementById('shortcut-form-mount');
 
+// Delete-error elements: created once, inserted as siblings of their list
+// containers so they survive the containers' replaceChildren() re-renders.
+const focusDeleteErrEl = document.createElement('p');
+focusDeleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+focusListEl.insertAdjacentElement('afterend', focusDeleteErrEl);
+
+const shortcutDeleteErrEl = document.createElement('p');
+shortcutDeleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+shortcutsGridEl.insertAdjacentElement('afterend', shortcutDeleteErrEl);
+
 // ---- Clock (nav signature element) ----
 function tickClock() {
   const text = new Date().toLocaleTimeString([], { hour12: false });
@@ -103,8 +113,15 @@ function renderFocuses(items) {
     delBtn.setAttribute('aria-label', 'Delete focus: ' + item.text);
     delBtn.addEventListener('click', async () => {
       delBtn.disabled = true;
-      await del('/api/focuses/' + item.id);
-      await loadDashboard();
+      focusDeleteErrEl.classList.add('hidden');
+      const res = await del('/api/focuses/' + item.id);
+      if (res.ok) {
+        await loadDashboard();
+      } else {
+        delBtn.disabled = false;
+        focusDeleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        focusDeleteErrEl.classList.remove('hidden');
+      }
     });
     li.appendChild(delBtn);
 
@@ -168,8 +185,15 @@ function renderShortcuts(items) {
     delBtn.setAttribute('aria-label', 'Delete shortcut: ' + item.title);
     delBtn.addEventListener('click', async () => {
       delBtn.disabled = true;
-      await del('/api/shortcuts/' + item.id);
-      await loadDashboard();
+      shortcutDeleteErrEl.classList.add('hidden');
+      const res = await del('/api/shortcuts/' + item.id);
+      if (res.ok) {
+        await loadDashboard();
+      } else {
+        delBtn.disabled = false;
+        shortcutDeleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        shortcutDeleteErrEl.classList.remove('hidden');
+      }
     });
     tile.appendChild(delBtn);
 
