@@ -42,9 +42,11 @@ func (m *BookmarkModel) GetAll() ([]Bookmark, error) {
 	var items []Bookmark
 	for rows.Next() {
 		var item Bookmark
-		if err := rows.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &item.Description, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &description, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	if data, err := json.Marshal(items); err == nil {
@@ -56,10 +58,12 @@ func (m *BookmarkModel) GetAll() ([]Bookmark, error) {
 func (m *BookmarkModel) Find(id int64) (*Bookmark, error) {
 	row := m.readDB.QueryRow("SELECT id, category_id, title, url, description, created_at FROM bookmarks WHERE id = ?", id)
 	var item Bookmark
-	err := row.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &item.Description, &item.CreatedAt)
+	var description sql.NullString
+	err := row.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &description, &item.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	item.Description = description.String
 	return &item, nil
 }
 
@@ -95,9 +99,11 @@ func (m *BookmarkModel) GetByCategory(categoryID int64) ([]Bookmark, error) {
 	var items []Bookmark
 	for rows.Next() {
 		var item Bookmark
-		if err := rows.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &item.Description, &item.CreatedAt); err != nil {
+		var description sql.NullString
+		if err := rows.Scan(&item.ID, &item.CategoryId, &item.Title, &item.Url, &description, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		item.Description = description.String
 		items = append(items, item)
 	}
 	return items, nil
