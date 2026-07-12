@@ -82,6 +82,72 @@ function makeCollapsibleSection(labelText, detailsClassName) {
   return { details, body, labelEl };
 }
 
+// ---- Row actions menu (kebab dropdown) ----
+// Replaces always-visible Edit/Delete buttons with a single "⋯" toggle and
+// a small dropdown, so list rows read cleanly at a glance. `actions` is an
+// array of { label, danger, onClick }; onClick may be async. Closes on an
+// outside click, on Escape, or automatically after an action runs.
+function makeActionsMenu(actions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'relative shrink-0';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className =
+    'px-2 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised border border-hairline transition-colors leading-none';
+  toggleBtn.textContent = '⋯';
+  toggleBtn.setAttribute('aria-label', 'Actions');
+  toggleBtn.setAttribute('aria-haspopup', 'true');
+  toggleBtn.setAttribute('aria-expanded', 'false');
+  wrap.appendChild(toggleBtn);
+
+  const menu = document.createElement('div');
+  menu.className = 'absolute right-0 top-full mt-1 min-w-32 bg-surface border border-hairline z-10 hidden';
+  wrap.appendChild(menu);
+
+  function closeMenu() {
+    menu.classList.add('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onOutsideClick);
+    document.removeEventListener('keydown', onKeydown);
+  }
+  function onOutsideClick(e) {
+    if (!wrap.contains(e.target)) closeMenu();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+  function openMenu() {
+    menu.classList.remove('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onOutsideClick);
+    document.addEventListener('keydown', onKeydown);
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('hidden')) openMenu();
+    else closeMenu();
+  });
+
+  actions.forEach(({ label, danger, onClick }) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className =
+      'block w-full text-left px-3 py-2 text-xs transition-colors ' +
+      (danger ? 'text-danger hover:bg-danger/10' : 'text-ink-dim hover:text-ink hover:bg-surface-raised');
+    item.textContent = label;
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeMenu();
+      await onClick();
+    });
+    menu.appendChild(item);
+  });
+
+  return wrap;
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -199,38 +265,26 @@ function renderSnippet(item) {
 
   headerRow.appendChild(info);
 
-  const actions = document.createElement('div');
-  actions.className = 'flex items-center gap-2 shrink-0';
-
-  const editBtn = document.createElement('button');
-  editBtn.type = 'button';
-  editBtn.className =
-    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  editBtn.textContent = 'Edit';
-  editBtn.addEventListener('click', () => populateFormForEdit(item));
-  actions.appendChild(editBtn);
-
-  const deleteBtn = document.createElement('button');
-  deleteBtn.type = 'button';
-  deleteBtn.className =
-    'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
-  deleteBtn.textContent = 'Delete';
-  deleteBtn.addEventListener('click', async () => {
-    deleteBtn.disabled = true;
-    deleteErrEl.classList.add('hidden');
-    const res = await del('/api/codex_entries/' + item.id);
-    if (res.ok) {
-      if (editingId === item.id) resetSnippetFormToCreateMode();
-      await loadList();
-    } else {
-      deleteBtn.disabled = false;
-      deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-      deleteErrEl.classList.remove('hidden');
-    }
-  });
-  actions.appendChild(deleteBtn);
-
-  headerRow.appendChild(actions);
+  headerRow.appendChild(
+    makeActionsMenu([
+      { label: 'Edit', onClick: () => populateFormForEdit(item) },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: async () => {
+          deleteErrEl.classList.add('hidden');
+          const res = await del('/api/codex_entries/' + item.id);
+          if (res.ok) {
+            if (editingId === item.id) resetSnippetFormToCreateMode();
+            await loadList();
+          } else {
+            deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+            deleteErrEl.classList.remove('hidden');
+          }
+        },
+      },
+    ])
+  );
   wrap.appendChild(headerRow);
 
   const pre = document.createElement('pre');

@@ -82,6 +82,75 @@ function makeCollapsibleSection(labelText, detailsClassName) {
   return { details, body, labelEl };
 }
 
+// ---- Row actions menu (kebab dropdown) ----
+// Replaces always-visible Edit/Delete buttons with a single "⋯" toggle and
+// a small dropdown, so list rows read cleanly at a glance. `actions` is an
+// array of { label, danger, onClick }; onClick may be async. Closes on an
+// outside click, on Escape, or automatically after an action runs.
+// `toggleClassName` lets a caller override the toggle button's look (e.g.
+// the todo-lists sidebar needs different contrast on its active/accent row).
+function makeActionsMenu(actions, toggleClassName) {
+  const wrap = document.createElement('div');
+  wrap.className = 'relative shrink-0';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className =
+    toggleClassName ||
+    'px-2 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised border border-hairline transition-colors leading-none';
+  toggleBtn.textContent = '⋯';
+  toggleBtn.setAttribute('aria-label', 'Actions');
+  toggleBtn.setAttribute('aria-haspopup', 'true');
+  toggleBtn.setAttribute('aria-expanded', 'false');
+  wrap.appendChild(toggleBtn);
+
+  const menu = document.createElement('div');
+  menu.className = 'absolute right-0 top-full mt-1 min-w-32 bg-surface border border-hairline z-10 hidden';
+  wrap.appendChild(menu);
+
+  function closeMenu() {
+    menu.classList.add('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onOutsideClick);
+    document.removeEventListener('keydown', onKeydown);
+  }
+  function onOutsideClick(e) {
+    if (!wrap.contains(e.target)) closeMenu();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+  function openMenu() {
+    menu.classList.remove('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onOutsideClick);
+    document.addEventListener('keydown', onKeydown);
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('hidden')) openMenu();
+    else closeMenu();
+  });
+
+  actions.forEach(({ label, danger, onClick }) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className =
+      'block w-full text-left px-3 py-2 text-xs transition-colors ' +
+      (danger ? 'text-danger hover:bg-danger/10' : 'text-ink-dim hover:text-ink hover:bg-surface-raised');
+    item.textContent = label;
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeMenu();
+      await onClick();
+    });
+    menu.appendChild(item);
+  });
+
+  return wrap;
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -182,46 +251,35 @@ function renderSidebar() {
     });
     li.appendChild(titleSpan);
 
-    const actions = document.createElement('span');
-    actions.className = 'flex items-center gap-1 shrink-0';
-
-    const renameBtn = document.createElement('button');
-    renameBtn.type = 'button';
-    renameBtn.className =
-      'text-xs px-1 ' +
+    const toggleClass =
+      'text-xs px-1.5 py-0.5 leading-none ' +
       (list.id === activeListId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-ink');
-    renameBtn.textContent = 'Edit';
-    renameBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      populateListFormForEdit(list);
-    });
-    actions.appendChild(renameBtn);
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className =
-      'text-xs px-1 ' +
-      (list.id === activeListId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-danger');
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (!window.confirm('Delete this list and all its todos?')) return;
-      deleteBtn.disabled = true;
-      deleteErrEl.classList.add('hidden');
-      const res = await del('/api/todo_lists/' + list.id);
-      if (res.ok) {
-        if (editingListId === list.id) resetListFormToCreateMode();
-        if (activeListId === list.id) activeListId = null;
-        await loadList();
-      } else {
-        deleteBtn.disabled = false;
-        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-        deleteErrEl.classList.remove('hidden');
-      }
-    });
-    actions.appendChild(deleteBtn);
-
-    li.appendChild(actions);
+    li.appendChild(
+      makeActionsMenu(
+        [
+          { label: 'Edit', onClick: () => populateListFormForEdit(list) },
+          {
+            label: 'Delete',
+            danger: true,
+            onClick: async () => {
+              if (!window.confirm('Delete this list and all its todos?')) return;
+              deleteErrEl.classList.add('hidden');
+              const res = await del('/api/todo_lists/' + list.id);
+              if (res.ok) {
+                if (editingListId === list.id) resetListFormToCreateMode();
+                if (activeListId === list.id) activeListId = null;
+                await loadList();
+              } else {
+                deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+                deleteErrEl.classList.remove('hidden');
+              }
+            },
+          },
+        ],
+        toggleClass
+      )
+    );
     ul.appendChild(li);
   });
 
@@ -343,35 +401,28 @@ function renderMain() {
     });
     actions.appendChild(subtasksBtn);
 
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className =
-      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-    editBtn.textContent = 'Edit';
-    editBtn.addEventListener('click', () => populateTodoFormForEdit(item));
-    actions.appendChild(editBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className =
-      'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', async () => {
-      deleteBtn.disabled = true;
-      deleteErrEl.classList.add('hidden');
-      const res = await del('/api/todos/' + item.id);
-      if (res.ok) {
-        if (editingTodoId === item.id) resetTodoFormToCreateMode();
-        expandedTodoIds.delete(item.id);
-        subtasksByTodoId.delete(item.id);
-        await loadList();
-      } else {
-        deleteBtn.disabled = false;
-        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-        deleteErrEl.classList.remove('hidden');
-      }
-    });
-    actions.appendChild(deleteBtn);
+    actions.appendChild(
+      makeActionsMenu([
+        { label: 'Edit', onClick: () => populateTodoFormForEdit(item) },
+        {
+          label: 'Delete',
+          danger: true,
+          onClick: async () => {
+            deleteErrEl.classList.add('hidden');
+            const res = await del('/api/todos/' + item.id);
+            if (res.ok) {
+              if (editingTodoId === item.id) resetTodoFormToCreateMode();
+              expandedTodoIds.delete(item.id);
+              subtasksByTodoId.delete(item.id);
+              await loadList();
+            } else {
+              deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+              deleteErrEl.classList.remove('hidden');
+            }
+          },
+        },
+      ])
+    );
 
     topRow.appendChild(actions);
     li.appendChild(topRow);
