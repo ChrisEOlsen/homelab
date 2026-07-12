@@ -5,12 +5,13 @@
 /*
  * Homelab design tokens
  * ---------------------
- * Direction: a self-hosted ops console, not a generic SaaS dashboard.
- * Dark canvas with three functional accent colors borrowed from rack
- * indicator LEDs: amber (primary / interactive), green (active / ok),
- * red (destructive). No gradients, no soft drop shadows, no
- * glassmorphism — depth comes from three flat elevation layers
- * (base < surface < surface-raised) separated by 1px hairlines.
+ * Direction: an elegant, warm-neutral, light interface — a polished
+ * everyday app, not a techno/cyberpunk console. Warm ivory canvas,
+ * a single restrained accent (used for links, buttons, focus rings),
+ * plus two functional colors: ok (success/done) and danger
+ * (destructive). No gradients, no glassmorphism — depth comes from
+ * three flat elevation layers (canvas < surface < surface-raised)
+ * separated by 1px hairlines.
  *
  * Reuse these tokens on every other page for a consistent system:
  *   bg-canvas / bg-surface / bg-surface-raised
@@ -23,18 +24,23 @@
  * Note: the page-background color is named "canvas", not "base" —
  * "base" would collide with Tailwind's built-in text-base (font-size)
  * utility and produce a confusing/ambiguous class name.
+ *
+ * Note: the hairline/border token is named "--color-hairline" (kept
+ * from the prior theme's naming) rather than "--color-border" — only
+ * the value changed here, not the name, to minimize diff churn for
+ * pages that already reference border-hairline/divide-hairline.
  */
 @theme {
-  --color-canvas: #0b0e0d;
-  --color-surface: #121613;
-  --color-surface-raised: #191f1b;
-  --color-hairline: #232b27;
-  --color-ink: #e7e9e4;
-  --color-ink-dim: #8b968e;
-  --color-accent: #e8a33d;
-  --color-accent-dim: #4a3a1c;
-  --color-ok: #4fd1a5;
-  --color-danger: #ef5a56;
+  --color-canvas: #faf7f2;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f3efe6;
+  --color-hairline: #e6dfd2;
+  --color-ink: #2b2620;
+  --color-ink-dim: #77705f;
+  --color-accent: #a8632b;
+  --color-accent-dim: #c98a54;
+  --color-ok: #4b7a5b;
+  --color-danger: #b0463c;
 }
 
 @layer base {
@@ -72,4 +78,27 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/*
+ * Collapsible-on-mobile pattern
+ * -----------------------------
+ * A zero-JS-logic disclosure widget built on native <details>/<summary>.
+ * Below 768px, the <summary> row is a clickable toggle (native behavior,
+ * no JS needed). At 768px and above, the toggle chevron is hidden and the
+ * body is forced open — sections are always open on desktop.
+ */
+@media (min-width: 768px) {
+  .collapsible-mobile > summary.collapsible-toggle {
+    display: none;
+  }
+  .collapsible-mobile > .collapsible-body {
+    display: block !important;
+  }
+}
+.collapsible-mobile > summary.collapsible-toggle {
+  list-style: none;
+}
+.collapsible-mobile > summary.collapsible-toggle::-webkit-details-marker {
+  display: none;
 }

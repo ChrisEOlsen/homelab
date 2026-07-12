@@ -97,7 +97,7 @@ function renderFocuses(items) {
     li.className = 'flex items-start gap-3 border border-hairline bg-surface-raised px-3 py-2';
 
     const num = document.createElement('span');
-    num.className = 'font-mono text-xs text-accent shrink-0 pt-0.5';
+    num.className = 'text-xs text-accent shrink-0 pt-0.5';
     num.textContent = String(index + 1).padStart(2, '0');
     li.appendChild(num);
 
@@ -108,7 +108,7 @@ function renderFocuses(items) {
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.className = 'shrink-0 font-mono text-xs text-ink-dim hover:text-danger transition-colors px-1';
+    delBtn.className = 'shrink-0 text-xs text-ink-dim hover:text-danger transition-colors px-1';
     delBtn.textContent = '×';
     delBtn.setAttribute('aria-label', 'Delete focus: ' + item.text);
     delBtn.addEventListener('click', async () => {
@@ -158,7 +158,7 @@ function renderReminders(items) {
     li.appendChild(left);
 
     const time = document.createElement('span');
-    time.className = 'font-mono text-xs text-ink-dim shrink-0 tabular-nums';
+    time.className = 'text-xs text-ink-dim shrink-0 tabular-nums';
     time.textContent = formatRemindAt(item.remind_at);
     li.appendChild(time);
 
@@ -180,7 +180,7 @@ function renderShortcuts(items) {
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.className = 'absolute top-1 right-1 font-mono text-xs text-ink-dim hover:text-danger transition-colors px-1.5 py-0.5';
+    delBtn.className = 'absolute top-1 right-1 text-xs text-ink-dim hover:text-danger transition-colors px-1.5 py-0.5';
     delBtn.textContent = '×';
     delBtn.setAttribute('aria-label', 'Delete shortcut: ' + item.title);
     delBtn.addEventListener('click', async () => {
@@ -207,7 +207,7 @@ function renderShortcuts(items) {
     link.appendChild(title);
 
     const host = document.createElement('p');
-    host.className = 'font-mono text-xs text-ink-dim truncate mt-0.5';
+    host.className = 'text-xs text-ink-dim truncate mt-0.5';
     host.textContent = shortcutHost(item.url);
     link.appendChild(host);
 
@@ -250,7 +250,7 @@ function setupFocusForm() {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'font-mono text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
+    'text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
   submitBtn.textContent = 'Add';
   form.appendChild(submitBtn);
 
@@ -302,7 +302,7 @@ function setupShortcutForm() {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'font-mono text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
+    'text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
   submitBtn.textContent = 'Add';
   form.appendChild(submitBtn);
 
