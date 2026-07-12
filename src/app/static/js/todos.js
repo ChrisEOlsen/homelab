@@ -19,6 +19,10 @@ let editingTodoIsDone = false;
 let editingTodoSortOrder = 0;
 let todoFormTitleEl, todoListSelect, todoTitleInput, todoDescriptionInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
 
+// Detail panel state (subtasks + todo blocks for one expanded todo)
+let detailTodoId = null;
+let detailData = null;
+
 async function loadList() {
   const res = await get('/api/todos');
   if (!res.ok) {
@@ -80,6 +84,8 @@ function renderSidebar() {
     titleSpan.textContent = list.title;
     titleSpan.addEventListener('click', () => {
       activeListId = list.id;
+      detailTodoId = null;
+      detailData = null;
       render();
     });
     li.appendChild(titleSpan);
@@ -208,6 +214,25 @@ function renderMain() {
     const actions = document.createElement('div');
     actions.className = 'flex items-center gap-2 shrink-0';
 
+    const detailsBtn = document.createElement('button');
+    detailsBtn.type = 'button';
+    detailsBtn.className =
+      'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    detailsBtn.textContent = detailTodoId === item.id ? 'Hide Details' : 'Details';
+    detailsBtn.addEventListener('click', async () => {
+      if (detailTodoId === item.id) {
+        detailTodoId = null;
+        detailData = null;
+        render();
+        return;
+      }
+      detailTodoId = item.id;
+      detailData = null;
+      render();
+      await loadTodoDetails(item.id);
+    });
+    actions.appendChild(detailsBtn);
+
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className =
@@ -225,6 +250,10 @@ function renderMain() {
       deleteBtn.disabled = true;
       await del('/api/todos/' + item.id);
       if (editingTodoId === item.id) resetTodoFormToCreateMode();
+      if (detailTodoId === item.id) {
+        detailTodoId = null;
+        detailData = null;
+      }
       await loadList();
     });
     actions.appendChild(deleteBtn);
@@ -264,7 +293,221 @@ function renderMain() {
   });
 
   section.appendChild(ul);
+
+  if (detailTodoId !== null && listTodos.some((t) => t.id === detailTodoId)) {
+    section.appendChild(renderDetailPanel());
+  }
+
   return section;
+}
+
+async function loadTodoDetails(id) {
+  const res = await get('/api/todos/' + id + '/details');
+  if (detailTodoId !== id) return; // stale response from an already-closed/changed panel
+  detailData = res.ok ? res.data : null;
+  render();
+}
+
+function renderDetailPanel() {
+  const panel = document.createElement('div');
+  panel.className = 'border border-gray-300 rounded-lg p-4 bg-gray-50 space-y-4';
+
+  const headerRow = document.createElement('div');
+  headerRow.className = 'flex items-center justify-between gap-4';
+
+  const heading = document.createElement('h3');
+  heading.className = 'text-sm font-semibold text-gray-900';
+  heading.textContent = detailData ? 'Details: ' + detailData.todo.title : 'Loading details...';
+  headerRow.appendChild(heading);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'text-xs text-gray-400 hover:text-gray-700';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => {
+    detailTodoId = null;
+    detailData = null;
+    render();
+  });
+  headerRow.appendChild(closeBtn);
+
+  panel.appendChild(headerRow);
+
+  if (!detailData) {
+    const p = document.createElement('p');
+    p.className = 'text-sm text-gray-500';
+    p.textContent = 'Loading...';
+    panel.appendChild(p);
+    return panel;
+  }
+
+  const todoId = detailData.todo.id;
+  panel.appendChild(renderSubtasksSection(todoId, detailData.subtasks ?? []));
+  panel.appendChild(renderBlocksSection(todoId, detailData.blocks ?? []));
+
+  return panel;
+}
+
+function renderSubtasksSection(todoId, subtasks) {
+  const wrap = document.createElement('div');
+  wrap.className = 'space-y-2';
+
+  const heading = document.createElement('h4');
+  heading.className = 'text-xs font-semibold text-gray-700 uppercase tracking-wide';
+  heading.textContent = 'Subtasks';
+  wrap.appendChild(heading);
+
+  if (subtasks.length > 0) {
+    const list = document.createElement('ul');
+    list.className = 'space-y-1';
+
+    subtasks.forEach((sub) => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center gap-2 bg-white border border-gray-200 rounded px-2 py-1.5';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = sub.is_done;
+      checkbox.className = 'shrink-0';
+      checkbox.addEventListener('change', async () => {
+        checkbox.disabled = true;
+        await post('/api/subtasks/' + sub.id + '/toggle');
+        await loadTodoDetails(todoId);
+      });
+      li.appendChild(checkbox);
+
+      const title = document.createElement('span');
+      title.className = 'flex-1 text-sm text-gray-900' + (sub.is_done ? ' line-through text-gray-400' : '');
+      title.textContent = sub.title;
+      li.appendChild(title);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'text-xs text-gray-400 hover:text-red-600 shrink-0';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', async () => {
+        deleteBtn.disabled = true;
+        await del('/api/subtasks/' + sub.id);
+        await loadTodoDetails(todoId);
+      });
+      li.appendChild(deleteBtn);
+
+      list.appendChild(li);
+    });
+
+    wrap.appendChild(list);
+  } else {
+    const p = document.createElement('p');
+    p.className = 'text-sm text-gray-500';
+    p.textContent = 'No subtasks yet.';
+    wrap.appendChild(p);
+  }
+
+  const form = document.createElement('form');
+  form.className = 'flex items-center gap-2';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'New subtask';
+  input.className =
+    'flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  form.appendChild(input);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'submit';
+  addBtn.className = 'px-3 py-1 text-xs rounded bg-gray-900 text-white hover:bg-gray-700 transition-colors';
+  addBtn.textContent = 'Add';
+  form.appendChild(addBtn);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!input.value.trim()) return;
+    addBtn.disabled = true;
+    await post('/api/subtasks_create', { todo_id: todoId, title: input.value });
+    await loadTodoDetails(todoId);
+  });
+
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function renderBlocksSection(todoId, blocks) {
+  const wrap = document.createElement('div');
+  wrap.className = 'space-y-2';
+
+  const heading = document.createElement('h4');
+  heading.className = 'text-xs font-semibold text-gray-700 uppercase tracking-wide';
+  heading.textContent = 'Sections';
+  wrap.appendChild(heading);
+
+  if (blocks.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'text-sm text-gray-500';
+    p.textContent = 'No sections yet.';
+    wrap.appendChild(p);
+  }
+
+  blocks.forEach((block) => {
+    const box = document.createElement('div');
+    box.className = 'bg-white border border-gray-200 rounded p-3 space-y-2';
+
+    const rowTop = document.createElement('div');
+    rowTop.className = 'flex items-center gap-2';
+
+    const headerInput = document.createElement('input');
+    headerInput.type = 'text';
+    headerInput.value = block.header;
+    headerInput.className =
+      'flex-1 border border-gray-300 rounded px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-gray-900';
+    rowTop.appendChild(headerInput);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'text-xs text-gray-400 hover:text-red-600 shrink-0';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', async () => {
+      deleteBtn.disabled = true;
+      await del('/api/todo_blocks/' + block.id);
+      await loadTodoDetails(todoId);
+    });
+    rowTop.appendChild(deleteBtn);
+
+    box.appendChild(rowTop);
+
+    const contentArea = document.createElement('textarea');
+    contentArea.value = block.content;
+    contentArea.rows = 3;
+    contentArea.className =
+      'block w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    box.appendChild(contentArea);
+
+    const saveBlock = async () => {
+      await put('/api/todo_blocks/' + block.id, {
+        header: headerInput.value,
+        content: contentArea.value,
+        sort_order: block.sort_order,
+      });
+      await loadTodoDetails(todoId);
+    };
+    headerInput.addEventListener('blur', saveBlock);
+    contentArea.addEventListener('blur', saveBlock);
+
+    wrap.appendChild(box);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className =
+    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+  addBtn.textContent = 'Add Section';
+  addBtn.addEventListener('click', async () => {
+    addBtn.disabled = true;
+    await post('/api/todo_blocks_create', { todo_id: todoId });
+    await loadTodoDetails(todoId);
+  });
+  wrap.appendChild(addBtn);
+
+  return wrap;
 }
 
 function renderTodoListSelectOptions() {

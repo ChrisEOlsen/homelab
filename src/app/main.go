@@ -90,6 +90,14 @@ func main() {
 	r.Delete("/api/todos/{id}", handlers.TodosDeleteDELETE(database.Read, database.Write, appCache))
 	r.Put("/api/todos_reorder", handlers.TodosReorderPUT(database.Read, database.Write, appCache))
 
+	r.Get("/api/todos/{id}/details", handlers.TodoDetailsGET(database.Read, database.Write, appCache))
+	r.Post("/api/subtasks_create", handlers.SubtasksCreatePOST(database.Read, database.Write, appCache))
+	r.Post("/api/subtasks/{id}/toggle", handlers.SubtasksTogglePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/subtasks/{id}", handlers.SubtasksDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/todo_blocks_create", handlers.TodoBlocksCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/todo_blocks/{id}", handlers.TodoBlocksUpdatePUT(database.Read, database.Write, appCache))
+	r.Delete("/api/todo_blocks/{id}", handlers.TodoBlocksDeleteDELETE(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
