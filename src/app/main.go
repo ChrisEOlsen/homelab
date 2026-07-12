@@ -79,6 +79,17 @@ func main() {
 	r.Post("/api/vision_milestones/{id}/toggle", handlers.VisionMilestonesTogglePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/vision_milestones/{id}", handlers.VisionMilestonesDeleteDELETE(database.Read, database.Write, appCache))
 
+	r.Get("/api/todos", handlers.TodosGET(database.Read, database.Write, appCache))
+	r.Post("/api/todo_lists_create", handlers.TodoListsCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/todo_lists/{id}", handlers.TodoListsUpdatePUT(database.Read, database.Write, appCache))
+	r.Delete("/api/todo_lists/{id}", handlers.TodoListsDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/todo_lists/{id}/clear_completed", handlers.TodosClearCompletedPOST(database.Read, database.Write, appCache))
+	r.Post("/api/todos_create", handlers.TodosCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/todos/{id}", handlers.TodosUpdatePUT(database.Read, database.Write, appCache))
+	r.Post("/api/todos/{id}/toggle", handlers.TodosTogglePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/todos/{id}", handlers.TodosDeleteDELETE(database.Read, database.Write, appCache))
+	r.Put("/api/todos_reorder", handlers.TodosReorderPUT(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
