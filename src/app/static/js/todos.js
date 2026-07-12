@@ -465,10 +465,17 @@ function renderMain() {
     // Always in the DOM (data's already loaded — see loadList) so mobile
     // can show it unconditionally. On mobile it's always visible; on
     // desktop `md:hidden` hides it unless this todo is expanded.
+    // The divider (border+padding) only applies where something is actually
+    // visible — with zero subtasks, mobile shows nothing at all (the empty
+    // text and add-form are desktop-only), so a bare border there read as a
+    // stray line with nothing under it.
+    const hasSubtasks = item.subtask_count > 0;
+    const dividerClass = hasSubtasks
+      ? 'border-t border-hairline pt-3'
+      : 'md:border-t md:border-hairline md:pt-3';
     const subWrap = document.createElement('div');
     subWrap.id = 'subtasks-inline-' + item.id;
-    subWrap.className =
-      'pl-8 border-t border-hairline pt-3' + (expandedTodoIds.has(item.id) ? '' : ' md:hidden');
+    subWrap.className = 'pl-8 ' + dividerClass + (expandedTodoIds.has(item.id) ? '' : ' md:hidden');
     subWrap.appendChild(renderInlineSubtasks(item.id));
     li.appendChild(subWrap);
 
@@ -504,23 +511,103 @@ function renderMain() {
   return section;
 }
 
-// Refetches one todo's subtasks after a create/toggle/delete and refreshes
-// just that todo's inline block. Not used for the initial render — the
-// bulk /api/todos response already has every todo's subtasks (see loadList).
+// Refetches one todo's subtasks after a create/toggle/delete/edit. Also
+// patches that todo's in-memory subtask_count (the "Subtasks (N)" button
+// label and the inline area's divider both key off it) and does a full
+// render() — without this, adding/removing a subtask would leave the count
+// and the divider stale until the next full page load.
 async function loadSubtasks(todoId) {
   const res = await get('/api/todos/' + todoId + '/details');
-  subtasksByTodoId.set(todoId, res.ok ? (res.data.subtasks ?? []) : []);
-  refreshSubtasksInline(todoId);
+  const subs = res.ok ? (res.data.subtasks ?? []) : [];
+  subtasksByTodoId.set(todoId, subs);
+  const todo = todos.find((t) => t.id === todoId);
+  if (todo) todo.subtask_count = subs.length;
+  render();
 }
 
-// Refreshes only one todo's inline subtasks block in place, without
-// touching the sidebar, the todo list, or any other todo's expand area or
-// in-progress form — mirrors the scoped-refresh pattern used elsewhere on
-// this page so an unrelated action never destroys focused input elsewhere.
-function refreshSubtasksInline(todoId) {
-  const container = document.getElementById('subtasks-inline-' + todoId);
-  if (!container) return;
-  container.replaceChildren(renderInlineSubtasks(todoId));
+// A real modal for editing a subtask's title, replacing window.prompt()'s
+// single-line box (which truncates/cramps long text and forces horizontal
+// scrolling to see or edit the end of it). A wrapping <textarea> shows the
+// whole thing at once. Closes on Escape, backdrop click, or Cancel.
+function openEditSubtaskModal(sub, todoId) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4';
+
+  const modal = document.createElement('div');
+  modal.className = 'bg-surface border border-hairline p-5 w-full max-w-md space-y-3';
+  modal.addEventListener('click', (e) => e.stopPropagation());
+  backdrop.appendChild(modal);
+
+  const heading = document.createElement('h3');
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Edit Subtask';
+  modal.appendChild(heading);
+
+  const textarea = document.createElement('textarea');
+  textarea.rows = 4;
+  textarea.value = sub.title;
+  textarea.className =
+    'w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
+  modal.appendChild(textarea);
+
+  const errEl = document.createElement('p');
+  errEl.className = 'text-xs text-danger hidden';
+  modal.appendChild(errEl);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+  modal.appendChild(btnRow);
+
+  function close() {
+    document.removeEventListener('keydown', onKeydown);
+    backdrop.remove();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') close();
+  }
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', onKeydown);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', close);
+  btnRow.appendChild(cancelBtn);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', async () => {
+    const newTitle = textarea.value.trim();
+    if (!newTitle) {
+      errEl.textContent = 'Title is required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (newTitle === sub.title) {
+      close();
+      return;
+    }
+    saveBtn.disabled = true;
+    const res = await put('/api/subtasks/' + sub.id, { title: newTitle });
+    if (res.ok) {
+      close();
+      await loadSubtasks(todoId);
+    } else {
+      saveBtn.disabled = false;
+      errEl.textContent = res.error ?? 'Failed to save.';
+      errEl.classList.remove('hidden');
+    }
+  });
+  btnRow.appendChild(saveBtn);
+
+  document.body.appendChild(backdrop);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 }
 
 function renderInlineSubtasks(todoId) {
@@ -559,18 +646,7 @@ function renderInlineSubtasks(todoId) {
         makeActionsMenu([
           {
             label: 'Edit',
-            onClick: async () => {
-              const newTitle = window.prompt('Edit subtask', sub.title);
-              if (newTitle === null || !newTitle.trim() || newTitle === sub.title) return;
-              deleteErrEl.classList.add('hidden');
-              const res = await put('/api/subtasks/' + sub.id, { title: newTitle });
-              if (res.ok) {
-                await loadSubtasks(todoId);
-              } else {
-                deleteErrEl.textContent = res.error ?? 'Failed to save.';
-                deleteErrEl.classList.remove('hidden');
-              }
-            },
+            onClick: () => openEditSubtaskModal(sub, todoId),
           },
           {
             label: 'Delete',
