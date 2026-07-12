@@ -14,6 +14,7 @@ let listFormTitleEl, listTitleInput, listSubmitBtn, listCancelBtn, listErrEl;
 
 // Todo form state (shared between create and edit modes)
 let editingTodoId = null;
+let editingTodoListId = null;
 let editingTodoIsDone = false;
 let editingTodoSortOrder = 0;
 let todoFormTitleEl, todoListSelect, todoTitleInput, todoDescriptionInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
@@ -276,7 +277,14 @@ function renderTodoListSelectOptions() {
     opt.textContent = list.title;
     todoListSelect.appendChild(opt);
   });
-  if (editingTodoId !== null) return; // populateTodoFormForEdit sets the value explicitly
+  if (editingTodoId !== null) {
+    // Preserve the list of the todo currently being edited across reloads
+    // triggered by unrelated actions (toggling, deleting, reordering, etc.)
+    // elsewhere on the page — otherwise the select silently resets to its
+    // first option and a subsequent Save would move the todo to the wrong list.
+    todoListSelect.value = String(editingTodoListId);
+    return;
+  }
   const desired = previousValue || (activeListId !== null ? String(activeListId) : '');
   if (desired && lists.some((l) => String(l.id) === desired)) {
     todoListSelect.value = desired;
@@ -285,6 +293,7 @@ function renderTodoListSelectOptions() {
 
 function populateTodoFormForEdit(item) {
   editingTodoId = item.id;
+  editingTodoListId = item.list_id;
   editingTodoIsDone = item.is_done;
   editingTodoSortOrder = item.sort_order;
   todoFormTitleEl.textContent = 'Edit Todo';
@@ -299,6 +308,7 @@ function populateTodoFormForEdit(item) {
 
 function resetTodoFormToCreateMode() {
   editingTodoId = null;
+  editingTodoListId = null;
   editingTodoIsDone = false;
   editingTodoSortOrder = 0;
   todoFormTitleEl.textContent = 'New Todo';
