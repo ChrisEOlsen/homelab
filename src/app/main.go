@@ -106,6 +106,12 @@ func main() {
 	r.Post("/api/log_entries_create", handlers.LogEntriesCreatePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/log_entries/{id}", handlers.LogEntriesDeleteDELETE(database.Read, database.Write, appCache))
 
+	r.Get("/api/dashboard", handlers.DashboardGET(database.Read, database.Write, appCache))
+	r.Post("/api/shortcuts_create", handlers.ShortcutsCreatePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/shortcuts/{id}", handlers.ShortcutsDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/focuses_create", handlers.FocusesCreatePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/focuses/{id}", handlers.FocusesDeleteDELETE(database.Read, database.Write, appCache))
+
 	// Generated API routes registered here by MCP tools
 	// Use database.Read for GET handlers, database.Write for POST handlers
 	// Example:
