@@ -1,6 +1,49 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives render()'s replaceChildren() re-renders.
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 let entries = [];
 
@@ -14,7 +57,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -38,7 +81,7 @@ function render() {
 
   if (entries.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No snippets yet.';
     app.appendChild(p);
     return;
@@ -57,11 +100,11 @@ function render() {
 
 function renderGroupCard(items, key) {
   const card = document.createElement('div');
-  card.className = 'border border-gray-200 rounded-lg bg-white p-4 space-y-4';
+  card.className = 'border border-hairline bg-surface p-4 space-y-4';
 
   if (items.length > 1) {
     const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 text-xs text-gray-400';
+    header.className = 'flex items-center gap-2 font-mono text-xs text-ink-dim';
     const label = document.createElement('span');
     label.className = 'font-medium uppercase tracking-wide';
     label.textContent = 'Bundle';
@@ -73,7 +116,7 @@ function renderGroupCard(items, key) {
   }
 
   const list = document.createElement('div');
-  list.className = 'space-y-4 divide-y divide-gray-100';
+  list.className = 'space-y-4 divide-y divide-hairline';
   items.forEach((item) => {
     list.appendChild(renderSnippet(item));
   });
@@ -93,18 +136,18 @@ function renderSnippet(item) {
   info.className = 'min-w-0';
 
   const titleEl = document.createElement('p');
-  titleEl.className = 'text-sm font-medium text-gray-900';
+  titleEl.className = 'text-sm font-medium text-ink';
   titleEl.textContent = item.title;
   info.appendChild(titleEl);
 
   const metaEl = document.createElement('p');
-  metaEl.className = 'text-xs text-gray-400';
+  metaEl.className = 'font-mono text-xs text-ink-dim';
   metaEl.textContent = item.language + (item.tags ? ' · ' + item.tags : '');
   info.appendChild(metaEl);
 
   if (item.description) {
     const descEl = document.createElement('p');
-    descEl.className = 'text-xs text-gray-500 mt-1';
+    descEl.className = 'font-mono text-xs text-ink-dim mt-1';
     descEl.textContent = item.description;
     info.appendChild(descEl);
   }
@@ -117,7 +160,7 @@ function renderSnippet(item) {
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
   editBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   editBtn.textContent = 'Edit';
   editBtn.addEventListener('click', () => populateFormForEdit(item));
   actions.appendChild(editBtn);
@@ -125,13 +168,20 @@ function renderSnippet(item) {
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
   deleteBtn.textContent = 'Delete';
   deleteBtn.addEventListener('click', async () => {
     deleteBtn.disabled = true;
-    await del('/api/codex_entries/' + item.id);
-    if (editingId === item.id) resetSnippetFormToCreateMode();
-    await loadList();
+    deleteErrEl.classList.add('hidden');
+    const res = await del('/api/codex_entries/' + item.id);
+    if (res.ok) {
+      if (editingId === item.id) resetSnippetFormToCreateMode();
+      await loadList();
+    } else {
+      deleteBtn.disabled = false;
+      deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+      deleteErrEl.classList.remove('hidden');
+    }
   });
   actions.appendChild(deleteBtn);
 
@@ -139,7 +189,7 @@ function renderSnippet(item) {
   wrap.appendChild(headerRow);
 
   const pre = document.createElement('pre');
-  pre.className = 'bg-gray-900 text-gray-100 text-xs rounded p-3 overflow-x-auto';
+  pre.className = 'bg-canvas text-ink text-xs p-3 overflow-x-auto border border-hairline font-mono';
   const code = document.createElement('code');
   code.textContent = item.code; // safe: textContent, never innerHTML
   pre.appendChild(code);
@@ -187,10 +237,10 @@ init();
 
 function setupCodexEntriesCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   cxFormTitleEl = document.createElement('h3');
-  cxFormTitleEl.className = 'text-sm font-semibold text-gray-900';
+  cxFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   cxFormTitleEl.textContent = 'New Snippet';
   wrapper.appendChild(cxFormTitleEl);
 
@@ -198,64 +248,64 @@ function setupCodexEntriesCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   cxTitleInput = document.createElement('input');
   cxTitleInput.type = 'text';
   cxTitleInput.name = 'title';
-  cxTitleInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxTitleInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   cxTitleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(cxTitleInput);
 
   const languageLabel = document.createElement('label');
-  languageLabel.className = 'block text-sm font-medium text-gray-700';
+  languageLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   languageLabel.textContent = 'Language';
   cxLanguageInput = document.createElement('input');
   cxLanguageInput.type = 'text';
   cxLanguageInput.name = 'language';
-  cxLanguageInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxLanguageInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(languageLabel);
   form.appendChild(cxLanguageInput);
 
   const codeLabel = document.createElement('label');
-  codeLabel.className = 'block text-sm font-medium text-gray-700';
+  codeLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   codeLabel.textContent = 'Code';
   cxCodeInput = document.createElement('textarea');
   cxCodeInput.name = 'code';
   cxCodeInput.rows = 8;
-  cxCodeInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxCodeInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm font-mono text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   cxCodeInput.required = true;
   form.appendChild(codeLabel);
   form.appendChild(cxCodeInput);
 
   const tagsLabel = document.createElement('label');
-  tagsLabel.className = 'block text-sm font-medium text-gray-700';
+  tagsLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   tagsLabel.textContent = 'Tags';
   cxTagsInput = document.createElement('input');
   cxTagsInput.type = 'text';
   cxTagsInput.name = 'tags';
-  cxTagsInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxTagsInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(tagsLabel);
   form.appendChild(cxTagsInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-sm font-medium text-gray-700';
+  descriptionLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   cxDescriptionInput = document.createElement('textarea');
   cxDescriptionInput.name = 'description';
   cxDescriptionInput.rows = 3;
-  cxDescriptionInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxDescriptionInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(descriptionLabel);
   form.appendChild(cxDescriptionInput);
 
   const bundleIdLabel = document.createElement('label');
-  bundleIdLabel.className = 'block text-sm font-medium text-gray-700';
+  bundleIdLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   bundleIdLabel.textContent = 'Bundle Id';
   cxBundleIdInput = document.createElement('input');
   cxBundleIdInput.type = 'text';
   cxBundleIdInput.name = 'bundle_id';
-  cxBundleIdInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  cxBundleIdInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(bundleIdLabel);
   form.appendChild(cxBundleIdInput);
 
@@ -264,14 +314,14 @@ function setupCodexEntriesCreateForm(container) {
 
   cxSubmitBtn = document.createElement('button');
   cxSubmitBtn.type = 'submit';
-  cxSubmitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  cxSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   cxSubmitBtn.textContent = 'Save Snippet';
   btnRow.appendChild(cxSubmitBtn);
 
   cxCancelBtn = document.createElement('button');
   cxCancelBtn.type = 'button';
   cxCancelBtn.className =
-    'px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50 transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   cxCancelBtn.textContent = 'Cancel';
   cxCancelBtn.addEventListener('click', resetSnippetFormToCreateMode);
   btnRow.appendChild(cxCancelBtn);
@@ -279,7 +329,7 @@ function setupCodexEntriesCreateForm(container) {
   form.appendChild(btnRow);
 
   cxErrEl = document.createElement('p');
-  cxErrEl.className = 'text-sm text-red-600 hidden';
+  cxErrEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(cxErrEl);
 
   form.addEventListener('submit', async (e) => {

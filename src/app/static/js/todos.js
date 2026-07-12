@@ -1,6 +1,50 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives render()'s replaceChildren() re-renders (used by every delete
+// action on this page, including ones nested in the detail panel).
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 // Module state
 let lists = [];
@@ -28,7 +72,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -62,7 +106,7 @@ function renderSidebar() {
 
   if (lists.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No lists yet.';
     aside.appendChild(p);
     return aside;
@@ -74,10 +118,10 @@ function renderSidebar() {
   lists.forEach((list) => {
     const li = document.createElement('li');
     li.className =
-      'group flex items-center justify-between gap-2 rounded px-3 py-2 text-sm cursor-pointer border ' +
+      'group flex items-center justify-between gap-2 px-3 py-2 text-sm cursor-pointer border ' +
       (list.id === activeListId
-        ? 'bg-gray-900 text-white border-gray-900'
-        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50');
+        ? 'bg-accent text-canvas border-accent'
+        : 'bg-surface text-ink-dim border-hairline hover:bg-surface-raised hover:text-ink');
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'flex-1 truncate';
@@ -96,8 +140,8 @@ function renderSidebar() {
     const renameBtn = document.createElement('button');
     renameBtn.type = 'button';
     renameBtn.className =
-      'text-xs px-1 rounded ' +
-      (list.id === activeListId ? 'text-gray-200 hover:text-white' : 'text-gray-400 hover:text-gray-700');
+      'text-xs px-1 ' +
+      (list.id === activeListId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-ink');
     renameBtn.textContent = 'Edit';
     renameBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -108,16 +152,24 @@ function renderSidebar() {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'text-xs px-1 rounded ' +
-      (list.id === activeListId ? 'text-gray-200 hover:text-white' : 'text-gray-400 hover:text-red-600');
+      'text-xs px-1 ' +
+      (list.id === activeListId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-danger');
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!window.confirm('Delete this list and all its todos?')) return;
-      await del('/api/todo_lists/' + list.id);
-      if (editingListId === list.id) resetListFormToCreateMode();
-      if (activeListId === list.id) activeListId = null;
-      await loadList();
+      deleteBtn.disabled = true;
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/todo_lists/' + list.id);
+      if (res.ok) {
+        if (editingListId === list.id) resetListFormToCreateMode();
+        if (activeListId === list.id) activeListId = null;
+        await loadList();
+      } else {
+        deleteBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     actions.appendChild(deleteBtn);
 
@@ -135,7 +187,7 @@ function renderMain() {
 
   if (activeListId === null) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'Create a list to get started.';
     section.appendChild(p);
     return section;
@@ -148,14 +200,14 @@ function renderMain() {
   header.className = 'flex items-center justify-between gap-4';
 
   const heading = document.createElement('h2');
-  heading.className = 'text-lg font-semibold text-gray-900';
+  heading.className = 'text-lg font-semibold text-ink';
   heading.textContent = activeList ? activeList.title : '';
   header.appendChild(heading);
 
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
   clearBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   clearBtn.textContent = 'Clear Completed';
   clearBtn.addEventListener('click', async () => {
     if (!window.confirm('Delete all completed todos in this list?')) return;
@@ -169,7 +221,7 @@ function renderMain() {
 
   if (listTodos.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No todos in this list yet.';
     section.appendChild(p);
     return section;
@@ -183,7 +235,7 @@ function renderMain() {
     li.draggable = true;
     li.dataset.id = String(item.id);
     li.className =
-      'border border-gray-200 rounded-lg p-3 bg-white flex items-center gap-3' +
+      'border border-hairline bg-surface-raised p-3 flex items-center gap-3' +
       (item.is_done ? ' opacity-60' : '');
 
     const checkbox = document.createElement('input');
@@ -200,12 +252,12 @@ function renderMain() {
     const info = document.createElement('div');
     info.className = 'flex-1 min-w-0';
     const titleEl = document.createElement('p');
-    titleEl.className = 'text-sm font-medium text-gray-900 truncate' + (item.is_done ? ' line-through' : '');
+    titleEl.className = 'text-sm font-medium text-ink truncate' + (item.is_done ? ' line-through' : '');
     titleEl.textContent = item.title;
     info.appendChild(titleEl);
     if (item.description) {
       const descEl = document.createElement('p');
-      descEl.className = 'text-xs text-gray-500 truncate';
+      descEl.className = 'font-mono text-xs text-ink-dim truncate';
       descEl.textContent = item.description;
       info.appendChild(descEl);
     }
@@ -217,7 +269,7 @@ function renderMain() {
     const detailsBtn = document.createElement('button');
     detailsBtn.type = 'button';
     detailsBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     detailsBtn.textContent = detailTodoId === item.id ? 'Hide Details' : 'Details';
     detailsBtn.addEventListener('click', async () => {
       if (detailTodoId === item.id) {
@@ -236,7 +288,7 @@ function renderMain() {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     editBtn.textContent = 'Edit';
     editBtn.addEventListener('click', () => populateTodoFormForEdit(item));
     actions.appendChild(editBtn);
@@ -244,24 +296,31 @@ function renderMain() {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
-      await del('/api/todos/' + item.id);
-      if (editingTodoId === item.id) resetTodoFormToCreateMode();
-      if (detailTodoId === item.id) {
-        detailTodoId = null;
-        detailData = null;
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/todos/' + item.id);
+      if (res.ok) {
+        if (editingTodoId === item.id) resetTodoFormToCreateMode();
+        if (detailTodoId === item.id) {
+          detailTodoId = null;
+          detailData = null;
+        }
+        await loadList();
+      } else {
+        deleteBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
       }
-      await loadList();
     });
     actions.appendChild(deleteBtn);
 
     li.appendChild(actions);
 
     const dragHandle = document.createElement('span');
-    dragHandle.className = 'text-gray-300 cursor-grab select-none shrink-0';
+    dragHandle.className = 'text-ink-dim cursor-grab select-none shrink-0';
     dragHandle.textContent = '⠿';
     li.insertBefore(dragHandle, li.firstChild);
 
@@ -326,19 +385,19 @@ function refreshDetailPanel() {
 
 function renderDetailPanel() {
   const panel = document.createElement('div');
-  panel.className = 'border border-gray-300 rounded-lg p-4 bg-gray-50 space-y-4';
+  panel.className = 'border border-hairline bg-surface-raised p-4 space-y-4';
 
   const headerRow = document.createElement('div');
   headerRow.className = 'flex items-center justify-between gap-4';
 
   const heading = document.createElement('h3');
-  heading.className = 'text-sm font-semibold text-gray-900';
+  heading.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   heading.textContent = detailData ? 'Details: ' + detailData.todo.title : 'Loading details...';
   headerRow.appendChild(heading);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.className = 'text-xs text-gray-400 hover:text-gray-700';
+  closeBtn.className = 'font-mono text-xs text-ink-dim hover:text-ink';
   closeBtn.textContent = 'Close';
   closeBtn.addEventListener('click', () => {
     detailTodoId = null;
@@ -351,7 +410,7 @@ function renderDetailPanel() {
 
   if (!detailData) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'Loading...';
     panel.appendChild(p);
     return panel;
@@ -369,7 +428,7 @@ function renderSubtasksSection(todoId, subtasks) {
   wrap.className = 'space-y-2';
 
   const heading = document.createElement('h4');
-  heading.className = 'text-xs font-semibold text-gray-700 uppercase tracking-wide';
+  heading.className = 'text-xs font-mono text-ink-dim uppercase tracking-wide';
   heading.textContent = 'Subtasks';
   wrap.appendChild(heading);
 
@@ -379,7 +438,7 @@ function renderSubtasksSection(todoId, subtasks) {
 
     subtasks.forEach((sub) => {
       const li = document.createElement('li');
-      li.className = 'flex items-center gap-2 bg-white border border-gray-200 rounded px-2 py-1.5';
+      li.className = 'flex items-center gap-2 bg-surface-raised border border-hairline px-2 py-1.5';
 
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
@@ -393,18 +452,25 @@ function renderSubtasksSection(todoId, subtasks) {
       li.appendChild(checkbox);
 
       const title = document.createElement('span');
-      title.className = 'flex-1 text-sm text-gray-900' + (sub.is_done ? ' line-through text-gray-400' : '');
+      title.className = 'flex-1 text-sm text-ink' + (sub.is_done ? ' line-through text-ink-dim' : '');
       title.textContent = sub.title;
       li.appendChild(title);
 
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
-      deleteBtn.className = 'text-xs text-gray-400 hover:text-red-600 shrink-0';
+      deleteBtn.className = 'font-mono text-xs text-ink-dim hover:text-danger shrink-0';
       deleteBtn.textContent = 'Delete';
       deleteBtn.addEventListener('click', async () => {
         deleteBtn.disabled = true;
-        await del('/api/subtasks/' + sub.id);
-        await loadTodoDetails(todoId);
+        deleteErrEl.classList.add('hidden');
+        const res = await del('/api/subtasks/' + sub.id);
+        if (res.ok) {
+          await loadTodoDetails(todoId);
+        } else {
+          deleteBtn.disabled = false;
+          deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+          deleteErrEl.classList.remove('hidden');
+        }
       });
       li.appendChild(deleteBtn);
 
@@ -414,7 +480,7 @@ function renderSubtasksSection(todoId, subtasks) {
     wrap.appendChild(list);
   } else {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No subtasks yet.';
     wrap.appendChild(p);
   }
@@ -426,12 +492,12 @@ function renderSubtasksSection(todoId, subtasks) {
   input.type = 'text';
   input.placeholder = 'New subtask';
   input.className =
-    'flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'flex-1 bg-canvas border border-hairline px-2 py-1 text-sm text-ink focus:outline-none focus:border-accent';
   form.appendChild(input);
 
   const addBtn = document.createElement('button');
   addBtn.type = 'submit';
-  addBtn.className = 'px-3 py-1 text-xs rounded bg-gray-900 text-white hover:bg-gray-700 transition-colors';
+  addBtn.className = 'px-3 py-1 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
   addBtn.textContent = 'Add';
   form.appendChild(addBtn);
 
@@ -452,20 +518,20 @@ function renderBlocksSection(todoId, blocks) {
   wrap.className = 'space-y-2';
 
   const heading = document.createElement('h4');
-  heading.className = 'text-xs font-semibold text-gray-700 uppercase tracking-wide';
+  heading.className = 'text-xs font-mono text-ink-dim uppercase tracking-wide';
   heading.textContent = 'Sections';
   wrap.appendChild(heading);
 
   if (blocks.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No sections yet.';
     wrap.appendChild(p);
   }
 
   blocks.forEach((block) => {
     const box = document.createElement('div');
-    box.className = 'bg-white border border-gray-200 rounded p-3 space-y-2';
+    box.className = 'bg-surface-raised border border-hairline p-3 space-y-2';
 
     const rowTop = document.createElement('div');
     rowTop.className = 'flex items-center gap-2';
@@ -474,17 +540,24 @@ function renderBlocksSection(todoId, blocks) {
     headerInput.type = 'text';
     headerInput.value = block.header;
     headerInput.className =
-      'flex-1 border border-gray-300 rounded px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-gray-900';
+      'flex-1 bg-canvas border border-hairline px-2 py-1 text-sm font-medium text-ink focus:outline-none focus:border-accent';
     rowTop.appendChild(headerInput);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
-    deleteBtn.className = 'text-xs text-gray-400 hover:text-red-600 shrink-0';
+    deleteBtn.className = 'font-mono text-xs text-ink-dim hover:text-danger shrink-0';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
-      await del('/api/todo_blocks/' + block.id);
-      await loadTodoDetails(todoId);
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/todo_blocks/' + block.id);
+      if (res.ok) {
+        await loadTodoDetails(todoId);
+      } else {
+        deleteBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     rowTop.appendChild(deleteBtn);
 
@@ -494,11 +567,11 @@ function renderBlocksSection(todoId, blocks) {
     contentArea.value = block.content;
     contentArea.rows = 3;
     contentArea.className =
-      'block w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+      'block w-full bg-canvas border border-hairline px-2 py-1 text-sm text-ink focus:outline-none focus:border-accent';
     box.appendChild(contentArea);
 
     const saveErrEl = document.createElement('p');
-    saveErrEl.className = 'text-xs text-red-600 hidden';
+    saveErrEl.className = 'text-xs text-danger hidden';
     box.appendChild(saveErrEl);
 
     // A block's own save is purely a field-level update: no block/subtask is
@@ -537,7 +610,7 @@ function renderBlocksSection(todoId, blocks) {
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   addBtn.textContent = 'Add Section';
   addBtn.addEventListener('click', async () => {
     addBtn.disabled = true;
@@ -632,10 +705,10 @@ init();
 
 function setupTodoListsCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   listFormTitleEl = document.createElement('h3');
-  listFormTitleEl.className = 'text-sm font-semibold text-gray-900';
+  listFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   listFormTitleEl.textContent = 'New List';
   wrapper.appendChild(listFormTitleEl);
 
@@ -643,13 +716,13 @@ function setupTodoListsCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   listTitleInput = document.createElement('input');
   listTitleInput.type = 'text';
   listTitleInput.name = 'title';
   listTitleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   listTitleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(listTitleInput);
@@ -659,14 +732,14 @@ function setupTodoListsCreateForm(container) {
 
   listSubmitBtn = document.createElement('button');
   listSubmitBtn.type = 'submit';
-  listSubmitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   listSubmitBtn.textContent = 'Add List';
   btnRow.appendChild(listSubmitBtn);
 
   listCancelBtn = document.createElement('button');
   listCancelBtn.type = 'button';
   listCancelBtn.className =
-    'px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50 transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   listCancelBtn.textContent = 'Cancel';
   listCancelBtn.addEventListener('click', resetListFormToCreateMode);
   btnRow.appendChild(listCancelBtn);
@@ -674,7 +747,7 @@ function setupTodoListsCreateForm(container) {
   form.appendChild(btnRow);
 
   listErrEl = document.createElement('p');
-  listErrEl.className = 'text-sm text-red-600 hidden';
+  listErrEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(listErrEl);
 
   form.addEventListener('submit', async (e) => {
@@ -703,10 +776,10 @@ function setupTodoListsCreateForm(container) {
 
 function setupTodosCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   todoFormTitleEl = document.createElement('h3');
-  todoFormTitleEl.className = 'text-sm font-semibold text-gray-900';
+  todoFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   todoFormTitleEl.textContent = 'New Todo';
   wrapper.appendChild(todoFormTitleEl);
 
@@ -714,36 +787,36 @@ function setupTodosCreateForm(container) {
   form.className = 'space-y-3';
 
   const listLabel = document.createElement('label');
-  listLabel.className = 'block text-sm font-medium text-gray-700';
+  listLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   listLabel.textContent = 'List';
   todoListSelect = document.createElement('select');
   todoListSelect.name = 'list_id';
   todoListSelect.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   todoListSelect.required = true;
   form.appendChild(listLabel);
   form.appendChild(todoListSelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   todoTitleInput = document.createElement('input');
   todoTitleInput.type = 'text';
   todoTitleInput.name = 'title';
   todoTitleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   todoTitleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(todoTitleInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-sm font-medium text-gray-700';
+  descriptionLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   todoDescriptionInput = document.createElement('input');
   todoDescriptionInput.type = 'text';
   todoDescriptionInput.name = 'description';
   todoDescriptionInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(descriptionLabel);
   form.appendChild(todoDescriptionInput);
 
@@ -752,14 +825,14 @@ function setupTodosCreateForm(container) {
 
   todoSubmitBtn = document.createElement('button');
   todoSubmitBtn.type = 'submit';
-  todoSubmitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   todoSubmitBtn.textContent = 'Add Todo';
   btnRow.appendChild(todoSubmitBtn);
 
   todoCancelBtn = document.createElement('button');
   todoCancelBtn.type = 'button';
   todoCancelBtn.className =
-    'px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50 transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   todoCancelBtn.textContent = 'Cancel';
   todoCancelBtn.addEventListener('click', resetTodoFormToCreateMode);
   btnRow.appendChild(todoCancelBtn);
@@ -767,7 +840,7 @@ function setupTodosCreateForm(container) {
   form.appendChild(btnRow);
 
   todoErrEl = document.createElement('p');
-  todoErrEl.className = 'text-sm text-red-600 hidden';
+  todoErrEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(todoErrEl);
 
   form.addEventListener('submit', async (e) => {

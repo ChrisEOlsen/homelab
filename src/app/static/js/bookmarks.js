@@ -1,6 +1,49 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives render()'s replaceChildren() re-renders.
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 let categories = [];
 let bookmarks = [];
@@ -15,7 +58,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -43,10 +86,10 @@ function populateCategorySelect() {
 
 function tabClass(active) {
   return (
-    'px-3 py-1.5 text-xs rounded border transition-colors ' +
+    'px-3 py-1.5 text-xs border transition-colors ' +
     (active
-      ? 'bg-gray-900 text-white border-gray-900'
-      : 'border-gray-300 text-gray-700 hover:bg-gray-50')
+      ? 'bg-accent text-canvas border-accent'
+      : 'border-hairline text-ink-dim hover:bg-surface-raised hover:text-ink')
   );
 }
 
@@ -82,15 +125,22 @@ function render() {
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.className = 'text-xs text-red-400 hover:text-red-600 px-1';
+    delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
     delBtn.title = 'Delete category';
     delBtn.textContent = '×';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       delBtn.disabled = true;
-      await del('/api/bookmark_categories/' + cat.id);
-      if (selectedCategoryId === cat.id) selectedCategoryId = 'all';
-      await loadList();
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/bookmark_categories/' + cat.id);
+      if (res.ok) {
+        if (selectedCategoryId === cat.id) selectedCategoryId = 'all';
+        await loadList();
+      } else {
+        delBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     tab.appendChild(delBtn);
 
@@ -109,7 +159,7 @@ function render() {
 
   if (filtered.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No bookmarks yet.';
     listWrap.appendChild(p);
   } else {
@@ -127,7 +177,7 @@ function render() {
 function renderBookmarkRow(item) {
   const li = document.createElement('li');
   li.className =
-    'border border-gray-200 rounded-lg p-4 bg-white flex items-start justify-between gap-4';
+    'border border-hairline bg-surface-raised p-4 flex items-start justify-between gap-4';
 
   const info = document.createElement('div');
   info.className = 'flex-1 min-w-0';
@@ -136,18 +186,18 @@ function renderBookmarkRow(item) {
   link.href = item.url;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.className = 'text-sm font-medium text-gray-900 hover:underline';
+  link.className = 'text-sm font-medium text-ink hover:underline';
   link.textContent = item.title;
   info.appendChild(link);
 
   const urlEl = document.createElement('p');
-  urlEl.className = 'text-xs text-gray-400 truncate';
+  urlEl.className = 'font-mono text-xs text-ink-dim truncate';
   urlEl.textContent = item.url;
   info.appendChild(urlEl);
 
   if (item.description) {
     const descEl = document.createElement('p');
-    descEl.className = 'text-xs text-gray-500 mt-1';
+    descEl.className = 'font-mono text-xs text-ink-dim mt-1';
     descEl.textContent = item.description;
     info.appendChild(descEl);
   }
@@ -160,7 +210,7 @@ function renderBookmarkRow(item) {
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
   editBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   editBtn.textContent = 'Edit';
   editBtn.addEventListener('click', () => populateFormForEdit(item));
   actions.appendChild(editBtn);
@@ -168,13 +218,20 @@ function renderBookmarkRow(item) {
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
   deleteBtn.textContent = 'Delete';
   deleteBtn.addEventListener('click', async () => {
     deleteBtn.disabled = true;
-    await del('/api/bookmarks/' + item.id);
-    if (editingId === item.id) resetBookmarkFormToCreateMode();
-    await loadList();
+    deleteErrEl.classList.add('hidden');
+    const res = await del('/api/bookmarks/' + item.id);
+    if (res.ok) {
+      if (editingId === item.id) resetBookmarkFormToCreateMode();
+      await loadList();
+    } else {
+      deleteBtn.disabled = false;
+      deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+      deleteErrEl.classList.remove('hidden');
+    }
   });
   actions.appendChild(deleteBtn);
 
@@ -216,10 +273,10 @@ init();
 
 function setupBookmarkCategoriesCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Category';
   wrapper.appendChild(titleEl);
 
@@ -227,25 +284,25 @@ function setupBookmarkCategoriesCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
   titleInput.name = 'title';
   titleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   titleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(titleInput);
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Category';
   form.appendChild(submitBtn);
 
   const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {
@@ -270,10 +327,10 @@ function setupBookmarkCategoriesCreateForm(container) {
 
 function setupBookmarksCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   bmFormTitleEl = document.createElement('h3');
-  bmFormTitleEl.className = 'text-sm font-semibold text-gray-900';
+  bmFormTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   bmFormTitleEl.textContent = 'New Bookmark';
   wrapper.appendChild(bmFormTitleEl);
 
@@ -281,48 +338,48 @@ function setupBookmarksCreateForm(container) {
   form.className = 'space-y-3';
 
   const categoryLabel = document.createElement('label');
-  categoryLabel.className = 'block text-sm font-medium text-gray-700';
+  categoryLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   categoryLabel.textContent = 'Category';
   bmCategorySelect = document.createElement('select');
   bmCategorySelect.name = 'category_id';
   bmCategorySelect.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   bmCategorySelect.required = true;
   form.appendChild(categoryLabel);
   form.appendChild(bmCategorySelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   bmTitleInput = document.createElement('input');
   bmTitleInput.type = 'text';
   bmTitleInput.name = 'title';
   bmTitleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   bmTitleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(bmTitleInput);
 
   const urlLabel = document.createElement('label');
-  urlLabel.className = 'block text-sm font-medium text-gray-700';
+  urlLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   urlLabel.textContent = 'Url';
   bmUrlInput = document.createElement('input');
   bmUrlInput.type = 'text';
   bmUrlInput.name = 'url';
   bmUrlInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   bmUrlInput.required = true;
   form.appendChild(urlLabel);
   form.appendChild(bmUrlInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-sm font-medium text-gray-700';
+  descriptionLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   bmDescriptionInput = document.createElement('input');
   bmDescriptionInput.type = 'text';
   bmDescriptionInput.name = 'description';
   bmDescriptionInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   form.appendChild(descriptionLabel);
   form.appendChild(bmDescriptionInput);
 
@@ -331,14 +388,14 @@ function setupBookmarksCreateForm(container) {
 
   bmSubmitBtn = document.createElement('button');
   bmSubmitBtn.type = 'submit';
-  bmSubmitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  bmSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   bmSubmitBtn.textContent = 'Add Bookmark';
   btnRow.appendChild(bmSubmitBtn);
 
   bmCancelBtn = document.createElement('button');
   bmCancelBtn.type = 'button';
   bmCancelBtn.className =
-    'px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50 transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   bmCancelBtn.textContent = 'Cancel';
   bmCancelBtn.addEventListener('click', resetBookmarkFormToCreateMode);
   btnRow.appendChild(bmCancelBtn);
@@ -346,7 +403,7 @@ function setupBookmarksCreateForm(container) {
   form.appendChild(btnRow);
 
   bmErrEl = document.createElement('p');
-  bmErrEl.className = 'text-sm text-red-600 hidden';
+  bmErrEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(bmErrEl);
 
   form.addEventListener('submit', async (e) => {

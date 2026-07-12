@@ -1,6 +1,49 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives renderList()'s replaceChildren() re-renders.
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 const RECURRENCE_LABELS = {
   none: 'Does not repeat',
@@ -22,7 +65,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -51,7 +94,7 @@ function renderList(items) {
   app.replaceChildren();
   if (items.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No reminders yet.';
     app.appendChild(p);
     return;
@@ -63,7 +106,7 @@ function renderList(items) {
   items.forEach((item) => {
     const li = document.createElement('li');
     li.className =
-      'border border-gray-200 rounded-lg p-4 bg-white flex items-center justify-between gap-4' +
+      'border border-hairline bg-surface-raised p-4 flex items-center justify-between gap-4' +
       (item.is_active ? '' : ' opacity-50');
 
     const info = document.createElement('div');
@@ -71,12 +114,12 @@ function renderList(items) {
     info.addEventListener('click', () => populateFormForEdit(item));
 
     const titleEl = document.createElement('p');
-    titleEl.className = 'text-sm font-medium text-gray-900';
+    titleEl.className = 'text-sm font-medium text-ink';
     titleEl.textContent = item.title;
     info.appendChild(titleEl);
 
     const metaEl = document.createElement('p');
-    metaEl.className = 'text-xs text-gray-500';
+    metaEl.className = 'font-mono text-xs text-ink-dim';
     metaEl.textContent = `${formatRemindAt(item.remind_at)} · ${recurrenceLabel(item)}`;
     info.appendChild(metaEl);
 
@@ -88,7 +131,7 @@ function renderList(items) {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
     toggleBtn.textContent = item.is_active ? 'Active' : 'Inactive';
     toggleBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -101,14 +144,21 @@ function renderList(items) {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       deleteBtn.disabled = true;
-      await del('/api/reminders/' + item.id);
-      if (editingId === item.id) resetFormToCreateMode();
-      await loadList();
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/reminders/' + item.id);
+      if (res.ok) {
+        if (editingId === item.id) resetFormToCreateMode();
+        await loadList();
+      } else {
+        deleteBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     actions.appendChild(deleteBtn);
 
@@ -167,10 +217,10 @@ init();
 
 function setupRemindersForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   formTitleEl = document.createElement('h3');
-  formTitleEl.className = 'text-sm font-semibold text-gray-900';
+  formTitleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   formTitleEl.textContent = 'New Reminder';
   wrapper.appendChild(formTitleEl);
 
@@ -178,36 +228,36 @@ function setupRemindersForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   titleInput = document.createElement('input');
   titleInput.type = 'text';
   titleInput.name = 'title';
   titleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   titleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(titleInput);
 
   const remindAtLabel = document.createElement('label');
-  remindAtLabel.className = 'block text-sm font-medium text-gray-700';
+  remindAtLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   remindAtLabel.textContent = 'Remind At';
   remindAtInput = document.createElement('input');
   remindAtInput.type = 'datetime-local';
   remindAtInput.name = 'remind_at';
   remindAtInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   remindAtInput.required = true;
   form.appendChild(remindAtLabel);
   form.appendChild(remindAtInput);
 
   const recurrenceFieldLabel = document.createElement('label');
-  recurrenceFieldLabel.className = 'block text-sm font-medium text-gray-700';
+  recurrenceFieldLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   recurrenceFieldLabel.textContent = 'Recurrence';
   recurrenceSelect = document.createElement('select');
   recurrenceSelect.name = 'recurrence_type';
   recurrenceSelect.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   [
     ['none', 'Does not repeat'],
     ['daily', 'Daily'],
@@ -229,7 +279,7 @@ function setupRemindersForm(container) {
   dayCheckboxes = [];
   DAY_LABELS.forEach((label, index) => {
     const wrapperLabel = document.createElement('label');
-    wrapperLabel.className = 'flex items-center gap-1 text-xs text-gray-700';
+    wrapperLabel.className = 'flex items-center gap-1 text-xs text-ink-dim';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.value = String(index);
@@ -248,14 +298,14 @@ function setupRemindersForm(container) {
 
   submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Reminder';
   btnRow.appendChild(submitBtn);
 
   cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50 transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-mono uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', resetFormToCreateMode);
   btnRow.appendChild(cancelBtn);
@@ -263,7 +313,7 @@ function setupRemindersForm(container) {
   form.appendChild(btnRow);
 
   errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {

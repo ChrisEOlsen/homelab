@@ -1,7 +1,50 @@
 import { get, post, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
 const formsContainer = document.getElementById('forms-container');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives render()'s replaceChildren() re-renders.
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 const FIELD_TYPES = ['text', 'date', 'time'];
 
@@ -20,7 +63,7 @@ async function loadCategories() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -59,10 +102,10 @@ function parseSchema(category) {
 
 function tabClass(active) {
   return (
-    'px-3 py-1.5 text-xs rounded border transition-colors ' +
+    'px-3 py-1.5 text-xs border transition-colors ' +
     (active
-      ? 'bg-gray-900 text-white border-gray-900'
-      : 'border-gray-300 text-gray-700 hover:bg-gray-50')
+      ? 'bg-accent text-canvas border-accent'
+      : 'border-hairline text-ink-dim hover:bg-surface-raised hover:text-ink')
   );
 }
 
@@ -74,7 +117,7 @@ function render() {
 
   if (categories.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No log categories yet. Create one below.';
     app.appendChild(p);
   } else {
@@ -94,15 +137,22 @@ function render() {
 
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
-      delBtn.className = 'text-xs text-red-400 hover:text-red-600 px-1';
+      delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
       delBtn.title = 'Delete category';
       delBtn.textContent = '×';
       delBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         delBtn.disabled = true;
-        await del('/api/log_categories/' + cat.id);
-        if (selectedCategoryId === cat.id) selectedCategoryId = null;
-        await loadCategories();
+        deleteErrEl.classList.add('hidden');
+        const res = await del('/api/log_categories/' + cat.id);
+        if (res.ok) {
+          if (selectedCategoryId === cat.id) selectedCategoryId = null;
+          await loadCategories();
+        } else {
+          delBtn.disabled = false;
+          deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+          deleteErrEl.classList.remove('hidden');
+        }
       });
       tab.appendChild(delBtn);
 
@@ -119,7 +169,7 @@ function render() {
     entriesSection.className = 'mt-6 space-y-4';
 
     const heading = document.createElement('h2');
-    heading.className = 'text-sm font-semibold text-gray-900';
+    heading.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
     heading.textContent = selected.title + ' entries';
     entriesSection.appendChild(heading);
 
@@ -133,37 +183,37 @@ function render() {
 function renderEntryTable(schema) {
   if (schema.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'This category has no fields defined.';
     return p;
   }
 
   if (entries.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No entries yet.';
     return p;
   }
 
   const wrap = document.createElement('div');
-  wrap.className = 'overflow-x-auto border border-gray-200 rounded-lg bg-white';
+  wrap.className = 'overflow-x-auto border border-hairline bg-surface';
 
   const table = document.createElement('table');
   table.className = 'min-w-full text-sm';
 
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
-  headRow.className = 'border-b border-gray-200';
+  headRow.className = 'border-b border-hairline';
 
   schema.forEach((field) => {
     const th = document.createElement('th');
-    th.className = 'text-left px-4 py-2 font-medium text-gray-700';
+    th.className = 'text-left px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink-dim';
     th.textContent = field.name;
     headRow.appendChild(th);
   });
 
   const actionsTh = document.createElement('th');
-  actionsTh.className = 'text-left px-4 py-2 font-medium text-gray-700';
+  actionsTh.className = 'text-left px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink-dim';
   actionsTh.textContent = 'Actions';
   headRow.appendChild(actionsTh);
 
@@ -181,11 +231,11 @@ function renderEntryTable(schema) {
     }
 
     const row = document.createElement('tr');
-    row.className = 'border-b border-gray-100 last:border-0';
+    row.className = 'border-b border-hairline last:border-0';
 
     schema.forEach((field) => {
       const td = document.createElement('td');
-      td.className = 'px-4 py-2 text-gray-800';
+      td.className = 'px-4 py-2 text-ink';
       const value = entryData[field.name];
       td.textContent = value === undefined || value === null || value === '' ? '-' : String(value);
       row.appendChild(td);
@@ -196,12 +246,19 @@ function renderEntryTable(schema) {
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+      'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
-      await del('/api/log_entries/' + entry.id);
-      await loadEntries();
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/log_entries/' + entry.id);
+      if (res.ok) {
+        await loadEntries();
+      } else {
+        deleteBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     actionsTd.appendChild(deleteBtn);
     row.appendChild(actionsTd);
@@ -216,16 +273,16 @@ function renderEntryTable(schema) {
 
 function renderEntryForm(category, schema) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Entry';
   wrapper.appendChild(titleEl);
 
   if (schema.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'Add fields to this category to start logging entries.';
     wrapper.appendChild(p);
     return wrapper;
@@ -238,14 +295,14 @@ function renderEntryForm(category, schema) {
 
   schema.forEach((field) => {
     const label = document.createElement('label');
-    label.className = 'block text-sm font-medium text-gray-700';
+    label.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
     label.textContent = field.name;
 
     const input = document.createElement('input');
     input.type = field.type === 'date' || field.type === 'time' ? field.type : 'text';
     input.name = field.name;
     input.className =
-      'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+      'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
 
     form.appendChild(label);
     form.appendChild(input);
@@ -255,12 +312,12 @@ function renderEntryForm(category, schema) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Entry';
   form.appendChild(submitBtn);
 
   const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {
@@ -300,12 +357,12 @@ function addFieldRow() {
   nameInput.type = 'text';
   nameInput.placeholder = 'Field name';
   nameInput.className =
-    'flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'flex-1 bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   nameInput.required = true;
 
   const typeSelect = document.createElement('select');
   typeSelect.className =
-    'border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
   FIELD_TYPES.forEach((type) => {
     const opt = document.createElement('option');
     opt.value = type;
@@ -315,7 +372,7 @@ function addFieldRow() {
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.className = 'text-xs text-red-400 hover:text-red-600 px-2';
+  removeBtn.className = 'text-xs text-danger/70 hover:text-danger px-2';
   removeBtn.textContent = 'Remove';
   removeBtn.addEventListener('click', () => {
     fieldRows = fieldRows.filter((entry) => entry.row !== row);
@@ -339,10 +396,10 @@ function resetCategoryForm() {
 
 function setupLogCategoriesCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Log Category';
   wrapper.appendChild(titleEl);
 
@@ -350,19 +407,19 @@ function setupLogCategoriesCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   catTitleInput = document.createElement('input');
   catTitleInput.type = 'text';
   catTitleInput.name = 'title';
   catTitleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   catTitleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(catTitleInput);
 
   const fieldsLabel = document.createElement('label');
-  fieldsLabel.className = 'block text-sm font-medium text-gray-700';
+  fieldsLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   fieldsLabel.textContent = 'Fields';
   form.appendChild(fieldsLabel);
 
@@ -373,7 +430,7 @@ function setupLogCategoriesCreateForm(container) {
   const addFieldBtn = document.createElement('button');
   addFieldBtn.type = 'button';
   addFieldBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-gray-300 hover:bg-gray-50 transition-colors';
+    'px-3 py-1.5 text-xs font-mono border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   addFieldBtn.textContent = '+ Add field';
   addFieldBtn.addEventListener('click', () => addFieldRow());
   form.appendChild(addFieldBtn);
@@ -381,12 +438,12 @@ function setupLogCategoriesCreateForm(container) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'block px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+    'block px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Category';
   form.appendChild(submitBtn);
 
   catErrEl = document.createElement('p');
-  catErrEl.className = 'text-sm text-red-600 hidden';
+  catErrEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(catErrEl);
 
   form.addEventListener('submit', async (e) => {

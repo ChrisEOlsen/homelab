@@ -1,6 +1,49 @@
 import { get, post, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
+
+// Delete-error element: created once, inserted as a sibling of #app so it
+// survives render()'s replaceChildren() re-renders.
+const deleteErrEl = document.createElement('p');
+deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', deleteErrEl);
 
 let categories = [];
 let goals = [];
@@ -18,7 +61,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -52,10 +95,10 @@ function milestonesByGoal() {
 
 function tabClass(active) {
   return (
-    'px-3 py-1.5 text-xs rounded border transition-colors ' +
+    'px-3 py-1.5 text-xs border transition-colors ' +
     (active
-      ? 'bg-gray-900 text-white border-gray-900'
-      : 'border-gray-300 text-gray-700 hover:bg-gray-50')
+      ? 'bg-accent text-canvas border-accent'
+      : 'border-hairline text-ink-dim hover:bg-surface-raised hover:text-ink')
   );
 }
 
@@ -64,7 +107,7 @@ function render() {
 
   if (categories.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No categories yet. Add one below to get started.';
     app.appendChild(p);
     return;
@@ -90,14 +133,21 @@ function render() {
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.className = 'text-xs text-red-400 hover:text-red-600 px-1';
+    delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
     delBtn.title = 'Delete category';
     delBtn.textContent = '×';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       delBtn.disabled = true;
-      await del('/api/vision_categories/' + cat.id);
-      await loadList();
+      deleteErrEl.classList.add('hidden');
+      const res = await del('/api/vision_categories/' + cat.id);
+      if (res.ok) {
+        await loadList();
+      } else {
+        delBtn.disabled = false;
+        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+        deleteErrEl.classList.remove('hidden');
+      }
     });
     tab.appendChild(delBtn);
 
@@ -115,7 +165,7 @@ function render() {
 
   if (activeGoals.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No goals in this category yet.';
     goalsWrap.appendChild(p);
   } else {
@@ -129,17 +179,17 @@ function render() {
 
 function renderGoalCard(goal, goalMilestones) {
   const card = document.createElement('div');
-  card.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3';
+  card.className = 'border border-hairline bg-surface p-5 space-y-3';
 
   const header = document.createElement('div');
   header.className = 'flex items-start justify-between gap-4';
 
   const titleWrap = document.createElement('div');
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'text-sm font-semibold text-ink';
   titleEl.textContent = goal.title;
   const yearEl = document.createElement('p');
-  yearEl.className = 'text-xs text-gray-400';
+  yearEl.className = 'font-mono text-xs text-ink-dim';
   yearEl.textContent = 'Target: ' + goal.target_year;
   titleWrap.appendChild(titleEl);
   titleWrap.appendChild(yearEl);
@@ -148,12 +198,19 @@ function renderGoalCard(goal, goalMilestones) {
   const goalDelBtn = document.createElement('button');
   goalDelBtn.type = 'button';
   goalDelBtn.className =
-    'px-3 py-1.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors shrink-0';
+    'px-3 py-1.5 text-xs font-mono border border-danger text-danger hover:bg-danger/10 transition-colors shrink-0';
   goalDelBtn.textContent = 'Delete';
   goalDelBtn.addEventListener('click', async () => {
     goalDelBtn.disabled = true;
-    await del('/api/vision_goals/' + goal.id);
-    await loadList();
+    deleteErrEl.classList.add('hidden');
+    const res = await del('/api/vision_goals/' + goal.id);
+    if (res.ok) {
+      await loadList();
+    } else {
+      goalDelBtn.disabled = false;
+      deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+      deleteErrEl.classList.remove('hidden');
+    }
   });
   header.appendChild(goalDelBtn);
 
@@ -165,21 +222,21 @@ function renderGoalCard(goal, goalMilestones) {
       : Math.round((goalMilestones.filter((m) => m.is_done).length / goalMilestones.length) * 100);
 
   const barOuter = document.createElement('div');
-  barOuter.className = 'w-full bg-gray-100 rounded-full h-2';
+  barOuter.className = 'w-full bg-surface-raised rounded-full h-2';
   const barInner = document.createElement('div');
-  barInner.className = 'bg-gray-900 h-2 rounded-full';
+  barInner.className = 'bg-accent h-2 rounded-full';
   barInner.style.width = pct + '%';
   barOuter.appendChild(barInner);
   card.appendChild(barOuter);
 
   const pctLabel = document.createElement('p');
-  pctLabel.className = 'text-xs text-gray-500';
+  pctLabel.className = 'font-mono text-xs text-ink-dim';
   pctLabel.textContent = pct + '% complete';
   card.appendChild(pctLabel);
 
   if (goalMilestones.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No milestones yet.';
     card.appendChild(p);
   } else {
@@ -209,19 +266,26 @@ function renderMilestoneRow(m) {
   li.appendChild(checkbox);
 
   const label = document.createElement('span');
-  label.className = m.is_done ? 'text-sm text-gray-400 line-through flex-1' : 'text-sm text-gray-900 flex-1';
+  label.className = m.is_done ? 'text-sm text-ink-dim line-through flex-1' : 'text-sm text-ink flex-1';
   label.textContent = m.title;
   li.appendChild(label);
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
-  delBtn.className = 'text-xs text-red-400 hover:text-red-600 px-1';
+  delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
   delBtn.title = 'Delete milestone';
   delBtn.textContent = '×';
   delBtn.addEventListener('click', async () => {
     delBtn.disabled = true;
-    await del('/api/vision_milestones/' + m.id);
-    await loadList();
+    deleteErrEl.classList.add('hidden');
+    const res = await del('/api/vision_milestones/' + m.id);
+    if (res.ok) {
+      await loadList();
+    } else {
+      delBtn.disabled = false;
+      deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+      deleteErrEl.classList.remove('hidden');
+    }
   });
   li.appendChild(delBtn);
 
@@ -274,10 +338,10 @@ init();
 
 function setupVisionCategoriesCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Category';
   wrapper.appendChild(titleEl);
 
@@ -285,25 +349,25 @@ function setupVisionCategoriesCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
   titleInput.name = 'title';
   titleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   titleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(titleInput);
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Category';
   form.appendChild(submitBtn);
 
   const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {
@@ -328,10 +392,10 @@ function setupVisionCategoriesCreateForm(container) {
 
 function setupVisionGoalsCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Goal';
   wrapper.appendChild(titleEl);
 
@@ -339,48 +403,48 @@ function setupVisionGoalsCreateForm(container) {
   form.className = 'space-y-3';
 
   const categoryLabel = document.createElement('label');
-  categoryLabel.className = 'block text-sm font-medium text-gray-700';
+  categoryLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   categoryLabel.textContent = 'Category';
   vgCategorySelect = document.createElement('select');
   vgCategorySelect.name = 'category_id';
   vgCategorySelect.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   vgCategorySelect.required = true;
   form.appendChild(categoryLabel);
   form.appendChild(vgCategorySelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
   titleInput.name = 'title';
   titleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   titleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(titleInput);
 
   const targetYearLabel = document.createElement('label');
-  targetYearLabel.className = 'block text-sm font-medium text-gray-700';
+  targetYearLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   targetYearLabel.textContent = 'Target Year';
   const targetYearInput = document.createElement('input');
   targetYearInput.type = 'number';
   targetYearInput.name = 'target_year';
   targetYearInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   targetYearInput.required = true;
   form.appendChild(targetYearLabel);
   form.appendChild(targetYearInput);
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Goal';
   form.appendChild(submitBtn);
 
   const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {
@@ -411,10 +475,10 @@ function setupVisionGoalsCreateForm(container) {
 
 function setupVisionMilestonesCreateForm(container) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'border border-gray-200 rounded-lg p-4 bg-white space-y-3 mt-4';
+  wrapper.className = 'border border-hairline bg-surface p-5 space-y-3 mt-4';
 
   const titleEl = document.createElement('h3');
-  titleEl.className = 'text-sm font-semibold text-gray-900';
+  titleEl.className = 'font-mono text-xs tracking-widest text-ink-dim uppercase';
   titleEl.textContent = 'New Milestone';
   wrapper.appendChild(titleEl);
 
@@ -422,36 +486,36 @@ function setupVisionMilestonesCreateForm(container) {
   form.className = 'space-y-3';
 
   const goalLabel = document.createElement('label');
-  goalLabel.className = 'block text-sm font-medium text-gray-700';
+  goalLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   goalLabel.textContent = 'Goal';
   vmGoalSelect = document.createElement('select');
   vmGoalSelect.name = 'goal_id';
   vmGoalSelect.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   vmGoalSelect.required = true;
   form.appendChild(goalLabel);
   form.appendChild(vmGoalSelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   const titleInput = document.createElement('input');
   titleInput.type = 'text';
   titleInput.name = 'title';
   titleInput.className =
-    'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   titleInput.required = true;
   form.appendChild(titleLabel);
   form.appendChild(titleInput);
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Milestone';
   form.appendChild(submitBtn);
 
   const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-red-600 hidden';
+  errEl.className = 'text-sm text-danger mt-2 hidden';
   form.appendChild(errEl);
 
   form.addEventListener('submit', async (e) => {

@@ -3,26 +3,85 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reminders</title>
+  <title>Reminders · Homelab</title>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
-  <nav class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-    <a href="/static/pages/home.html" class="font-semibold text-sm tracking-tight">GOVA</a>
-    <div class="flex gap-6 text-sm text-gray-500">
-      <a href="/static/pages/home.html" class="hover:text-gray-900 transition-colors">Home</a>
+<body class="bg-canvas text-ink min-h-screen flex flex-col font-sans antialiased">
+
+  <header class="sticky top-0 z-20 border-b border-hairline bg-surface">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+      <a href="/static/pages/home.html" class="flex items-center gap-2 font-mono text-sm tracking-wide shrink-0">
+        <span class="h-2 w-2 rounded-full bg-accent led-pulse" aria-hidden="true"></span>
+        HOMELAB
+      </a>
+
+      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline font-mono text-xs tracking-wide overflow-x-auto">
+        <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">DASHBOARD</a>
+        <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
+          <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+          REMINDERS
+        </span>
+        <a href="/static/pages/todos.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">TASKS</a>
+        <a href="/static/pages/journal.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">JOURNAL</a>
+        <a href="/static/pages/codex.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">CODEX</a>
+        <a href="/static/pages/bookmarks.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">BOOKMARKS</a>
+        <a href="/static/pages/vision_board.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">VISION</a>
+        <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">LOGGER</a>
+      </nav>
+
+      <div class="hidden md:flex items-center gap-1.5 shrink-0 font-mono text-xs text-ink-dim tabular-nums">
+        <span>LOCAL</span>
+        <time id="clock">--:--:--</time>
+      </div>
+
+      <button id="nav-toggle" type="button" class="md:hidden flex flex-col justify-center gap-1.5 h-9 w-9 shrink-0" aria-expanded="false" aria-controls="mobile-drawer">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+      </button>
     </div>
-  </nav>
-  <main class="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
-    <div class="space-y-6">
-      <h1 class="text-2xl font-semibold tracking-tight">Reminders</h1>
-      <div id="app">Loading...</div>
-      <div id="forms-container" class="space-y-4"></div>
+  </header>
+
+  <div id="mobile-drawer-backdrop" class="md:hidden fixed inset-0 bg-black/60 z-30 hidden"></div>
+
+  <aside id="mobile-drawer" class="md:hidden fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-surface border-l border-hairline z-40 translate-x-full transition-transform duration-200 ease-out flex flex-col">
+    <div class="h-14 flex items-center justify-between px-4 border-b border-hairline shrink-0">
+      <span class="font-mono text-xs tracking-widest text-ink-dim">MENU</span>
+      <button id="nav-close" type="button" class="text-ink-dim hover:text-ink text-lg leading-none px-2 py-1">
+        <span aria-hidden="true">&times;</span>
+        <span class="sr-only">Close menu</span>
+      </button>
     </div>
+    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 font-mono text-sm tracking-wide overflow-y-auto">
+      <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">DASHBOARD</a>
+      <span class="px-3 py-3 flex items-center gap-2 text-ink border-b border-hairline">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+        REMINDERS
+      </span>
+      <a href="/static/pages/todos.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">TASKS</a>
+      <a href="/static/pages/journal.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">JOURNAL</a>
+      <a href="/static/pages/codex.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">CODEX</a>
+      <a href="/static/pages/bookmarks.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">BOOKMARKS</a>
+      <a href="/static/pages/vision_board.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">VISION BOARD</a>
+      <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">LOGGER</a>
+    </nav>
+    <div class="mt-auto px-4 py-3 border-t border-hairline font-mono text-xs text-ink-dim flex items-center gap-1.5 tabular-nums shrink-0">
+      <span>LOCAL</span>
+      <time id="clock-mobile">--:--:--</time>
+    </div>
+  </aside>
+
+  <main class="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <h1 class="text-xl font-semibold tracking-tight text-ink">Reminders</h1>
+    <div id="app" class="text-sm text-ink-dim">Loading&hellip;</div>
+    <div id="forms-container"></div>
   </main>
-  <footer class="border-t border-gray-100 px-6 py-4 text-xs text-gray-400">
-    Built with GOVA
+
+  <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim font-mono">
+    HOMELAB
   </footer>
+
   <script type="module" src="/static/js/reminders.js"></script>
 </body>
 </html>

@@ -1,5 +1,42 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
+// ---- Clock (nav signature element) ----
+function tickClock() {
+  const text = new Date().toLocaleTimeString([], { hour12: false });
+  const clock = document.getElementById('clock');
+  const clockMobile = document.getElementById('clock-mobile');
+  if (clock) clock.textContent = text;
+  if (clockMobile) clockMobile.textContent = text;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---- Mobile nav drawer ----
+const navToggle = document.getElementById('nav-toggle');
+const navClose = document.getElementById('nav-close');
+const drawer = document.getElementById('mobile-drawer');
+const backdrop = document.getElementById('mobile-drawer-backdrop');
+
+function openDrawer() {
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+  navToggle.setAttribute('aria-expanded', 'true');
+}
+
+function closeDrawer() {
+  drawer.classList.add('translate-x-full');
+  backdrop.classList.add('hidden');
+  navToggle.setAttribute('aria-expanded', 'false');
+}
+
+navToggle.addEventListener('click', openDrawer);
+navClose.addEventListener('click', closeDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
+
 const app = document.getElementById('app');
 
 const MONTH_NAMES = [
@@ -20,7 +57,7 @@ async function loadList() {
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
-    p.className = 'text-sm text-red-600';
+    p.className = 'text-sm text-danger';
     p.textContent = res.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
@@ -70,7 +107,7 @@ function renderSidebar() {
 
   jNewBtn = document.createElement('button');
   jNewBtn.type = 'button';
-  jNewBtn.className = 'w-full px-3 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  jNewBtn.className = 'w-full px-3 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   jNewBtn.textContent = 'New Entry';
   jNewBtn.addEventListener('click', async () => {
     jNewBtn.disabled = true;
@@ -85,7 +122,7 @@ function renderSidebar() {
 
   if (entries.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'No entries yet.';
     sidebar.appendChild(p);
     return sidebar;
@@ -97,7 +134,7 @@ function renderSidebar() {
     monthWrap.className = 'space-y-1';
 
     const header = document.createElement('p');
-    header.className = 'text-xs font-medium uppercase tracking-wide text-gray-400 pt-2';
+    header.className = 'text-xs font-mono uppercase tracking-wide text-ink-dim pt-2';
     header.textContent = monthLabel(key);
     monthWrap.appendChild(header);
 
@@ -109,10 +146,10 @@ function renderSidebar() {
       const link = document.createElement('button');
       link.type = 'button';
       link.className =
-        'w-full text-left px-2 py-1.5 rounded text-sm truncate transition-colors ' +
+        'w-full text-left px-2 py-1.5 text-sm truncate transition-colors ' +
         (item.id === selectedId
-          ? 'bg-gray-900 text-white'
-          : 'text-gray-700 hover:bg-gray-100');
+          ? 'bg-accent text-canvas'
+          : 'text-ink-dim hover:bg-surface-raised hover:text-ink');
       link.textContent = (item.title && item.title.trim() !== '' ? item.title : '(untitled)') + ' · ' + item.entry_date;
       link.addEventListener('click', () => {
         selectedId = item.id;
@@ -131,25 +168,25 @@ function renderSidebar() {
 
 function renderDetail() {
   const detail = document.createElement('div');
-  detail.className = 'flex-1 min-w-0 border border-gray-200 rounded-lg bg-white p-4 space-y-3';
+  detail.className = 'flex-1 min-w-0 border border-hairline bg-surface p-5 space-y-3';
 
   const entry = entries.find((e) => e.id === selectedId);
 
   if (!entry) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-gray-500';
+    p.className = 'text-sm text-ink-dim';
     p.textContent = 'Select an entry, or create a new one.';
     detail.appendChild(p);
     return detail;
   }
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-sm font-medium text-gray-700';
+  titleLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   jTitleInput = document.createElement('input');
   jTitleInput.type = 'text';
   jTitleInput.value = entry.title ?? '';
-  jTitleInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  jTitleInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   detail.appendChild(titleLabel);
   detail.appendChild(jTitleInput);
 
@@ -159,10 +196,10 @@ function renderDetail() {
   const moodWrap = document.createElement('div');
   moodWrap.className = 'flex-1';
   const moodLabel = document.createElement('label');
-  moodLabel.className = 'block text-sm font-medium text-gray-700';
+  moodLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   moodLabel.textContent = 'Mood';
   jMoodSelect = document.createElement('select');
-  jMoodSelect.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  jMoodSelect.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   MOODS.forEach((m) => {
     const opt = document.createElement('option');
     opt.value = m;
@@ -177,12 +214,12 @@ function renderDetail() {
   const dateWrap = document.createElement('div');
   dateWrap.className = 'flex-1';
   const dateLabel = document.createElement('label');
-  dateLabel.className = 'block text-sm font-medium text-gray-700';
+  dateLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   dateLabel.textContent = 'Date';
   jDateInput = document.createElement('input');
   jDateInput.type = 'date';
   jDateInput.value = entry.entry_date ?? '';
-  jDateInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  jDateInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   dateWrap.appendChild(dateLabel);
   dateWrap.appendChild(jDateInput);
   metaRow.appendChild(dateWrap);
@@ -190,17 +227,17 @@ function renderDetail() {
   detail.appendChild(metaRow);
 
   const contentLabel = document.createElement('label');
-  contentLabel.className = 'block text-sm font-medium text-gray-700';
+  contentLabel.className = 'block text-xs font-mono uppercase tracking-wide text-ink-dim mb-1';
   contentLabel.textContent = 'Content';
   jContentInput = document.createElement('textarea');
   jContentInput.rows = 10;
   jContentInput.value = entry.content ?? '';
-  jContentInput.className = 'mt-1 block w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-900';
+  jContentInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   detail.appendChild(contentLabel);
   detail.appendChild(jContentInput);
 
   jErrEl = document.createElement('p');
-  jErrEl.className = 'text-sm text-red-600 hidden';
+  jErrEl.className = 'text-sm text-danger mt-2 hidden';
   detail.appendChild(jErrEl);
 
   const btnRow = document.createElement('div');
@@ -208,7 +245,7 @@ function renderDetail() {
 
   jSaveBtn = document.createElement('button');
   jSaveBtn.type = 'button';
-  jSaveBtn.className = 'px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-700 transition-colors';
+  jSaveBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-mono uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   jSaveBtn.textContent = 'Save';
   jSaveBtn.addEventListener('click', async () => {
     jSaveBtn.disabled = true;
@@ -232,13 +269,20 @@ function renderDetail() {
 
   jDeleteBtn = document.createElement('button');
   jDeleteBtn.type = 'button';
-  jDeleteBtn.className = 'px-4 py-2 text-sm rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors';
+  jDeleteBtn.className = 'px-4 py-2 text-xs font-mono uppercase tracking-wide border border-danger text-danger hover:bg-danger/10 transition-colors';
   jDeleteBtn.textContent = 'Delete';
   jDeleteBtn.addEventListener('click', async () => {
     jDeleteBtn.disabled = true;
-    await del('/api/journal_entries/' + entry.id);
-    if (selectedId === entry.id) selectedId = null;
-    await loadList();
+    jErrEl.classList.add('hidden');
+    const res = await del('/api/journal_entries/' + entry.id);
+    if (res.ok) {
+      if (selectedId === entry.id) selectedId = null;
+      await loadList();
+    } else {
+      jDeleteBtn.disabled = false;
+      jErrEl.textContent = res.error ?? 'Failed to delete.';
+      jErrEl.classList.remove('hidden');
+    }
   });
   btnRow.appendChild(jDeleteBtn);
 
