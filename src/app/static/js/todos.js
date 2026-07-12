@@ -413,28 +413,51 @@ function renderMain() {
     });
     actions.appendChild(subtasksBtn);
 
-    actions.appendChild(
-      makeActionsMenu([
-        { label: 'Edit', onClick: () => populateTodoFormForEdit(item) },
-        {
-          label: 'Delete',
-          danger: true,
-          onClick: async () => {
-            deleteErrEl.classList.add('hidden');
-            const res = await del('/api/todos/' + item.id);
-            if (res.ok) {
-              if (editingTodoId === item.id) resetTodoFormToCreateMode();
-              expandedTodoIds.delete(item.id);
-              subtasksByTodoId.delete(item.id);
-              await loadList();
-            } else {
-              deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-              deleteErrEl.classList.remove('hidden');
-            }
-          },
+    // The inline add-subtask form is desktop-only (see renderInlineSubtasks)
+    // — on mobile, adding a subtask happens through this menu instead, since
+    // there's no room for both an always-open form and a real mobile layout.
+    const todoActions = [];
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      todoActions.push({
+        label: 'Add Subtask',
+        onClick: async () => {
+          const title = window.prompt('New subtask title:');
+          if (!title || !title.trim()) return;
+          deleteErrEl.classList.add('hidden');
+          const res = await post('/api/subtasks_create', { todo_id: item.id, title });
+          if (res.ok) {
+            // subWrap is already in the DOM (see below) — no full render()
+            // needed, just refresh this one todo's scoped subtasks block.
+            expandedTodoIds.add(item.id);
+            await loadSubtasks(item.id);
+          } else {
+            deleteErrEl.textContent = res.error ?? 'Failed to add subtask.';
+            deleteErrEl.classList.remove('hidden');
+          }
         },
-      ])
+      });
+    }
+    todoActions.push(
+      { label: 'Edit', onClick: () => populateTodoFormForEdit(item) },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: async () => {
+          deleteErrEl.classList.add('hidden');
+          const res = await del('/api/todos/' + item.id);
+          if (res.ok) {
+            if (editingTodoId === item.id) resetTodoFormToCreateMode();
+            expandedTodoIds.delete(item.id);
+            subtasksByTodoId.delete(item.id);
+            await loadList();
+          } else {
+            deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+            deleteErrEl.classList.remove('hidden');
+          }
+        },
+      }
     );
+    actions.appendChild(makeActionsMenu(todoActions));
 
     topRow.appendChild(actions);
     li.appendChild(topRow);
@@ -532,37 +555,57 @@ function renderInlineSubtasks(todoId) {
       title.textContent = sub.title;
       li.appendChild(title);
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'text-xs text-ink-dim hover:text-danger shrink-0';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', async () => {
-        deleteBtn.disabled = true;
-        deleteErrEl.classList.add('hidden');
-        const res = await del('/api/subtasks/' + sub.id);
-        if (res.ok) {
-          await loadSubtasks(todoId);
-        } else {
-          deleteBtn.disabled = false;
-          deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-          deleteErrEl.classList.remove('hidden');
-        }
-      });
-      li.appendChild(deleteBtn);
+      li.appendChild(
+        makeActionsMenu([
+          {
+            label: 'Edit',
+            onClick: async () => {
+              const newTitle = window.prompt('Edit subtask', sub.title);
+              if (newTitle === null || !newTitle.trim() || newTitle === sub.title) return;
+              deleteErrEl.classList.add('hidden');
+              const res = await put('/api/subtasks/' + sub.id, { title: newTitle });
+              if (res.ok) {
+                await loadSubtasks(todoId);
+              } else {
+                deleteErrEl.textContent = res.error ?? 'Failed to save.';
+                deleteErrEl.classList.remove('hidden');
+              }
+            },
+          },
+          {
+            label: 'Delete',
+            danger: true,
+            onClick: async () => {
+              deleteErrEl.classList.add('hidden');
+              const res = await del('/api/subtasks/' + sub.id);
+              if (res.ok) {
+                await loadSubtasks(todoId);
+              } else {
+                deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+                deleteErrEl.classList.remove('hidden');
+              }
+            },
+          },
+        ])
+      );
 
       list.appendChild(li);
     });
 
     wrap.appendChild(list);
   } else {
+    // Hidden on mobile: adding the first subtask there happens via the
+    // todo's own "⋯" menu ("Add Subtask") instead of this inline form —
+    // see the mobile-only branch in renderMain's actions menu below.
     const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
+    p.className = 'hidden md:block text-sm text-ink-dim';
     p.textContent = 'No subtasks yet.';
     wrap.appendChild(p);
   }
 
+  // Hidden on mobile for the same reason — desktop keeps this inline form.
   const form = document.createElement('form');
-  form.className = 'flex items-center gap-2';
+  form.className = 'hidden md:flex items-center gap-2';
 
   const input = document.createElement('input');
   input.type = 'text';

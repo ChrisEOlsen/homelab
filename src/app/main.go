@@ -93,6 +93,7 @@ func main() {
 	r.Get("/api/todos/{id}/details", handlers.TodoDetailsGET(database.Read, database.Write, appCache))
 	r.Post("/api/subtasks_create", handlers.SubtasksCreatePOST(database.Read, database.Write, appCache))
 	r.Post("/api/subtasks/{id}/toggle", handlers.SubtasksTogglePOST(database.Read, database.Write, appCache))
+	r.Put("/api/subtasks/{id}", handlers.SubtasksUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/subtasks/{id}", handlers.SubtasksDeleteDELETE(database.Read, database.Write, appCache))
 	r.Post("/api/todo_blocks_create", handlers.TodoBlocksCreatePOST(database.Read, database.Write, appCache))
 	r.Put("/api/todo_blocks/{id}", handlers.TodoBlocksUpdatePUT(database.Read, database.Write, appCache))

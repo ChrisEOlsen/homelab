@@ -113,6 +113,15 @@ func (m *SubtaskModel) GetByTodo(todoID int64) ([]Subtask, error) {
 	return items, nil
 }
 
+func (m *SubtaskModel) Update(id int64, title string) error {
+	_, err := m.writeDB.Exec("UPDATE subtasks SET title = ? WHERE id = ?", title, id)
+	if err == nil {
+		m.cache.Bust("subtasks:")
+		m.cache.Bust("todos:")
+	}
+	return err
+}
+
 func (m *SubtaskModel) Toggle(id int64) error {
 	_, err := m.writeDB.Exec("UPDATE subtasks SET is_done = NOT is_done WHERE id = ?", id)
 	if err == nil {
