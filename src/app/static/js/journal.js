@@ -137,8 +137,10 @@ function monthLabel(key) {
 function render() {
   app.replaceChildren();
 
+  // Stack on mobile so the sidebar's entry list doesn't eat vertical space
+  // above the writing area — side-by-side only once there's room (sm+).
   const layout = document.createElement('div');
-  layout.className = 'flex gap-6 items-start';
+  layout.className = 'flex flex-col sm:flex-row gap-6 items-start';
 
   layout.appendChild(renderSidebar());
   layout.appendChild(renderDetail());
@@ -147,8 +149,13 @@ function render() {
 }
 
 function renderSidebar() {
-  const sidebar = document.createElement('div');
-  sidebar.className = 'w-64 shrink-0 space-y-4';
+  // The whole sidebar collapses on mobile (not just the entry list) so a
+  // long entry list doesn't push the actual reading/writing pane below the
+  // fold — matches the collapsible sidebar pattern used on Tasks/Bookmarks.
+  const { details, body } = makeCollapsibleSection(
+    'Entries',
+    'w-full sm:w-64 shrink-0 border border-hairline bg-surface p-4 space-y-2'
+  );
 
   jNewBtn = document.createElement('button');
   jNewBtn.type = 'button';
@@ -163,17 +170,14 @@ function renderSidebar() {
       await loadList();
     }
   });
-  sidebar.appendChild(jNewBtn);
-
-  const { details, body } = makeCollapsibleSection('Entries', 'border border-hairline bg-surface p-4');
-  sidebar.appendChild(details);
+  body.appendChild(jNewBtn);
 
   if (entries.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
+    p.className = 'text-sm text-ink-dim mt-2';
     p.textContent = 'No entries yet.';
     body.appendChild(p);
-    return sidebar;
+    return details;
   }
 
   const groups = groupByMonth(entries);
@@ -211,7 +215,7 @@ function renderSidebar() {
     body.appendChild(monthWrap);
   });
 
-  return sidebar;
+  return details;
 }
 
 function renderDetail() {
@@ -278,9 +282,13 @@ function renderDetail() {
   contentLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   contentLabel.textContent = 'Content';
   jContentInput = document.createElement('textarea');
-  jContentInput.rows = 10;
+  jContentInput.rows = 20;
   jContentInput.value = entry.content ?? '';
-  jContentInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  // min-h keeps the writing/reading area tall on any screen size (rows=20
+  // is just a sane starting point) — this is the one thing the page is
+  // for, so it shouldn't be squeezed into a small fixed box.
+  jContentInput.className =
+    'mt-1 block w-full min-h-[60vh] bg-canvas border border-hairline px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
   detail.appendChild(contentLabel);
   detail.appendChild(jContentInput);
 

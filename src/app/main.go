@@ -55,6 +55,7 @@ func main() {
 
 	r.Get("/api/bookmarks", handlers.BookmarksGET(database.Read, database.Write, appCache))
 	r.Post("/api/bookmark_categories_create", handlers.BookmarkCategoriesCreatePOST(database.Read, database.Write, appCache))
+	r.Put("/api/bookmark_categories/{id}", handlers.BookmarkCategoriesUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/bookmark_categories/{id}", handlers.BookmarkCategoriesDeleteDELETE(database.Read, database.Write, appCache))
 	r.Post("/api/bookmarks_create", handlers.BookmarksCreatePOST(database.Read, database.Write, appCache))
 	r.Put("/api/bookmarks/{id}", handlers.BookmarksUpdatePUT(database.Read, database.Write, appCache))
@@ -64,20 +65,13 @@ func main() {
 	r.Post("/api/codex_entries_create", handlers.CodexEntriesCreatePOST(database.Read, database.Write, appCache))
 	r.Put("/api/codex_entries/{id}", handlers.CodexEntriesUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/codex_entries/{id}", handlers.CodexEntriesDeleteDELETE(database.Read, database.Write, appCache))
+	r.Post("/api/codex_folders_rename", handlers.CodexFoldersRenamePOST(database.Read, database.Write, appCache))
+	r.Post("/api/codex_folders_delete", handlers.CodexFoldersDeletePOST(database.Read, database.Write, appCache))
 
 	r.Get("/api/journal", handlers.JournalGET(database.Read, database.Write, appCache))
 	r.Post("/api/journal_entries_create", handlers.JournalEntriesCreatePOST(database.Read, database.Write, appCache))
 	r.Put("/api/journal_entries/{id}", handlers.JournalEntriesUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/journal_entries/{id}", handlers.JournalEntriesDeleteDELETE(database.Read, database.Write, appCache))
-
-	r.Get("/api/vision_board", handlers.VisionBoardGET(database.Read, database.Write, appCache))
-	r.Post("/api/vision_categories_create", handlers.VisionCategoriesCreatePOST(database.Read, database.Write, appCache))
-	r.Delete("/api/vision_categories/{id}", handlers.VisionCategoriesDeleteDELETE(database.Read, database.Write, appCache))
-	r.Post("/api/vision_goals_create", handlers.VisionGoalsCreatePOST(database.Read, database.Write, appCache))
-	r.Delete("/api/vision_goals/{id}", handlers.VisionGoalsDeleteDELETE(database.Read, database.Write, appCache))
-	r.Post("/api/vision_milestones_create", handlers.VisionMilestonesCreatePOST(database.Read, database.Write, appCache))
-	r.Post("/api/vision_milestones/{id}/toggle", handlers.VisionMilestonesTogglePOST(database.Read, database.Write, appCache))
-	r.Delete("/api/vision_milestones/{id}", handlers.VisionMilestonesDeleteDELETE(database.Read, database.Write, appCache))
 
 	r.Get("/api/todos", handlers.TodosGET(database.Read, database.Write, appCache))
 	r.Post("/api/todo_lists_create", handlers.TodoListsCreatePOST(database.Read, database.Write, appCache))

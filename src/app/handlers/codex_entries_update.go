@@ -22,16 +22,15 @@ func CodexEntriesUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.
 			Title       string `json:"title"`
 			Language    string `json:"language"`
 			Code        string `json:"code"`
-			Tags        string `json:"tags"`
 			Description string `json:"description"`
-			BundleID    string `json:"bundle_id"`
+			Folder      string `json:"folder"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" || body.Code == "" {
 			jsonError(w, "title and code are required", 400)
 			return
 		}
 		model := models.NewCodexEntryModel(readDB, writeDB, appCache)
-		if err := model.Update(id, body.Title, body.Language, body.Code, body.Tags, body.Description, body.BundleID); err != nil {
+		if err := model.Update(id, body.Title, body.Language, body.Code, body.Description, body.Folder); err != nil {
 			jsonError(w, "failed to update", 500)
 			return
 		}

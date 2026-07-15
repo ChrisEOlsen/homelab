@@ -15,9 +15,8 @@ func CodexEntriesCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http
 			Title       string `json:"title"`
 			Language    string `json:"language"`
 			Code        string `json:"code"`
-			Tags        string `json:"tags"`
 			Description string `json:"description"`
-			BundleID    string `json:"bundle_id"`
+			Folder      string `json:"folder"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Title == "" || body.Code == "" {
 			jsonError(w, "title and code are required", 400)
@@ -27,7 +26,7 @@ func CodexEntriesCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http
 			body.Language = "c"
 		}
 		model := models.NewCodexEntryModel(readDB, writeDB, appCache)
-		id, err := model.Create(body.Title, body.Language, body.Code, body.Tags, body.Description, body.BundleID)
+		id, err := model.Create(body.Title, body.Language, body.Code, body.Description, body.Folder)
 		if err != nil {
 			jsonError(w, "failed to create", 500)
 			return

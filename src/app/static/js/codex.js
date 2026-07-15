@@ -1,4 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { createModal } from '/static/js/lib/modal.js';
+import { renderMarkdown } from '/static/js/lib/markdown.js';
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
@@ -15,78 +17,27 @@ setInterval(tickClock, 1000);
 const navToggle = document.getElementById('nav-toggle');
 const navClose = document.getElementById('nav-close');
 const drawer = document.getElementById('mobile-drawer');
-const backdrop = document.getElementById('mobile-drawer-backdrop');
+const drawerBackdrop = document.getElementById('mobile-drawer-backdrop');
 
 function openDrawer() {
   drawer.classList.remove('translate-x-full');
-  backdrop.classList.remove('hidden');
+  drawerBackdrop.classList.remove('hidden');
   navToggle.setAttribute('aria-expanded', 'true');
 }
-
 function closeDrawer() {
   drawer.classList.add('translate-x-full');
-  backdrop.classList.add('hidden');
+  drawerBackdrop.classList.add('hidden');
   navToggle.setAttribute('aria-expanded', 'false');
 }
-
 navToggle.addEventListener('click', openDrawer);
 navClose.addEventListener('click', closeDrawer);
-backdrop.addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeDrawer();
 });
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
-// ---- Collapsible-mobile section helper ----
-// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
-// makes a section collapse on mobile (native <details> disclosure; CSS in
-// input.css hides the toggle and forces the body open at 768px+). Returns
-// the pieces so callers can mount content into `body` and keep updating
-// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
-function makeCollapsibleSection(labelText, detailsClassName) {
-  const details = document.createElement('details');
-  details.className = 'collapsible-mobile ' + detailsClassName;
-  details.open = true;
-
-  const summary = document.createElement('summary');
-  summary.className =
-    'collapsible-toggle flex items-center justify-between cursor-pointer select-none py-2 md:pointer-events-none';
-
-  const labelEl = document.createElement('span');
-  labelEl.className = 'text-sm font-medium text-ink';
-  labelEl.textContent = labelText;
-  summary.appendChild(labelEl);
-
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('class', 'w-4 h-4 text-ink-dim md:hidden');
-  svg.setAttribute('viewBox', '0 0 20 20');
-  svg.setAttribute('fill', 'currentColor');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(svgNS, 'path');
-  path.setAttribute('fill-rule', 'evenodd');
-  path.setAttribute('clip-rule', 'evenodd');
-  path.setAttribute(
-    'd',
-    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
-  );
-  svg.appendChild(path);
-  summary.appendChild(svg);
-
-  details.appendChild(summary);
-
-  const body = document.createElement('div');
-  body.className = 'collapsible-body pt-2';
-  details.appendChild(body);
-
-  return { details, body, labelEl };
-}
-
 // ---- Row actions menu (kebab dropdown) ----
-// Replaces always-visible Edit/Delete buttons with a single "⋯" toggle and
-// a small dropdown, so list rows read cleanly at a glance. `actions` is an
-// array of { label, danger, onClick }; onClick may be async. Closes on an
-// outside click, on Escape, or automatically after an action runs.
 function makeActionsMenu(actions) {
   const wrap = document.createElement('div');
   wrap.className = 'relative shrink-0';
@@ -150,18 +101,24 @@ function makeActionsMenu(actions) {
 
 const app = document.getElementById('app');
 
-// Delete-error element: created once, inserted as a sibling of #app so it
-// survives render()'s replaceChildren() re-renders.
-const deleteErrEl = document.createElement('p');
-deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
-app.insertAdjacentElement('afterend', deleteErrEl);
+const errEl = document.createElement('p');
+errEl.className = 'text-sm text-danger mt-2 hidden';
+app.insertAdjacentElement('afterend', errEl);
 
+function showErr(msg) {
+  errEl.textContent = msg;
+  errEl.classList.remove('hidden');
+}
+function clearErr() {
+  errEl.classList.add('hidden');
+}
+
+// Module state
 let entries = [];
-
-// Snippet form state (shared between create and edit modes)
-let editingId = null;
-let cxFormTitleEl, cxSubmitBtn, cxCancelBtn;
-let cxTitleInput, cxLanguageInput, cxCodeInput, cxTagsInput, cxDescriptionInput, cxBundleIdInput, cxErrEl;
+let searchQuery = '';
+let sortMode = 'name'; // 'name' | 'date' | 'language'
+let expandedFolders = new Set();
+let expandedFileIds = new Set();
 
 async function loadList() {
   const res = await get('/api/codex');
@@ -177,286 +134,622 @@ async function loadList() {
   render();
 }
 
-function groupByBundle(items) {
-  const groups = new Map();
-  items.forEach((item) => {
-    const key = item.bundle_id ? item.bundle_id : 'single-' + item.id;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(item);
+function distinctFolders() {
+  const set = new Set();
+  entries.forEach((e) => {
+    if (e.folder) set.add(e.folder);
   });
-  return groups;
+  return [...set].sort();
+}
+
+function sortEntries(list) {
+  const arr = [...list];
+  if (sortMode === 'date') {
+    arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  } else if (sortMode === 'language') {
+    arr.sort((a, b) => (a.language || '').localeCompare(b.language || '') || a.title.localeCompare(b.title));
+  } else {
+    arr.sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return arr;
+}
+
+function matchesSearch(entry) {
+  if (!searchQuery) return true;
+  const q = searchQuery.toLowerCase();
+  return (
+    entry.title.toLowerCase().includes(q) ||
+    (entry.description || '').toLowerCase().includes(q) ||
+    (entry.folder || '').toLowerCase().includes(q)
+  );
+}
+
+// ---- Tree building ----
+// Folders aren't a separate table — a folder is just the common prefix of
+// its entries' `folder` paths — so the tree is derived fresh from the flat
+// entry list on every render.
+function buildTree(list) {
+  const root = { name: '', path: '', folders: new Map(), files: [] };
+  list.forEach((entry) => {
+    const parts = entry.folder ? entry.folder.split('/') : [];
+    let node = root;
+    let pathSoFar = '';
+    parts.forEach((part) => {
+      pathSoFar = pathSoFar ? pathSoFar + '/' + part : part;
+      if (!node.folders.has(part)) {
+        node.folders.set(part, { name: part, path: pathSoFar, folders: new Map(), files: [] });
+      }
+      node = node.folders.get(part);
+    });
+    node.files.push(entry);
+  });
+  return root;
 }
 
 function render() {
   app.replaceChildren();
 
-  if (entries.length === 0) {
+  const controls = document.createElement('div');
+  controls.className = 'flex flex-wrap items-center gap-2';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Search snippets...';
+  searchInput.value = searchQuery;
+  searchInput.className =
+    'flex-1 min-w-[10rem] bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    render();
+    // render() rebuilds the input; keep typing uninterrupted.
+    const newInput = app.querySelector('input[type="text"]');
+    if (newInput) {
+      newInput.focus();
+      newInput.setSelectionRange(newInput.value.length, newInput.value.length);
+    }
+  });
+  controls.appendChild(searchInput);
+
+  const sortSelect = document.createElement('select');
+  sortSelect.className =
+    'bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
+  [
+    ['name', 'Sort: Name'],
+    ['date', 'Sort: Date'],
+    ['language', 'Sort: Language'],
+  ].forEach(([value, label]) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === sortMode) opt.selected = true;
+    sortSelect.appendChild(opt);
+  });
+  sortSelect.addEventListener('change', () => {
+    sortMode = sortSelect.value;
+    render();
+  });
+  controls.appendChild(sortSelect);
+
+  const newFolderBtn = document.createElement('button');
+  newFolderBtn.type = 'button';
+  newFolderBtn.className =
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  newFolderBtn.textContent = '+ New Folder';
+  newFolderBtn.addEventListener('click', (e) => openFileModalForCreate(e.currentTarget, ''));
+  controls.appendChild(newFolderBtn);
+
+  const addFileBtn = document.createElement('button');
+  addFileBtn.type = 'button';
+  addFileBtn.className =
+    'px-3 py-1.5 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
+  addFileBtn.textContent = '+ Add File';
+  addFileBtn.addEventListener('click', (e) => openFileModalForCreate(e.currentTarget, null));
+  controls.appendChild(addFileBtn);
+
+  app.appendChild(controls);
+
+  const tree = document.createElement('div');
+  tree.className = 'mt-4 space-y-1';
+
+  const root = buildTree(entries);
+  const rootFolders = [...root.folders.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const searchActive = searchQuery.trim() !== '';
+
+  let anyVisible = false;
+  rootFolders.forEach((node) => {
+    const el = renderFolderNode(node, searchActive);
+    if (el) {
+      tree.appendChild(el);
+      anyVisible = true;
+    }
+  });
+
+  const rootFiles = sortEntries(root.files.filter(matchesSearch));
+  rootFiles.forEach((entry) => {
+    tree.appendChild(renderFileRow(entry));
+    anyVisible = true;
+  });
+
+  if (!anyVisible) {
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
-    p.textContent = 'No snippets yet.';
-    app.appendChild(p);
-    return;
+    p.textContent = entries.length === 0 ? 'No snippets yet.' : 'No matches.';
+    tree.appendChild(p);
   }
 
-  const groups = groupByBundle(entries);
-  const wrap = document.createElement('div');
-  wrap.className = 'space-y-4';
-
-  groups.forEach((items, key) => {
-    wrap.appendChild(renderGroupCard(items, key));
-  });
-
-  app.appendChild(wrap);
+  app.appendChild(tree);
 }
 
-function renderGroupCard(items, key) {
-  const card = document.createElement('div');
-  card.className = 'border border-hairline bg-surface p-4 space-y-4';
-
-  if (items.length > 1) {
-    const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 text-xs text-ink-dim';
-    const label = document.createElement('span');
-    label.className = 'font-medium uppercase tracking-wide';
-    label.textContent = 'Bundle';
-    const value = document.createElement('span');
-    value.textContent = key;
-    header.appendChild(label);
-    header.appendChild(value);
-    card.appendChild(header);
-  }
-
-  const list = document.createElement('div');
-  list.className = 'space-y-4 divide-y divide-hairline';
-  items.forEach((item) => {
-    list.appendChild(renderSnippet(item));
+function renderFolderNode(node, searchActive) {
+  const childFolders = [...node.folders.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const childEls = [];
+  childFolders.forEach((child) => {
+    const el = renderFolderNode(child, searchActive);
+    if (el) childEls.push(el);
   });
-  card.appendChild(list);
 
-  return card;
-}
+  const visibleFiles = sortEntries(node.files.filter(matchesSearch));
 
-function renderSnippet(item) {
-  const wrap = document.createElement('div');
-  wrap.className = 'pt-4 first:pt-0 space-y-2';
+  if (searchActive && visibleFiles.length === 0 && childEls.length === 0) return null;
 
-  const headerRow = document.createElement('div');
-  headerRow.className = 'flex items-start justify-between gap-4';
+  const details = document.createElement('details');
+  details.className = 'border border-hairline bg-surface';
+  details.open = expandedFolders.has(node.path) || (searchActive && (visibleFiles.length > 0 || childEls.length > 0));
+  details.addEventListener('toggle', () => {
+    if (details.open) expandedFolders.add(node.path);
+    else expandedFolders.delete(node.path);
+  });
 
-  const info = document.createElement('div');
-  info.className = 'min-w-0';
+  const summary = document.createElement('summary');
+  summary.className =
+    'flex items-center justify-between gap-2 cursor-pointer select-none px-3 py-2 hover:bg-surface-raised transition-colors';
 
-  const titleEl = document.createElement('p');
-  titleEl.className = 'text-sm font-medium text-ink';
-  titleEl.textContent = item.title;
-  info.appendChild(titleEl);
+  const left = document.createElement('span');
+  left.className = 'flex items-center gap-2 text-sm text-ink min-w-0';
+  const icon = document.createElement('span');
+  icon.className = 'text-ink-dim shrink-0';
+  icon.textContent = '\u{1F4C1}'; // 📁 — decorative folder glyph, name conveys meaning on its own
+  icon.setAttribute('aria-hidden', 'true');
+  left.appendChild(icon);
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'truncate';
+  nameSpan.textContent = node.name;
+  left.appendChild(nameSpan);
+  const countSpan = document.createElement('span');
+  countSpan.className = 'text-xs text-ink-dim shrink-0';
+  countSpan.textContent = String(countFiles(node));
+  left.appendChild(countSpan);
+  summary.appendChild(left);
 
-  const metaEl = document.createElement('p');
-  metaEl.className = 'text-xs text-ink-dim';
-  metaEl.textContent = item.language + (item.tags ? ' · ' + item.tags : '');
-  info.appendChild(metaEl);
-
-  if (item.description) {
-    const descEl = document.createElement('p');
-    descEl.className = 'text-xs text-ink-dim mt-1';
-    descEl.textContent = item.description;
-    info.appendChild(descEl);
-  }
-
-  headerRow.appendChild(info);
-
-  headerRow.appendChild(
+  const menuHolder = document.createElement('span');
+  menuHolder.addEventListener('click', (e) => e.preventDefault());
+  menuHolder.appendChild(
     makeActionsMenu([
-      { label: 'Edit', onClick: () => populateFormForEdit(item) },
+      { label: 'New File Here', onClick: () => openFileModalForCreate(null, node.path) },
+      { label: 'Rename', onClick: () => openFolderRenameModal(node) },
       {
         label: 'Delete',
         danger: true,
         onClick: async () => {
-          deleteErrEl.classList.add('hidden');
-          const res = await del('/api/codex_entries/' + item.id);
+          const count = countFiles(node);
+          if (!window.confirm(`Delete folder "${node.name}" and ${count} snippet(s) inside it?`)) return;
+          clearErr();
+          const res = await post('/api/codex_folders_delete', { path: node.path });
           if (res.ok) {
-            if (editingId === item.id) resetSnippetFormToCreateMode();
+            expandedFolders.delete(node.path);
             await loadList();
           } else {
-            deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-            deleteErrEl.classList.remove('hidden');
+            showErr(res.error ?? 'Failed to delete folder.');
           }
         },
       },
     ])
   );
-  wrap.appendChild(headerRow);
+  summary.appendChild(menuHolder);
 
-  const pre = document.createElement('pre');
-  pre.className = 'bg-canvas text-ink text-xs p-3 overflow-x-auto border border-hairline font-mono';
-  const code = document.createElement('code');
-  code.textContent = item.code; // safe: textContent, never innerHTML
-  pre.appendChild(code);
-  wrap.appendChild(pre);
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'pl-6 pb-2 space-y-1';
+  childEls.forEach((el) => body.appendChild(el));
+  visibleFiles.forEach((entry) => body.appendChild(renderFileRow(entry)));
+  details.appendChild(body);
+
+  return details;
+}
+
+function countFiles(node) {
+  let count = node.files.length;
+  node.folders.forEach((child) => {
+    count += countFiles(child);
+  });
+  return count;
+}
+
+function renderFileRow(entry) {
+  const wrap = document.createElement('div');
+  wrap.className = 'border border-hairline bg-surface-raised';
+
+  const row = document.createElement('div');
+  row.className = 'flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-surface transition-colors';
+  row.addEventListener('click', () => {
+    if (expandedFileIds.has(entry.id)) expandedFileIds.delete(entry.id);
+    else expandedFileIds.add(entry.id);
+    render();
+  });
+
+  const left = document.createElement('span');
+  left.className = 'flex items-center gap-2 text-sm text-ink min-w-0';
+  const icon = document.createElement('span');
+  icon.className = 'text-ink-dim shrink-0';
+  icon.textContent = '\u{1F4C4}'; // 📄 — decorative file glyph, name conveys meaning on its own
+  icon.setAttribute('aria-hidden', 'true');
+  left.appendChild(icon);
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'truncate';
+  nameSpan.textContent = entry.title;
+  left.appendChild(nameSpan);
+  if (entry.language) {
+    const langSpan = document.createElement('span');
+    langSpan.className = 'text-xs text-ink-dim shrink-0';
+    langSpan.textContent = entry.language;
+    left.appendChild(langSpan);
+  }
+  row.appendChild(left);
+
+  const menuHolder = document.createElement('span');
+  menuHolder.addEventListener('click', (e) => e.stopPropagation());
+  menuHolder.appendChild(
+    makeActionsMenu([
+      { label: 'Edit', onClick: () => openFileModalForEdit(entry) },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: async () => {
+          if (!window.confirm(`Delete "${entry.title}"?`)) return;
+          clearErr();
+          const res = await del('/api/codex_entries/' + entry.id);
+          if (res.ok) {
+            expandedFileIds.delete(entry.id);
+            await loadList();
+          } else {
+            showErr(res.error ?? 'Failed to delete.');
+          }
+        },
+      },
+    ])
+  );
+  row.appendChild(menuHolder);
+
+  wrap.appendChild(row);
+
+  if (expandedFileIds.has(entry.id)) {
+    wrap.appendChild(renderFileDetail(entry));
+  }
 
   return wrap;
 }
 
-function populateFormForEdit(item) {
-  editingId = item.id;
-  cxFormTitleEl.textContent = 'Edit Snippet';
-  cxSubmitBtn.textContent = 'Save Changes';
-  cxCancelBtn.classList.remove('hidden');
-  cxTitleInput.value = item.title;
-  cxLanguageInput.value = item.language ?? '';
-  cxCodeInput.value = item.code;
-  cxTagsInput.value = item.tags ?? '';
-  cxDescriptionInput.value = item.description ?? '';
-  cxBundleIdInput.value = item.bundle_id ?? '';
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+function renderFileDetail(entry) {
+  const detail = document.createElement('div');
+  detail.className = 'px-3 pb-3 space-y-3 border-t border-hairline pt-3';
+
+  const codeWrap = document.createElement('div');
+  codeWrap.className = 'relative';
+
+  const pre = document.createElement('pre');
+  pre.className = 'bg-canvas border border-hairline p-3 overflow-x-auto text-xs';
+  const code = document.createElement('code');
+  code.textContent = entry.code;
+  pre.appendChild(code);
+  codeWrap.appendChild(pre);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className =
+    'absolute top-2 right-2 px-2 py-1 text-xs border border-hairline bg-surface text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  copyBtn.textContent = 'Copy';
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(entry.code);
+      copyBtn.textContent = 'Copied';
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1200);
+    } catch {
+      copyBtn.textContent = 'Failed';
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1200);
+    }
+  });
+  codeWrap.appendChild(copyBtn);
+
+  detail.appendChild(codeWrap);
+
+  if (entry.description) {
+    const notes = document.createElement('div');
+    notes.className = 'text-sm text-ink';
+    renderMarkdown(notes, entry.description);
+    detail.appendChild(notes);
+  }
+
+  return detail;
 }
 
-function resetSnippetFormToCreateMode() {
-  editingId = null;
-  cxFormTitleEl.textContent = 'New Snippet';
-  cxSubmitBtn.textContent = 'Save Snippet';
-  cxCancelBtn.classList.add('hidden');
-  cxTitleInput.value = '';
-  cxLanguageInput.value = '';
-  cxCodeInput.value = '';
-  cxTagsInput.value = '';
-  cxDescriptionInput.value = '';
-  cxBundleIdInput.value = '';
+// ---- File modal (create + edit) ----
+let editingFileId = null;
+const fileModal = createModal('file-modal-title');
+let fileFormTitleEl, fileTitleInput, fileLanguageInput, fileFolderInput, folderDatalist, fileCodeInput, fileDescriptionInput, fileSubmitBtn, fileErrEl;
+
+function buildFileModal() {
+  fileModal.panel.classList.add('max-w-2xl');
+
+  const heading = document.createElement('h3');
+  heading.id = 'file-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New File';
+  fileModal.panel.appendChild(heading);
+  fileFormTitleEl = heading;
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3 max-h-[75vh] overflow-y-auto pr-1';
+
+  const row1 = document.createElement('div');
+  row1.className = 'flex gap-3';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'flex-1';
+  const titleLabel = document.createElement('label');
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.textContent = 'Title';
+  fileTitleInput = document.createElement('input');
+  fileTitleInput.type = 'text';
+  fileTitleInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  fileTitleInput.required = true;
+  titleWrap.appendChild(titleLabel);
+  titleWrap.appendChild(fileTitleInput);
+  row1.appendChild(titleWrap);
+
+  const langWrap = document.createElement('div');
+  langWrap.className = 'w-32';
+  const langLabel = document.createElement('label');
+  langLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  langLabel.textContent = 'Language';
+  fileLanguageInput = document.createElement('input');
+  fileLanguageInput.type = 'text';
+  fileLanguageInput.placeholder = 'c';
+  fileLanguageInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  langWrap.appendChild(langLabel);
+  langWrap.appendChild(fileLanguageInput);
+  row1.appendChild(langWrap);
+
+  form.appendChild(row1);
+
+  const folderLabel = document.createElement('label');
+  folderLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  folderLabel.textContent = 'Folder';
+  fileFolderInput = document.createElement('input');
+  fileFolderInput.type = 'text';
+  fileFolderInput.setAttribute('list', 'codex-folder-options');
+  fileFolderInput.placeholder = 'e.g. Algorithms & Math (or Parent/Child to nest)';
+  fileFolderInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  folderDatalist = document.createElement('datalist');
+  folderDatalist.id = 'codex-folder-options';
+  form.appendChild(folderLabel);
+  form.appendChild(fileFolderInput);
+  form.appendChild(folderDatalist);
+
+  const folderHint = document.createElement('p');
+  folderHint.className = 'text-xs text-ink-dim';
+  folderHint.textContent = 'Typing a folder that doesn’t exist yet creates it — folders exist only as long as they hold at least one file.';
+  form.appendChild(folderHint);
+
+  const codeLabel = document.createElement('label');
+  codeLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  codeLabel.textContent = 'Code';
+  fileCodeInput = document.createElement('textarea');
+  fileCodeInput.rows = 10;
+  fileCodeInput.spellcheck = false;
+  fileCodeInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-xs font-mono text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  fileCodeInput.required = true;
+  form.appendChild(codeLabel);
+  form.appendChild(fileCodeInput);
+
+  const descLabel = document.createElement('label');
+  descLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  descLabel.textContent = 'Notes (Markdown)';
+  fileDescriptionInput = document.createElement('textarea');
+  fileDescriptionInput.rows = 4;
+  fileDescriptionInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  form.appendChild(descLabel);
+  form.appendChild(fileDescriptionInput);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => fileModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  fileSubmitBtn = document.createElement('button');
+  fileSubmitBtn.type = 'submit';
+  fileSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  fileSubmitBtn.textContent = 'Add File';
+  btnRow.appendChild(fileSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  fileErrEl = document.createElement('p');
+  fileErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(fileErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    fileSubmitBtn.disabled = true;
+    fileErrEl.classList.add('hidden');
+
+    const data = {
+      title: fileTitleInput.value,
+      language: fileLanguageInput.value,
+      folder: fileFolderInput.value.trim(),
+      code: fileCodeInput.value,
+      description: fileDescriptionInput.value,
+    };
+
+    const res = editingFileId
+      ? await put('/api/codex_entries/' + editingFileId, data)
+      : await post('/api/codex_entries_create', data);
+
+    fileSubmitBtn.disabled = false;
+    if (res.ok) {
+      if (data.folder) expandedFolders.add(data.folder);
+      fileModal.close();
+      await loadList();
+    } else {
+      fileErrEl.textContent = res.error ?? 'Something went wrong.';
+      fileErrEl.classList.remove('hidden');
+    }
+  });
+
+  fileModal.panel.appendChild(form);
 }
 
-setupCodexEntriesCreateForm(document.getElementById('forms-container'));
-// @inject-forms
+function populateFolderDatalist() {
+  folderDatalist.replaceChildren();
+  distinctFolders().forEach((path) => {
+    const opt = document.createElement('option');
+    opt.value = path;
+    folderDatalist.appendChild(opt);
+  });
+}
+
+function openFileModalForCreate(trigger, folderPath) {
+  editingFileId = null;
+  fileFormTitleEl.textContent = 'New File';
+  fileSubmitBtn.textContent = 'Add File';
+  populateFolderDatalist();
+  fileTitleInput.value = '';
+  fileLanguageInput.value = '';
+  fileFolderInput.value = folderPath ?? '';
+  fileCodeInput.value = '';
+  fileDescriptionInput.value = '';
+  fileErrEl.classList.add('hidden');
+  fileModal.open(trigger);
+  if (folderPath === '') fileFolderInput.focus();
+}
+
+function openFileModalForEdit(entry) {
+  editingFileId = entry.id;
+  fileFormTitleEl.textContent = 'Edit File';
+  fileSubmitBtn.textContent = 'Save Changes';
+  populateFolderDatalist();
+  fileTitleInput.value = entry.title;
+  fileLanguageInput.value = entry.language ?? '';
+  fileFolderInput.value = entry.folder ?? '';
+  fileCodeInput.value = entry.code;
+  fileDescriptionInput.value = entry.description ?? '';
+  fileErrEl.classList.add('hidden');
+  fileModal.open();
+}
+
+// ---- Folder rename modal ----
+let renamingFolderNode = null;
+const folderModal = createModal('folder-modal-title');
+let folderNameInput, folderSubmitBtn, folderModalErrEl;
+
+function buildFolderModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'folder-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Rename Folder';
+  folderModal.panel.appendChild(heading);
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const label = document.createElement('label');
+  label.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  label.textContent = 'Folder name';
+  folderNameInput = document.createElement('input');
+  folderNameInput.type = 'text';
+  folderNameInput.required = true;
+  folderNameInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  form.appendChild(label);
+  form.appendChild(folderNameInput);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => folderModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  folderSubmitBtn = document.createElement('button');
+  folderSubmitBtn.type = 'submit';
+  folderSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  folderSubmitBtn.textContent = 'Save';
+  btnRow.appendChild(folderSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  folderModalErrEl = document.createElement('p');
+  folderModalErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(folderModalErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!renamingFolderNode) return;
+    const newName = folderNameInput.value.trim();
+    if (!newName) return;
+
+    const parentPrefix = renamingFolderNode.path.includes('/')
+      ? renamingFolderNode.path.slice(0, renamingFolderNode.path.lastIndexOf('/') + 1)
+      : '';
+    const newPath = parentPrefix + newName;
+
+    folderSubmitBtn.disabled = true;
+    folderModalErrEl.classList.add('hidden');
+    const res = await post('/api/codex_folders_rename', { old_path: renamingFolderNode.path, new_path: newPath });
+    folderSubmitBtn.disabled = false;
+    if (res.ok) {
+      expandedFolders.delete(renamingFolderNode.path);
+      expandedFolders.add(newPath);
+      folderModal.close();
+      await loadList();
+    } else {
+      folderModalErrEl.textContent = res.error ?? 'Failed to rename folder.';
+      folderModalErrEl.classList.remove('hidden');
+    }
+  });
+
+  folderModal.panel.appendChild(form);
+}
+
+function openFolderRenameModal(node) {
+  renamingFolderNode = node;
+  folderNameInput.value = node.name;
+  folderModalErrEl.classList.add('hidden');
+  folderModal.open();
+}
+
+buildFileModal();
+buildFolderModal();
 
 async function init() {
   await loadList();
 }
 
 init();
-
-
-function setupCodexEntriesCreateForm(container) {
-  const { details, body, labelEl } = makeCollapsibleSection(
-    'New Snippet',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
-  cxFormTitleEl = labelEl;
-
-  const form = document.createElement('form');
-  form.className = 'space-y-3';
-
-  const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  titleLabel.textContent = 'Title';
-  cxTitleInput = document.createElement('input');
-  cxTitleInput.type = 'text';
-  cxTitleInput.name = 'title';
-  cxTitleInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  cxTitleInput.required = true;
-  form.appendChild(titleLabel);
-  form.appendChild(cxTitleInput);
-
-  const languageLabel = document.createElement('label');
-  languageLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  languageLabel.textContent = 'Language';
-  cxLanguageInput = document.createElement('input');
-  cxLanguageInput.type = 'text';
-  cxLanguageInput.name = 'language';
-  cxLanguageInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  form.appendChild(languageLabel);
-  form.appendChild(cxLanguageInput);
-
-  const codeLabel = document.createElement('label');
-  codeLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  codeLabel.textContent = 'Code';
-  cxCodeInput = document.createElement('textarea');
-  cxCodeInput.name = 'code';
-  cxCodeInput.rows = 8;
-  cxCodeInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  cxCodeInput.required = true;
-  form.appendChild(codeLabel);
-  form.appendChild(cxCodeInput);
-
-  const tagsLabel = document.createElement('label');
-  tagsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  tagsLabel.textContent = 'Tags';
-  cxTagsInput = document.createElement('input');
-  cxTagsInput.type = 'text';
-  cxTagsInput.name = 'tags';
-  cxTagsInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  form.appendChild(tagsLabel);
-  form.appendChild(cxTagsInput);
-
-  const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  descriptionLabel.textContent = 'Description';
-  cxDescriptionInput = document.createElement('textarea');
-  cxDescriptionInput.name = 'description';
-  cxDescriptionInput.rows = 3;
-  cxDescriptionInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  form.appendChild(descriptionLabel);
-  form.appendChild(cxDescriptionInput);
-
-  const bundleIdLabel = document.createElement('label');
-  bundleIdLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  bundleIdLabel.textContent = 'Bundle Id';
-  cxBundleIdInput = document.createElement('input');
-  cxBundleIdInput.type = 'text';
-  cxBundleIdInput.name = 'bundle_id';
-  cxBundleIdInput.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  form.appendChild(bundleIdLabel);
-  form.appendChild(cxBundleIdInput);
-
-  const btnRow = document.createElement('div');
-  btnRow.className = 'flex items-center gap-2';
-
-  cxSubmitBtn = document.createElement('button');
-  cxSubmitBtn.type = 'submit';
-  cxSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
-  cxSubmitBtn.textContent = 'Save Snippet';
-  btnRow.appendChild(cxSubmitBtn);
-
-  cxCancelBtn = document.createElement('button');
-  cxCancelBtn.type = 'button';
-  cxCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
-  cxCancelBtn.textContent = 'Cancel';
-  cxCancelBtn.addEventListener('click', resetSnippetFormToCreateMode);
-  btnRow.appendChild(cxCancelBtn);
-
-  form.appendChild(btnRow);
-
-  cxErrEl = document.createElement('p');
-  cxErrEl.className = 'text-sm text-danger mt-2 hidden';
-  form.appendChild(cxErrEl);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    cxSubmitBtn.disabled = true;
-    cxErrEl.classList.add('hidden');
-
-    const data = {
-      title: cxTitleInput.value,
-      language: cxLanguageInput.value,
-      code: cxCodeInput.value,
-      tags: cxTagsInput.value,
-      description: cxDescriptionInput.value,
-      bundle_id: cxBundleIdInput.value,
-    };
-
-    const res = editingId
-      ? await put('/api/codex_entries/' + editingId, data)
-      : await post('/api/codex_entries_create', data);
-
-    cxSubmitBtn.disabled = false;
-    if (res.ok) {
-      resetSnippetFormToCreateMode();
-      await loadList();
-    } else {
-      cxErrEl.textContent = res.error ?? 'Something went wrong.';
-      cxErrEl.classList.remove('hidden');
-    }
-  });
-
-  body.appendChild(form);
-  container.appendChild(details);
-}

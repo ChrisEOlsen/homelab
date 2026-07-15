@@ -1,4 +1,5 @@
-import { get, post, del } from '/static/js/lib/api.js';
+import { get, post, put, del } from '/static/js/lib/api.js';
+import { createModal } from '/static/js/lib/modal.js';
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
@@ -38,11 +39,6 @@ document.addEventListener('keydown', (e) => {
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
 // ---- Collapsible-mobile section helper ----
-// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
-// makes a section collapse on mobile (native <details> disclosure; CSS in
-// input.css hides the toggle and forces the body open at 768px+). Returns
-// the pieces so callers can mount content into `body` and keep updating
-// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
 function makeCollapsibleSection(labelText, detailsClassName) {
   const details = document.createElement('details');
   details.className = 'collapsible-mobile ' + detailsClassName;
@@ -82,11 +78,71 @@ function makeCollapsibleSection(labelText, detailsClassName) {
   return { details, body, labelEl };
 }
 
-const app = document.getElementById('app');
-const formsContainer = document.getElementById('forms-container');
+// ---- Row actions menu (kebab dropdown) ----
+function makeActionsMenu(actions, toggleClassName) {
+  const wrap = document.createElement('div');
+  wrap.className = 'relative shrink-0';
 
-// Delete-error element: created once, inserted as a sibling of #app so it
-// survives render()'s replaceChildren() re-renders.
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className =
+    toggleClassName ||
+    'px-2 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised border border-hairline transition-colors leading-none';
+  toggleBtn.textContent = '⋯';
+  toggleBtn.setAttribute('aria-label', 'Actions');
+  toggleBtn.setAttribute('aria-haspopup', 'true');
+  toggleBtn.setAttribute('aria-expanded', 'false');
+  wrap.appendChild(toggleBtn);
+
+  const menu = document.createElement('div');
+  menu.className = 'absolute right-0 top-full mt-1 min-w-32 bg-surface border border-hairline z-10 hidden';
+  wrap.appendChild(menu);
+
+  function closeMenu() {
+    menu.classList.add('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onOutsideClick);
+    document.removeEventListener('keydown', onKeydown);
+  }
+  function onOutsideClick(e) {
+    if (!wrap.contains(e.target)) closeMenu();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+  function openMenu() {
+    menu.classList.remove('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onOutsideClick);
+    document.addEventListener('keydown', onKeydown);
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains('hidden')) openMenu();
+    else closeMenu();
+  });
+
+  actions.forEach(({ label, danger, onClick }) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className =
+      'block w-full text-left px-3 py-2 text-xs transition-colors ' +
+      (danger ? 'text-danger hover:bg-danger/10' : 'text-ink-dim hover:text-ink hover:bg-surface-raised');
+    item.textContent = label;
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeMenu();
+      await onClick();
+    });
+    menu.appendChild(item);
+  });
+
+  return wrap;
+}
+
+const app = document.getElementById('app');
+
 const deleteErrEl = document.createElement('p');
 deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
 app.insertAdjacentElement('afterend', deleteErrEl);
@@ -97,11 +153,183 @@ let categories = [];
 let selectedCategoryId = null;
 let entries = [];
 
-// Category-create form state: repeatable field rows.
-let catTitleInput;
-let fieldRowsEl;
-let catErrEl;
+function parseSchema(category) {
+  if (!category) return [];
+  try {
+    const parsed = JSON.parse(category.schema_def);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// ---- Category modal (title + repeatable field rows) ----
+let editingCategoryId = null;
+const categoryModal = createModal('category-modal-title');
+let catFormTitleEl, catTitleInput, catSubmitBtn, catErrEl, fieldRowsEl;
 let fieldRows = []; // { row, nameInput, typeSelect }
+
+function addFieldRow(initial) {
+  const row = document.createElement('div');
+  row.className = 'flex items-center gap-2';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Field name';
+  nameInput.value = initial?.name ?? '';
+  nameInput.className =
+    'flex-1 bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  nameInput.required = true;
+
+  const typeSelect = document.createElement('select');
+  typeSelect.className =
+    'bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
+  FIELD_TYPES.forEach((type) => {
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = type;
+    if (initial?.type === type) opt.selected = true;
+    typeSelect.appendChild(opt);
+  });
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'text-xs text-danger/70 hover:text-danger px-2';
+  removeBtn.textContent = 'Remove';
+  removeBtn.addEventListener('click', () => {
+    fieldRows = fieldRows.filter((entry) => entry.row !== row);
+    row.remove();
+  });
+
+  row.appendChild(nameInput);
+  row.appendChild(typeSelect);
+  row.appendChild(removeBtn);
+
+  fieldRowsEl.appendChild(row);
+  fieldRows.push({ row, nameInput, typeSelect });
+}
+
+function resetCategoryForm() {
+  fieldRows.forEach((entry) => entry.row.remove());
+  fieldRows = [];
+}
+
+function buildCategoryModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'category-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New Log Category';
+  categoryModal.panel.appendChild(heading);
+  catFormTitleEl = heading;
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const titleLabel = document.createElement('label');
+  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.textContent = 'Title';
+  catTitleInput = document.createElement('input');
+  catTitleInput.type = 'text';
+  catTitleInput.name = 'title';
+  catTitleInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  catTitleInput.required = true;
+  form.appendChild(titleLabel);
+  form.appendChild(catTitleInput);
+
+  const fieldsLabel = document.createElement('label');
+  fieldsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  fieldsLabel.textContent = 'Fields';
+  form.appendChild(fieldsLabel);
+
+  fieldRowsEl = document.createElement('div');
+  fieldRowsEl.className = 'space-y-2 max-h-48 overflow-y-auto';
+  form.appendChild(fieldRowsEl);
+
+  const addFieldBtn = document.createElement('button');
+  addFieldBtn.type = 'button';
+  addFieldBtn.className =
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  addFieldBtn.textContent = '+ Add field';
+  addFieldBtn.addEventListener('click', () => addFieldRow());
+  form.appendChild(addFieldBtn);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => categoryModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  catSubmitBtn = document.createElement('button');
+  catSubmitBtn.type = 'submit';
+  catSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  catSubmitBtn.textContent = 'Add Category';
+  btnRow.appendChild(catSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  catErrEl = document.createElement('p');
+  catErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(catErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    catSubmitBtn.disabled = true;
+    catErrEl.classList.add('hidden');
+
+    const fields = fieldRows
+      .filter((entry) => entry.nameInput.value.trim() !== '')
+      .map((entry) => ({ name: entry.nameInput.value.trim(), type: entry.typeSelect.value }));
+
+    const res = editingCategoryId
+      ? await put('/api/log_categories/' + editingCategoryId, { title: catTitleInput.value, fields })
+      : await post('/api/log_categories_create', { title: catTitleInput.value, fields });
+
+    catSubmitBtn.disabled = false;
+    if (res.ok) {
+      categoryModal.close();
+      await loadCategories();
+    } else {
+      catErrEl.textContent = res.error ?? 'Something went wrong.';
+      catErrEl.classList.remove('hidden');
+    }
+  });
+
+  categoryModal.panel.appendChild(form);
+}
+
+function openCategoryModalForCreate(trigger) {
+  editingCategoryId = null;
+  catFormTitleEl.textContent = 'New Log Category';
+  catSubmitBtn.textContent = 'Add Category';
+  catTitleInput.value = '';
+  resetCategoryForm();
+  addFieldRow();
+  catErrEl.classList.add('hidden');
+  categoryModal.open(trigger);
+}
+
+function openCategoryModalForEdit(cat) {
+  editingCategoryId = cat.id;
+  catFormTitleEl.textContent = 'Edit Log Category';
+  catSubmitBtn.textContent = 'Save Changes';
+  catTitleInput.value = cat.title;
+  resetCategoryForm();
+  const schema = parseSchema(cat);
+  if (schema.length === 0) {
+    addFieldRow();
+  } else {
+    schema.forEach((field) => addFieldRow(field));
+  }
+  catErrEl.classList.add('hidden');
+  categoryModal.open();
+}
 
 async function loadCategories() {
   const res = await get('/api/logger');
@@ -135,99 +363,120 @@ function getSelectedCategory() {
   return categories.find((c) => c.id === selectedCategoryId) ?? null;
 }
 
-function parseSchema(category) {
-  if (!category) return [];
-  try {
-    const parsed = JSON.parse(category.schema_def);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function tabClass(active) {
-  return (
-    'px-3 py-1.5 text-xs border transition-colors ' +
-    (active
-      ? 'bg-accent text-canvas border-accent'
-      : 'border-hairline text-ink-dim hover:bg-surface-raised hover:text-ink')
-  );
-}
-
 function render() {
   app.replaceChildren();
 
-  const tabsWrap = document.createElement('div');
-  tabsWrap.className = 'flex flex-wrap gap-2';
+  const container = document.createElement('div');
+  container.className = 'flex flex-col sm:flex-row gap-6';
+
+  container.appendChild(renderSidebar());
+  container.appendChild(renderMain());
+
+  app.appendChild(container);
+}
+
+function renderSidebar() {
+  const { details, body } = makeCollapsibleSection(
+    'Categories',
+    'w-full sm:w-56 shrink-0 border border-hairline bg-surface p-4 space-y-2'
+  );
 
   if (categories.length === 0) {
     const p = document.createElement('p');
     p.className = 'text-sm text-ink-dim';
-    p.textContent = 'No log categories yet. Create one below.';
-    app.appendChild(p);
+    p.textContent = 'No log categories yet.';
+    body.appendChild(p);
   } else {
-    categories.forEach((cat) => {
-      const tab = document.createElement('div');
-      tab.className = 'flex items-center gap-1';
+    const ul = document.createElement('ul');
+    ul.className = 'space-y-1';
 
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = tabClass(cat.id === selectedCategoryId);
-      btn.textContent = cat.title;
-      btn.addEventListener('click', async () => {
+    categories.forEach((cat) => {
+      const li = document.createElement('li');
+      li.className =
+        'group flex items-center justify-between gap-2 px-3 py-2 text-sm cursor-pointer border ' +
+        (cat.id === selectedCategoryId
+          ? 'bg-accent text-canvas border-accent'
+          : 'bg-surface text-ink-dim border-hairline hover:bg-surface-raised hover:text-ink');
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'flex-1 truncate';
+      titleSpan.textContent = cat.title;
+      titleSpan.addEventListener('click', async () => {
         selectedCategoryId = cat.id;
         await loadEntries();
       });
-      tab.appendChild(btn);
+      li.appendChild(titleSpan);
 
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
-      delBtn.title = 'Delete category';
-      delBtn.textContent = '×';
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        delBtn.disabled = true;
-        deleteErrEl.classList.add('hidden');
-        const res = await del('/api/log_categories/' + cat.id);
-        if (res.ok) {
-          if (selectedCategoryId === cat.id) selectedCategoryId = null;
-          await loadCategories();
-        } else {
-          delBtn.disabled = false;
-          deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-          deleteErrEl.classList.remove('hidden');
-        }
-      });
-      tab.appendChild(delBtn);
+      const toggleClass =
+        'text-xs px-1.5 py-0.5 leading-none ' +
+        (cat.id === selectedCategoryId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-ink');
 
-      tabsWrap.appendChild(tab);
+      li.appendChild(
+        makeActionsMenu(
+          [
+            { label: 'Edit', onClick: () => openCategoryModalForEdit(cat) },
+            {
+              label: 'Delete',
+              danger: true,
+              onClick: async () => {
+                if (!window.confirm('Delete this category and all its entries?')) return;
+                deleteErrEl.classList.add('hidden');
+                const res = await del('/api/log_categories/' + cat.id);
+                if (res.ok) {
+                  if (selectedCategoryId === cat.id) selectedCategoryId = null;
+                  await loadCategories();
+                } else {
+                  deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+                  deleteErrEl.classList.remove('hidden');
+                }
+              },
+            },
+          ],
+          toggleClass
+        )
+      );
+      ul.appendChild(li);
     });
-    const { details: tabsDetails, body: tabsBody } = makeCollapsibleSection(
-      'Categories',
-      'border border-hairline bg-surface p-5'
-    );
-    tabsBody.appendChild(tabsWrap);
-    app.appendChild(tabsDetails);
+
+    body.appendChild(ul);
   }
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className =
+    'w-full mt-2 px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  addBtn.textContent = '+ Category';
+  addBtn.addEventListener('click', (e) => openCategoryModalForCreate(e.currentTarget));
+  body.appendChild(addBtn);
+
+  return details;
+}
+
+function renderMain() {
+  const section = document.createElement('section');
+  section.className = 'flex-1 space-y-4 min-w-0';
 
   const selected = getSelectedCategory();
+
+  if (!selected) {
+    const p = document.createElement('p');
+    p.className = 'text-sm text-ink-dim';
+    p.textContent = 'Create a log category to get started.';
+    section.appendChild(p);
+    return section;
+  }
+
   const schema = parseSchema(selected);
 
-  if (selected) {
-    const entriesSection = document.createElement('div');
-    entriesSection.className = 'mt-6 space-y-4';
+  const heading = document.createElement('h2');
+  heading.className = 'text-lg font-semibold text-ink';
+  heading.textContent = selected.title;
+  section.appendChild(heading);
 
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs tracking-widest text-ink-dim uppercase';
-    heading.textContent = selected.title + ' entries';
-    entriesSection.appendChild(heading);
+  section.appendChild(renderEntryForm(selected, schema));
+  section.appendChild(renderEntryTable(schema));
 
-    entriesSection.appendChild(renderEntryForm(selected, schema));
-    entriesSection.appendChild(renderEntryTable(schema));
-
-    app.appendChild(entriesSection);
-  }
+  return section;
 }
 
 function renderEntryTable(schema) {
@@ -393,132 +642,7 @@ function renderEntryForm(category, schema) {
   return details;
 }
 
-function addFieldRow() {
-  const row = document.createElement('div');
-  row.className = 'flex items-center gap-2';
-
-  const nameInput = document.createElement('input');
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Field name';
-  nameInput.className =
-    'flex-1 bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  nameInput.required = true;
-
-  const typeSelect = document.createElement('select');
-  typeSelect.className =
-    'bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
-  FIELD_TYPES.forEach((type) => {
-    const opt = document.createElement('option');
-    opt.value = type;
-    opt.textContent = type;
-    typeSelect.appendChild(opt);
-  });
-
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'text-xs text-danger/70 hover:text-danger px-2';
-  removeBtn.textContent = 'Remove';
-  removeBtn.addEventListener('click', () => {
-    fieldRows = fieldRows.filter((entry) => entry.row !== row);
-    row.remove();
-  });
-
-  row.appendChild(nameInput);
-  row.appendChild(typeSelect);
-  row.appendChild(removeBtn);
-
-  fieldRowsEl.appendChild(row);
-  fieldRows.push({ row, nameInput, typeSelect });
-}
-
-function resetCategoryForm() {
-  catTitleInput.value = '';
-  fieldRows.forEach((entry) => entry.row.remove());
-  fieldRows = [];
-  addFieldRow();
-}
-
-function setupLogCategoriesCreateForm(container) {
-  const { details, body } = makeCollapsibleSection(
-    'New Log Category',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
-
-  const form = document.createElement('form');
-  form.className = 'space-y-3';
-
-  const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  titleLabel.textContent = 'Title';
-  catTitleInput = document.createElement('input');
-  catTitleInput.type = 'text';
-  catTitleInput.name = 'title';
-  catTitleInput.className =
-    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  catTitleInput.required = true;
-  form.appendChild(titleLabel);
-  form.appendChild(catTitleInput);
-
-  const fieldsLabel = document.createElement('label');
-  fieldsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  fieldsLabel.textContent = 'Fields';
-  form.appendChild(fieldsLabel);
-
-  fieldRowsEl = document.createElement('div');
-  fieldRowsEl.className = 'space-y-2';
-  form.appendChild(fieldRowsEl);
-
-  const addFieldBtn = document.createElement('button');
-  addFieldBtn.type = 'button';
-  addFieldBtn.className =
-    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  addFieldBtn.textContent = '+ Add field';
-  addFieldBtn.addEventListener('click', () => addFieldRow());
-  form.appendChild(addFieldBtn);
-
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className =
-    'block px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
-  submitBtn.textContent = 'Add Category';
-  form.appendChild(submitBtn);
-
-  catErrEl = document.createElement('p');
-  catErrEl.className = 'text-sm text-danger mt-2 hidden';
-  form.appendChild(catErrEl);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    submitBtn.disabled = true;
-    catErrEl.classList.add('hidden');
-
-    const fields = fieldRows
-      .filter((entry) => entry.nameInput.value.trim() !== '')
-      .map((entry) => ({ name: entry.nameInput.value.trim(), type: entry.typeSelect.value }));
-
-    const res = await post('/api/log_categories_create', {
-      title: catTitleInput.value,
-      fields,
-    });
-
-    submitBtn.disabled = false;
-    if (res.ok) {
-      resetCategoryForm();
-      await loadCategories();
-    } else {
-      catErrEl.textContent = res.error ?? 'Something went wrong.';
-      catErrEl.classList.remove('hidden');
-    }
-  });
-
-  body.appendChild(form);
-  container.appendChild(details);
-
-  addFieldRow();
-}
-
-setupLogCategoriesCreateForm(formsContainer);
-// @inject-forms
+buildCategoryModal();
 
 async function init() {
   await loadCategories();

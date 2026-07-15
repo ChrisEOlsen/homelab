@@ -135,61 +135,95 @@ function recurrenceLabel(item) {
   return RECURRENCE_LABELS[item.recurrence_type] ?? item.recurrence_type;
 }
 
+// A reminder never disappears on its own — passing its date only changes how
+// it's styled (red = overdue), never its presence in the list. The only ways
+// a reminder leaves this list are an explicit Delete or Clear Completed.
+function isOverdue(item) {
+  const d = new Date(item.remind_at);
+  return !isNaN(d.getTime()) && d.getTime() < Date.now();
+}
+
 function renderList(items) {
   app.replaceChildren();
+
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-end';
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className =
+    'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  clearBtn.textContent = 'Clear Completed';
+  clearBtn.addEventListener('click', async () => {
+    const completed = items.filter((item) => !item.is_active);
+    if (completed.length === 0) return;
+    if (!window.confirm(`Delete ${completed.length} completed reminder(s)?`)) return;
+    clearBtn.disabled = true;
+    deleteErrEl.classList.add('hidden');
+    const results = await Promise.all(completed.map((item) => del('/api/reminders/' + item.id)));
+    if (results.some((res) => !res.ok)) {
+      deleteErrEl.textContent = 'Some reminders failed to delete.';
+      deleteErrEl.classList.remove('hidden');
+    }
+    if (completed.some((item) => item.id === editingId)) resetFormToCreateMode();
+    await loadList();
+  });
+  header.appendChild(clearBtn);
+  app.appendChild(header);
+
   if (items.length === 0) {
     const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
+    p.className = 'text-sm text-ink-dim mt-2';
     p.textContent = 'No reminders yet.';
     app.appendChild(p);
     return;
   }
 
   const ul = document.createElement('ul');
-  ul.className = 'space-y-2';
+  ul.className = 'space-y-2 mt-2';
 
   items.forEach((item) => {
+    const completed = !item.is_active;
+    const overdue = !completed && isOverdue(item);
+
     const li = document.createElement('li');
     li.className =
-      'border border-hairline bg-surface-raised p-4 flex items-center justify-between gap-4' +
-      (item.is_active ? '' : ' opacity-50');
+      'border bg-surface-raised p-4 flex items-center gap-4' +
+      (completed ? ' opacity-60 border-hairline' : overdue ? ' border-danger' : ' border-hairline');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = completed;
+    checkbox.className = 'shrink-0';
+    checkbox.setAttribute('aria-label', 'Mark reminder complete');
+    checkbox.addEventListener('change', async () => {
+      checkbox.disabled = true;
+      await post('/api/reminders/' + item.id + '/toggle');
+      await loadList();
+    });
+    li.appendChild(checkbox);
 
     const info = document.createElement('div');
-    info.className = 'flex-1 cursor-pointer';
+    info.className = 'flex-1 min-w-0 cursor-pointer';
     info.addEventListener('click', () => populateFormForEdit(item));
 
     const titleEl = document.createElement('p');
-    titleEl.className = 'text-sm font-medium text-ink';
+    titleEl.className =
+      'text-sm font-medium' +
+      (completed ? ' text-ink-dim line-through' : overdue ? ' text-danger' : ' text-ink');
     titleEl.textContent = item.title;
     info.appendChild(titleEl);
 
     const metaEl = document.createElement('p');
-    metaEl.className = 'text-xs text-ink-dim';
+    metaEl.className = 'text-xs' + (overdue && !completed ? ' text-danger' : ' text-ink-dim');
     metaEl.textContent = `${formatRemindAt(item.remind_at)} · ${recurrenceLabel(item)}`;
     info.appendChild(metaEl);
 
     li.appendChild(info);
 
-    const actions = document.createElement('div');
-    actions.className = 'flex items-center gap-2 shrink-0';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className =
-      'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-    toggleBtn.textContent = item.is_active ? 'Active' : 'Inactive';
-    toggleBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      toggleBtn.disabled = true;
-      await post('/api/reminders/' + item.id + '/toggle');
-      await loadList();
-    });
-    actions.appendChild(toggleBtn);
-
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className =
-      'px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
+      'shrink-0 px-3 py-1.5 text-xs border border-danger text-danger hover:bg-danger/10 transition-colors';
     deleteBtn.textContent = 'Delete';
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -205,9 +239,8 @@ function renderList(items) {
         deleteErrEl.classList.remove('hidden');
       }
     });
-    actions.appendChild(deleteBtn);
+    li.appendChild(deleteBtn);
 
-    li.appendChild(actions);
     ul.appendChild(li);
   });
 

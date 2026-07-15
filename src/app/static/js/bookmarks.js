@@ -1,4 +1,5 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { createModal } from '/static/js/lib/modal.js';
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
@@ -38,11 +39,6 @@ document.addEventListener('keydown', (e) => {
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
 
 // ---- Collapsible-mobile section helper ----
-// Builds the <details>/<summary>/<div class="collapsible-body"> shell that
-// makes a section collapse on mobile (native <details> disclosure; CSS in
-// input.css hides the toggle and forces the body open at 768px+). Returns
-// the pieces so callers can mount content into `body` and keep updating
-// `labelEl.textContent` (e.g. New/Edit toggles) exactly as before.
 function makeCollapsibleSection(labelText, detailsClassName) {
   const details = document.createElement('details');
   details.className = 'collapsible-mobile ' + detailsClassName;
@@ -83,17 +79,14 @@ function makeCollapsibleSection(labelText, detailsClassName) {
 }
 
 // ---- Row actions menu (kebab dropdown) ----
-// Replaces always-visible Edit/Delete buttons with a single "⋯" toggle and
-// a small dropdown, so list rows read cleanly at a glance. `actions` is an
-// array of { label, danger, onClick }; onClick may be async. Closes on an
-// outside click, on Escape, or automatically after an action runs.
-function makeActionsMenu(actions) {
+function makeActionsMenu(actions, toggleClassName) {
   const wrap = document.createElement('div');
   wrap.className = 'relative shrink-0';
 
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.className =
+    toggleClassName ||
     'px-2 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised border border-hairline transition-colors leading-none';
   toggleBtn.textContent = '⋯';
   toggleBtn.setAttribute('aria-label', 'Actions');
@@ -150,231 +143,27 @@ function makeActionsMenu(actions) {
 
 const app = document.getElementById('app');
 
-// Delete-error element: created once, inserted as a sibling of #app so it
-// survives render()'s replaceChildren() re-renders.
 const deleteErrEl = document.createElement('p');
 deleteErrEl.className = 'text-sm text-danger mt-2 hidden';
 app.insertAdjacentElement('afterend', deleteErrEl);
 
+// Module state
 let categories = [];
 let bookmarks = [];
 let selectedCategoryId = 'all';
 
-// Bookmark form state (shared between create and edit modes)
-let editingId = null;
-let bmFormTitleEl, bmSubmitBtn, bmCancelBtn, bmCategorySelect, bmTitleInput, bmUrlInput, bmDescriptionInput, bmErrEl;
+// ---- Category modal ----
+let editingCategoryId = null;
+const categoryModal = createModal('category-modal-title');
+let catFormTitleEl, catTitleInput, catSubmitBtn, catErrEl;
 
-async function loadList() {
-  const res = await get('/api/bookmarks');
-  if (!res.ok) {
-    app.replaceChildren();
-    const p = document.createElement('p');
-    p.className = 'text-sm text-danger';
-    p.textContent = res.error ?? 'Failed to load.';
-    app.appendChild(p);
-    return;
-  }
-  categories = res.data?.categories ?? [];
-  bookmarks = res.data?.bookmarks ?? [];
-  populateCategorySelect();
-  render();
-}
-
-function populateCategorySelect() {
-  if (!bmCategorySelect) return;
-  const previousValue = bmCategorySelect.value;
-  bmCategorySelect.replaceChildren();
-  categories.forEach((cat) => {
-    const opt = document.createElement('option');
-    opt.value = String(cat.id);
-    opt.textContent = cat.title;
-    bmCategorySelect.appendChild(opt);
-  });
-  if (previousValue && categories.some((cat) => String(cat.id) === previousValue)) {
-    bmCategorySelect.value = previousValue;
-  }
-}
-
-function tabClass(active) {
-  return (
-    'px-3 py-1.5 text-xs border transition-colors ' +
-    (active
-      ? 'bg-accent text-canvas border-accent'
-      : 'border-hairline text-ink-dim hover:bg-surface-raised hover:text-ink')
-  );
-}
-
-function render() {
-  app.replaceChildren();
-
-  const tabsWrap = document.createElement('div');
-  tabsWrap.className = 'flex flex-wrap gap-2';
-
-  const allBtn = document.createElement('button');
-  allBtn.type = 'button';
-  allBtn.className = tabClass(selectedCategoryId === 'all');
-  allBtn.textContent = 'All';
-  allBtn.addEventListener('click', () => {
-    selectedCategoryId = 'all';
-    render();
-  });
-  tabsWrap.appendChild(allBtn);
-
-  categories.forEach((cat) => {
-    const tab = document.createElement('div');
-    tab.className = 'flex items-center gap-1';
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = tabClass(selectedCategoryId === cat.id);
-    btn.textContent = cat.title;
-    btn.addEventListener('click', () => {
-      selectedCategoryId = cat.id;
-      render();
-    });
-    tab.appendChild(btn);
-
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'text-xs text-danger/70 hover:text-danger px-1';
-    delBtn.title = 'Delete category';
-    delBtn.textContent = '×';
-    delBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      delBtn.disabled = true;
-      deleteErrEl.classList.add('hidden');
-      const res = await del('/api/bookmark_categories/' + cat.id);
-      if (res.ok) {
-        if (selectedCategoryId === cat.id) selectedCategoryId = 'all';
-        await loadList();
-      } else {
-        delBtn.disabled = false;
-        deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-        deleteErrEl.classList.remove('hidden');
-      }
-    });
-    tab.appendChild(delBtn);
-
-    tabsWrap.appendChild(tab);
-  });
-
-  app.appendChild(tabsWrap);
-
-  const listWrap = document.createElement('div');
-  listWrap.className = 'space-y-2 mt-4';
-
-  const filtered =
-    selectedCategoryId === 'all'
-      ? bookmarks
-      : bookmarks.filter((item) => item.category_id === selectedCategoryId);
-
-  if (filtered.length === 0) {
-    const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
-    p.textContent = 'No bookmarks yet.';
-    listWrap.appendChild(p);
-  } else {
-    const ul = document.createElement('ul');
-    ul.className = 'space-y-2';
-    filtered.forEach((item) => {
-      ul.appendChild(renderBookmarkRow(item));
-    });
-    listWrap.appendChild(ul);
-  }
-
-  app.appendChild(listWrap);
-}
-
-function renderBookmarkRow(item) {
-  const li = document.createElement('li');
-  li.className =
-    'border border-hairline bg-surface-raised p-4 flex items-start justify-between gap-4';
-
-  const info = document.createElement('div');
-  info.className = 'flex-1 min-w-0';
-
-  const link = document.createElement('a');
-  link.href = item.url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.className = 'text-sm font-medium text-ink hover:underline';
-  link.textContent = item.title;
-  info.appendChild(link);
-
-  const urlEl = document.createElement('p');
-  urlEl.className = 'text-xs text-ink-dim truncate';
-  urlEl.textContent = item.url;
-  info.appendChild(urlEl);
-
-  if (item.description) {
-    const descEl = document.createElement('p');
-    descEl.className = 'text-xs text-ink-dim mt-1';
-    descEl.textContent = item.description;
-    info.appendChild(descEl);
-  }
-
-  li.appendChild(info);
-
-  li.appendChild(
-    makeActionsMenu([
-      { label: 'Edit', onClick: () => populateFormForEdit(item) },
-      {
-        label: 'Delete',
-        danger: true,
-        onClick: async () => {
-          deleteErrEl.classList.add('hidden');
-          const res = await del('/api/bookmarks/' + item.id);
-          if (res.ok) {
-            if (editingId === item.id) resetBookmarkFormToCreateMode();
-            await loadList();
-          } else {
-            deleteErrEl.textContent = res.error ?? 'Failed to delete.';
-            deleteErrEl.classList.remove('hidden');
-          }
-        },
-      },
-    ])
-  );
-  return li;
-}
-
-function populateFormForEdit(item) {
-  editingId = item.id;
-  bmFormTitleEl.textContent = 'Edit Bookmark';
-  bmSubmitBtn.textContent = 'Save Changes';
-  bmCancelBtn.classList.remove('hidden');
-  bmCategorySelect.value = String(item.category_id);
-  bmTitleInput.value = item.title;
-  bmUrlInput.value = item.url;
-  bmDescriptionInput.value = item.description ?? '';
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-}
-
-function resetBookmarkFormToCreateMode() {
-  editingId = null;
-  bmFormTitleEl.textContent = 'New Bookmark';
-  bmSubmitBtn.textContent = 'Add Bookmark';
-  bmCancelBtn.classList.add('hidden');
-  bmTitleInput.value = '';
-  bmUrlInput.value = '';
-  bmDescriptionInput.value = '';
-}
-
-setupBookmarkCategoriesCreateForm(document.getElementById('forms-container'));
-setupBookmarksCreateForm(document.getElementById('forms-container'));
-// @inject-forms
-
-async function init() {
-  await loadList();
-}
-
-init();
-
-function setupBookmarkCategoriesCreateForm(container) {
-  const { details, body } = makeCollapsibleSection(
-    'New Category',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
+function buildCategoryModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'category-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New Category';
+  categoryModal.panel.appendChild(heading);
+  catFormTitleEl = heading;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
@@ -382,51 +171,92 @@ function setupBookmarkCategoriesCreateForm(container) {
   const titleLabel = document.createElement('label');
   titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
-  const titleInput = document.createElement('input');
-  titleInput.type = 'text';
-  titleInput.name = 'title';
-  titleInput.className =
+  catTitleInput = document.createElement('input');
+  catTitleInput.type = 'text';
+  catTitleInput.name = 'title';
+  catTitleInput.className =
     'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  titleInput.required = true;
+  catTitleInput.required = true;
   form.appendChild(titleLabel);
-  form.appendChild(titleInput);
+  form.appendChild(catTitleInput);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
-  submitBtn.textContent = 'Add Category';
-  form.appendChild(submitBtn);
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
 
-  const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-danger mt-2 hidden';
-  form.appendChild(errEl);
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => categoryModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  catSubmitBtn = document.createElement('button');
+  catSubmitBtn.type = 'submit';
+  catSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  catSubmitBtn.textContent = 'Add Category';
+  btnRow.appendChild(catSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  catErrEl = document.createElement('p');
+  catErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(catErrEl);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    submitBtn.disabled = true;
-    errEl.classList.add('hidden');
-    const data = { title: titleInput.value };
-    const res = await post('/api/bookmark_categories_create', data);
-    submitBtn.disabled = false;
+    catSubmitBtn.disabled = true;
+    catErrEl.classList.add('hidden');
+    const title = catTitleInput.value;
+
+    const res = editingCategoryId
+      ? await put('/api/bookmark_categories/' + editingCategoryId, { title })
+      : await post('/api/bookmark_categories_create', { title });
+
+    catSubmitBtn.disabled = false;
     if (res.ok) {
-      form.reset();
+      categoryModal.close();
       await loadList();
     } else {
-      errEl.textContent = res.error ?? 'Something went wrong.';
-      errEl.classList.remove('hidden');
+      catErrEl.textContent = res.error ?? 'Something went wrong.';
+      catErrEl.classList.remove('hidden');
     }
   });
 
-  body.appendChild(form);
-  container.appendChild(details);
+  categoryModal.panel.appendChild(form);
 }
 
-function setupBookmarksCreateForm(container) {
-  const { details, body, labelEl } = makeCollapsibleSection(
-    'New Bookmark',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
-  bmFormTitleEl = labelEl;
+function openCategoryModalForCreate(trigger) {
+  editingCategoryId = null;
+  catFormTitleEl.textContent = 'New Category';
+  catSubmitBtn.textContent = 'Add Category';
+  catTitleInput.value = '';
+  catErrEl.classList.add('hidden');
+  categoryModal.open(trigger);
+}
+
+function openCategoryModalForEdit(cat) {
+  editingCategoryId = cat.id;
+  catFormTitleEl.textContent = 'Edit Category';
+  catSubmitBtn.textContent = 'Save Changes';
+  catTitleInput.value = cat.title;
+  catErrEl.classList.add('hidden');
+  categoryModal.open();
+}
+
+// ---- Bookmark modal ----
+let editingId = null;
+const bookmarkModal = createModal('bookmark-modal-title');
+let bmFormTitleEl, bmSubmitBtn, bmCategorySelect, bmTitleInput, bmUrlInput, bmDescriptionInput, bmErrEl;
+
+function buildBookmarkModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'bookmark-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New Bookmark';
+  bookmarkModal.panel.appendChild(heading);
+  bmFormTitleEl = heading;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
@@ -478,21 +308,22 @@ function setupBookmarksCreateForm(container) {
   form.appendChild(bmDescriptionInput);
 
   const btnRow = document.createElement('div');
-  btnRow.className = 'flex items-center gap-2';
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => bookmarkModal.close());
+  btnRow.appendChild(cancelBtn);
 
   bmSubmitBtn = document.createElement('button');
   bmSubmitBtn.type = 'submit';
-  bmSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  bmSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   bmSubmitBtn.textContent = 'Add Bookmark';
   btnRow.appendChild(bmSubmitBtn);
-
-  bmCancelBtn = document.createElement('button');
-  bmCancelBtn.type = 'button';
-  bmCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
-  bmCancelBtn.textContent = 'Cancel';
-  bmCancelBtn.addEventListener('click', resetBookmarkFormToCreateMode);
-  btnRow.appendChild(bmCancelBtn);
 
   form.appendChild(btnRow);
 
@@ -502,6 +333,11 @@ function setupBookmarksCreateForm(container) {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!bmCategorySelect.value) {
+      bmErrEl.textContent = 'Create a category first.';
+      bmErrEl.classList.remove('hidden');
+      return;
+    }
     bmSubmitBtn.disabled = true;
     bmErrEl.classList.add('hidden');
 
@@ -512,13 +348,11 @@ function setupBookmarksCreateForm(container) {
       description: bmDescriptionInput.value,
     };
 
-    const res = editingId
-      ? await put('/api/bookmarks/' + editingId, data)
-      : await post('/api/bookmarks_create', data);
+    const res = editingId ? await put('/api/bookmarks/' + editingId, data) : await post('/api/bookmarks_create', data);
 
     bmSubmitBtn.disabled = false;
     if (res.ok) {
-      resetBookmarkFormToCreateMode();
+      bookmarkModal.close();
       await loadList();
     } else {
       bmErrEl.textContent = res.error ?? 'Something went wrong.';
@@ -526,8 +360,264 @@ function setupBookmarksCreateForm(container) {
     }
   });
 
-  body.appendChild(form);
-  container.appendChild(details);
-
-  populateCategorySelect();
+  bookmarkModal.panel.appendChild(form);
 }
+
+function populateCategorySelect() {
+  bmCategorySelect.replaceChildren();
+  categories.forEach((cat) => {
+    const opt = document.createElement('option');
+    opt.value = String(cat.id);
+    opt.textContent = cat.title;
+    bmCategorySelect.appendChild(opt);
+  });
+}
+
+function openBookmarkModalForCreate(trigger) {
+  editingId = null;
+  bmFormTitleEl.textContent = 'New Bookmark';
+  bmSubmitBtn.textContent = 'Add Bookmark';
+  populateCategorySelect();
+  // Always default to whichever category is currently selected in the
+  // sidebar, never a stale value left over from a previous add.
+  const desired = selectedCategoryId !== 'all' ? String(selectedCategoryId) : categories[0] ? String(categories[0].id) : '';
+  if (desired) bmCategorySelect.value = desired;
+  bmTitleInput.value = '';
+  bmUrlInput.value = '';
+  bmDescriptionInput.value = '';
+  bmErrEl.classList.add('hidden');
+  bookmarkModal.open(trigger);
+}
+
+function openBookmarkModalForEdit(item) {
+  editingId = item.id;
+  bmFormTitleEl.textContent = 'Edit Bookmark';
+  bmSubmitBtn.textContent = 'Save Changes';
+  populateCategorySelect();
+  bmCategorySelect.value = String(item.category_id);
+  bmTitleInput.value = item.title;
+  bmUrlInput.value = item.url;
+  bmDescriptionInput.value = item.description ?? '';
+  bmErrEl.classList.add('hidden');
+  bookmarkModal.open();
+}
+
+async function loadList() {
+  const res = await get('/api/bookmarks');
+  if (!res.ok) {
+    app.replaceChildren();
+    const p = document.createElement('p');
+    p.className = 'text-sm text-danger';
+    p.textContent = res.error ?? 'Failed to load.';
+    app.appendChild(p);
+    return;
+  }
+  categories = res.data?.categories ?? [];
+  bookmarks = res.data?.bookmarks ?? [];
+  if (selectedCategoryId !== 'all' && !categories.some((c) => c.id === selectedCategoryId)) {
+    selectedCategoryId = 'all';
+  }
+  render();
+}
+
+function render() {
+  app.replaceChildren();
+
+  const container = document.createElement('div');
+  container.className = 'flex flex-col sm:flex-row gap-6';
+
+  container.appendChild(renderSidebar());
+  container.appendChild(renderMain());
+
+  app.appendChild(container);
+}
+
+function renderSidebar() {
+  const { details, body } = makeCollapsibleSection(
+    'Categories',
+    'w-full sm:w-56 shrink-0 border border-hairline bg-surface p-4 space-y-2'
+  );
+
+  const ul = document.createElement('ul');
+  ul.className = 'space-y-1';
+
+  const allLi = document.createElement('li');
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.className =
+    'w-full text-left px-3 py-2 text-sm border transition-colors ' +
+    (selectedCategoryId === 'all'
+      ? 'bg-accent text-canvas border-accent'
+      : 'bg-surface text-ink-dim border-hairline hover:bg-surface-raised hover:text-ink');
+  allBtn.textContent = 'All';
+  allBtn.addEventListener('click', () => {
+    selectedCategoryId = 'all';
+    render();
+  });
+  allLi.appendChild(allBtn);
+  ul.appendChild(allLi);
+
+  categories.forEach((cat) => {
+    const li = document.createElement('li');
+    li.className =
+      'group flex items-center justify-between gap-2 px-3 py-2 text-sm cursor-pointer border ' +
+      (cat.id === selectedCategoryId
+        ? 'bg-accent text-canvas border-accent'
+        : 'bg-surface text-ink-dim border-hairline hover:bg-surface-raised hover:text-ink');
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'flex-1 truncate';
+    titleSpan.textContent = cat.title;
+    titleSpan.addEventListener('click', () => {
+      selectedCategoryId = cat.id;
+      render();
+    });
+    li.appendChild(titleSpan);
+
+    const toggleClass =
+      'text-xs px-1.5 py-0.5 leading-none ' +
+      (cat.id === selectedCategoryId ? 'text-canvas/70 hover:text-canvas' : 'text-ink-dim hover:text-ink');
+
+    li.appendChild(
+      makeActionsMenu(
+        [
+          { label: 'Edit', onClick: () => openCategoryModalForEdit(cat) },
+          {
+            label: 'Delete',
+            danger: true,
+            onClick: async () => {
+              if (!window.confirm('Delete this category and all its bookmarks?')) return;
+              deleteErrEl.classList.add('hidden');
+              const res = await del('/api/bookmark_categories/' + cat.id);
+              if (res.ok) {
+                if (selectedCategoryId === cat.id) selectedCategoryId = 'all';
+                await loadList();
+              } else {
+                deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+                deleteErrEl.classList.remove('hidden');
+              }
+            },
+          },
+        ],
+        toggleClass
+      )
+    );
+    ul.appendChild(li);
+  });
+
+  body.appendChild(ul);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className =
+    'w-full mt-2 px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  addBtn.textContent = '+ Category';
+  addBtn.addEventListener('click', (e) => openCategoryModalForCreate(e.currentTarget));
+  body.appendChild(addBtn);
+
+  return details;
+}
+
+function renderMain() {
+  const section = document.createElement('section');
+  section.className = 'flex-1 space-y-4 min-w-0';
+
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-between gap-4';
+
+  const heading = document.createElement('h2');
+  heading.className = 'text-lg font-semibold text-ink';
+  heading.textContent = selectedCategoryId === 'all' ? 'All Bookmarks' : categories.find((c) => c.id === selectedCategoryId)?.title ?? '';
+  header.appendChild(heading);
+
+  const addBookmarkBtn = document.createElement('button');
+  addBookmarkBtn.type = 'button';
+  addBookmarkBtn.className =
+    'px-3 py-1.5 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
+  addBookmarkBtn.textContent = '+ Add Bookmark';
+  addBookmarkBtn.disabled = categories.length === 0;
+  addBookmarkBtn.addEventListener('click', (e) => openBookmarkModalForCreate(e.currentTarget));
+  header.appendChild(addBookmarkBtn);
+
+  section.appendChild(header);
+
+  const filtered =
+    selectedCategoryId === 'all' ? bookmarks : bookmarks.filter((item) => item.category_id === selectedCategoryId);
+
+  if (filtered.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'text-sm text-ink-dim';
+    p.textContent = categories.length === 0 ? 'Create a category to get started.' : 'No bookmarks yet.';
+    section.appendChild(p);
+    return section;
+  }
+
+  const ul = document.createElement('ul');
+  ul.className = 'space-y-2';
+  filtered.forEach((item) => {
+    ul.appendChild(renderBookmarkRow(item));
+  });
+  section.appendChild(ul);
+
+  return section;
+}
+
+function renderBookmarkRow(item) {
+  const li = document.createElement('li');
+  li.className = 'border border-hairline bg-surface-raised p-4 flex items-start justify-between gap-4';
+
+  const info = document.createElement('div');
+  info.className = 'flex-1 min-w-0';
+
+  const link = document.createElement('a');
+  link.href = item.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.className = 'text-sm font-medium text-ink hover:underline';
+  link.textContent = item.title;
+  info.appendChild(link);
+
+  const urlEl = document.createElement('p');
+  urlEl.className = 'text-xs text-ink-dim truncate';
+  urlEl.textContent = item.url;
+  info.appendChild(urlEl);
+
+  if (item.description) {
+    const descEl = document.createElement('p');
+    descEl.className = 'text-xs text-ink-dim mt-1';
+    descEl.textContent = item.description;
+    info.appendChild(descEl);
+  }
+
+  li.appendChild(info);
+
+  li.appendChild(
+    makeActionsMenu([
+      { label: 'Edit', onClick: () => openBookmarkModalForEdit(item) },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: async () => {
+          deleteErrEl.classList.add('hidden');
+          const res = await del('/api/bookmarks/' + item.id);
+          if (res.ok) {
+            await loadList();
+          } else {
+            deleteErrEl.textContent = res.error ?? 'Failed to delete.';
+            deleteErrEl.classList.remove('hidden');
+          }
+        },
+      },
+    ])
+  );
+  return li;
+}
+
+buildCategoryModal();
+buildBookmarkModal();
+
+async function init() {
+  await loadList();
+}
+
+init();

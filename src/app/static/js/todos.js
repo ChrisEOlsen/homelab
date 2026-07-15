@@ -151,6 +151,65 @@ function makeActionsMenu(actions, toggleClassName) {
   return wrap;
 }
 
+// ---- Drag-to-reorder (grip handle) ----
+// Pointer Events unify mouse, touch, and pen in one code path — native HTML5
+// drag-and-drop (dragstart/dragover/drop) never fires on touch devices,
+// which is why reordering silently didn't work on mobile. Drag is scoped to
+// the grip handle rather than the whole row so taps on the checkbox/kebab
+// menu elsewhere in the row aren't mistaken for a drag start.
+function makeRowDraggable(li, handle, ul) {
+  let dragging = false;
+
+  handle.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    handle.setPointerCapture(e.pointerId);
+    li.classList.add('opacity-50');
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const afterEl = getDragAfterElement(ul, e.clientY, li);
+    if (afterEl == null) {
+      ul.appendChild(li);
+    } else if (afterEl !== li) {
+      ul.insertBefore(li, afterEl);
+    }
+  });
+
+  async function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    li.classList.remove('opacity-50');
+    try {
+      handle.releasePointerCapture(e.pointerId);
+    } catch {
+      // no-op — capture may already have been released (e.g. pointercancel)
+    }
+    const order = Array.from(ul.children).map((el) => Number(el.dataset.id));
+    await put('/api/todos_reorder', { order });
+    await loadList();
+  }
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+}
+
+// Finds the row a dragged item should be inserted before, based on the
+// dragged pointer's Y position relative to each row's vertical midpoint.
+function getDragAfterElement(ul, y, dragEl) {
+  const rows = [...ul.children].filter((el) => el !== dragEl);
+  return rows.reduce(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: child };
+      }
+      return closest;
+    },
+    { offset: -Infinity, element: null }
+  ).element;
+}
+
 const app = document.getElementById('app');
 
 // Delete-error element: created once, inserted as a sibling of #app so it
@@ -175,7 +234,12 @@ let editingTodoId = null;
 let editingTodoListId = null;
 let editingTodoIsDone = false;
 let editingTodoSortOrder = 0;
-let todoFormTitleEl, todoListSelect, todoTitleInput, todoDescriptionInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
+let todoFormTitleEl, todoListSelect, todoTitleInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
+
+// Todo modal state (backdrop/panel built once in setupTodosCreateForm, then
+// shown/hidden — mirrors openEditSubtaskModal's visual pattern but persists
+// the same form/select elements so populate/reset functions above keep working).
+let todoModalBackdrop, todoModalPanel, todoModalTriggerEl;
 
 // Inline subtasks state. The bulk /api/todos response now includes every
 // subtask up front (grouped here by todo_id), so every todo's subtasks are
@@ -322,6 +386,20 @@ function renderMain() {
   heading.textContent = activeList ? activeList.title : '';
   header.appendChild(heading);
 
+  const headerBtns = document.createElement('div');
+  headerBtns.className = 'flex items-center gap-2';
+
+  const addTaskBtn = document.createElement('button');
+  addTaskBtn.type = 'button';
+  addTaskBtn.className =
+    'px-3 py-1.5 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
+  addTaskBtn.textContent = '+ Add Task';
+  addTaskBtn.addEventListener('click', (e) => {
+    resetTodoFormToCreateMode();
+    openTodoModal(e.currentTarget);
+  });
+  headerBtns.appendChild(addTaskBtn);
+
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
   clearBtn.className =
@@ -333,7 +411,8 @@ function renderMain() {
     await post('/api/todo_lists/' + activeListId + '/clear_completed');
     await loadList();
   });
-  header.appendChild(clearBtn);
+  headerBtns.appendChild(clearBtn);
+  header.appendChild(headerBtns);
 
   section.appendChild(header);
 
@@ -350,7 +429,6 @@ function renderMain() {
 
   listTodos.forEach((item) => {
     const li = document.createElement('li');
-    li.draggable = true;
     li.dataset.id = String(item.id);
     li.className =
       'border border-hairline bg-surface-raised p-3 flex flex-col gap-3' +
@@ -359,8 +437,12 @@ function renderMain() {
     const topRow = document.createElement('div');
     topRow.className = 'flex items-center gap-3';
 
+    // touch-action: none stops the browser from starting a page scroll when
+    // a drag begins here — needed for the handle to work as a touch drag
+    // target on mobile, not just with a mouse.
     const dragHandle = document.createElement('span');
     dragHandle.className = 'text-ink-dim cursor-grab select-none shrink-0';
+    dragHandle.style.touchAction = 'none';
     dragHandle.textContent = '⠿';
     topRow.appendChild(dragHandle);
 
@@ -381,12 +463,6 @@ function renderMain() {
     titleEl.className = 'text-sm font-medium text-ink truncate' + (item.is_done ? ' line-through' : '');
     titleEl.textContent = item.title;
     info.appendChild(titleEl);
-    if (item.description) {
-      const descEl = document.createElement('p');
-      descEl.className = 'text-xs text-ink-dim truncate';
-      descEl.textContent = item.description;
-      info.appendChild(descEl);
-    }
     topRow.appendChild(info);
 
     const actions = document.createElement('div');
@@ -479,29 +555,7 @@ function renderMain() {
     subWrap.appendChild(renderInlineSubtasks(item.id));
     li.appendChild(subWrap);
 
-    li.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', String(item.id));
-      e.dataTransfer.effectAllowed = 'move';
-      li.classList.add('opacity-50');
-    });
-    li.addEventListener('dragend', () => li.classList.remove('opacity-50'));
-    li.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-    });
-    li.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      const draggedId = Number(e.dataTransfer.getData('text/plain'));
-      if (!draggedId || draggedId === item.id) return;
-      const draggedEl = ul.querySelector(`[data-id="${draggedId}"]`);
-      if (!draggedEl) return;
-      const rect = li.getBoundingClientRect();
-      const insertBefore = e.clientY - rect.top < rect.height / 2;
-      ul.insertBefore(draggedEl, insertBefore ? li : li.nextSibling);
-      const order = Array.from(ul.children).map((el) => Number(el.dataset.id));
-      await put('/api/todos_reorder', { order });
-      await loadList();
-    });
+    makeRowDraggable(li, dragHandle, ul);
 
     ul.appendChild(li);
   });
@@ -712,7 +766,6 @@ function renderInlineSubtasks(todoId) {
 
 function renderTodoListSelectOptions() {
   if (!todoListSelect) return;
-  const previousValue = todoListSelect.value;
   todoListSelect.replaceChildren();
   lists.forEach((list) => {
     const opt = document.createElement('option');
@@ -728,9 +781,10 @@ function renderTodoListSelectOptions() {
     todoListSelect.value = String(editingTodoListId);
     return;
   }
-  const desired = previousValue || (activeListId !== null ? String(activeListId) : '');
-  if (desired && lists.some((l) => String(l.id) === desired)) {
-    todoListSelect.value = desired;
+  // Always default to the sidebar's current list when adding a new task,
+  // never a stale value left over from a previous add.
+  if (activeListId !== null) {
+    todoListSelect.value = String(activeListId);
   }
 }
 
@@ -741,12 +795,10 @@ function populateTodoFormForEdit(item) {
   editingTodoSortOrder = item.sort_order;
   todoFormTitleEl.textContent = 'Edit Todo';
   todoSubmitBtn.textContent = 'Save Changes';
-  todoCancelBtn.classList.remove('hidden');
 
   todoListSelect.value = String(item.list_id);
   todoTitleInput.value = item.title;
-  todoDescriptionInput.value = item.description ?? '';
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  openTodoModal();
 }
 
 function resetTodoFormToCreateMode() {
@@ -756,9 +808,8 @@ function resetTodoFormToCreateMode() {
   editingTodoSortOrder = 0;
   todoFormTitleEl.textContent = 'New Todo';
   todoSubmitBtn.textContent = 'Add Todo';
-  todoCancelBtn.classList.add('hidden');
   todoTitleInput.value = '';
-  todoDescriptionInput.value = '';
+  todoErrEl.classList.add('hidden');
   renderTodoListSelectOptions();
 }
 
@@ -782,7 +833,7 @@ function resetListFormToCreateMode() {
 }
 
 setupTodoListsCreateForm(document.getElementById('forms-container'));
-setupTodosCreateForm(document.getElementById('forms-container'));
+setupTodosCreateForm();
 // @inject-forms
 
 async function init() {
@@ -860,12 +911,62 @@ function setupTodoListsCreateForm(container) {
   container.appendChild(details);
 }
 
-function setupTodosCreateForm(container) {
-  const { details, body, labelEl } = makeCollapsibleSection(
-    'New Todo',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
-  todoFormTitleEl = labelEl;
+// Opens the Add/Edit Todo modal. `trigger` is the element focus should
+// return to on close (defaults to whatever was focused when called, e.g.
+// a kebab-menu "Edit" item). Backdrop click, Escape, and Cancel all close it.
+function openTodoModal(trigger) {
+  todoModalTriggerEl = trigger ?? document.activeElement;
+  todoModalBackdrop.classList.remove('hidden');
+  document.addEventListener('keydown', onTodoModalKeydown);
+  todoTitleInput.focus();
+}
+
+function closeTodoModal() {
+  todoModalBackdrop.classList.add('hidden');
+  document.removeEventListener('keydown', onTodoModalKeydown);
+  if (todoModalTriggerEl instanceof HTMLElement) todoModalTriggerEl.focus();
+  todoModalTriggerEl = null;
+}
+
+function onTodoModalKeydown(e) {
+  if (e.key === 'Escape') {
+    closeTodoModal();
+    return;
+  }
+  // Minimal focus trap: keep Tab from leaving the modal panel.
+  if (e.key !== 'Tab') return;
+  const focusable = todoModalPanel.querySelectorAll('button, input, select, textarea, a[href]');
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+function setupTodosCreateForm() {
+  todoModalBackdrop = document.createElement('div');
+  todoModalBackdrop.className = 'fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4';
+  todoModalBackdrop.addEventListener('click', closeTodoModal);
+
+  todoModalPanel = document.createElement('div');
+  todoModalPanel.className = 'bg-surface border border-hairline p-5 w-full max-w-md space-y-3';
+  todoModalPanel.setAttribute('role', 'dialog');
+  todoModalPanel.setAttribute('aria-modal', 'true');
+  todoModalPanel.setAttribute('aria-labelledby', 'todo-modal-title');
+  todoModalPanel.addEventListener('click', (e) => e.stopPropagation());
+  todoModalBackdrop.appendChild(todoModalPanel);
+
+  const heading = document.createElement('h3');
+  heading.id = 'todo-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New Todo';
+  todoModalPanel.appendChild(heading);
+  todoFormTitleEl = heading;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
@@ -893,33 +994,25 @@ function setupTodosCreateForm(container) {
   form.appendChild(titleLabel);
   form.appendChild(todoTitleInput);
 
-  const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
-  descriptionLabel.textContent = 'Description';
-  todoDescriptionInput = document.createElement('input');
-  todoDescriptionInput.type = 'text';
-  todoDescriptionInput.name = 'description';
-  todoDescriptionInput.className =
-    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-  form.appendChild(descriptionLabel);
-  form.appendChild(todoDescriptionInput);
-
   const btnRow = document.createElement('div');
-  btnRow.className = 'flex items-center gap-2';
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  todoCancelBtn = document.createElement('button');
+  todoCancelBtn.type = 'button';
+  todoCancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+  todoCancelBtn.textContent = 'Cancel';
+  todoCancelBtn.addEventListener('click', () => {
+    resetTodoFormToCreateMode();
+    closeTodoModal();
+  });
+  btnRow.appendChild(todoCancelBtn);
 
   todoSubmitBtn = document.createElement('button');
   todoSubmitBtn.type = 'submit';
   todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
   todoSubmitBtn.textContent = 'Add Todo';
   btnRow.appendChild(todoSubmitBtn);
-
-  todoCancelBtn = document.createElement('button');
-  todoCancelBtn.type = 'button';
-  todoCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
-  todoCancelBtn.textContent = 'Cancel';
-  todoCancelBtn.addEventListener('click', resetTodoFormToCreateMode);
-  btnRow.appendChild(todoCancelBtn);
 
   form.appendChild(btnRow);
 
@@ -938,21 +1031,20 @@ function setupTodosCreateForm(container) {
     todoErrEl.classList.add('hidden');
     const listId = Number(todoListSelect.value);
     const title = todoTitleInput.value;
-    const description = todoDescriptionInput.value;
 
     const res = editingTodoId
       ? await put('/api/todos/' + editingTodoId, {
           list_id: listId,
           title,
-          description,
           is_done: editingTodoIsDone,
           sort_order: editingTodoSortOrder,
         })
-      : await post('/api/todos_create', { list_id: listId, title, description });
+      : await post('/api/todos_create', { list_id: listId, title });
 
     todoSubmitBtn.disabled = false;
     if (res.ok) {
       resetTodoFormToCreateMode();
+      closeTodoModal();
       await loadList();
     } else {
       todoErrEl.textContent = res.error ?? 'Something went wrong.';
@@ -960,6 +1052,6 @@ function setupTodosCreateForm(container) {
     }
   });
 
-  body.appendChild(form);
-  container.appendChild(details);
+  todoModalPanel.appendChild(form);
+  document.body.appendChild(todoModalBackdrop);
 }
