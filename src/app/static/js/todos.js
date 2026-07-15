@@ -159,38 +159,45 @@ function makeActionsMenu(actions, toggleClassName) {
 // menu elsewhere in the row aren't mistaken for a drag start.
 function makeRowDraggable(li, handle, ul) {
   let dragging = false;
+  let pointerId = null;
 
+  // Move/up/cancel listeners live on `document`, not on `handle` itself.
+  // Reordering reparents `li` (insertBefore/appendChild) on every move, and
+  // moving an element that holds pointer capture releases that capture
+  // (a `lostpointercapture` fires) — so listeners on `handle` alone stop
+  // receiving events mid-drag and `endDrag` never runs. `document` never
+  // moves, so it keeps receiving events for the whole gesture.
   handle.addEventListener('pointerdown', (e) => {
     dragging = true;
-    handle.setPointerCapture(e.pointerId);
+    pointerId = e.pointerId;
     li.classList.add('opacity-50');
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', endDrag);
   });
 
-  handle.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
+  function onPointerMove(e) {
+    if (!dragging || e.pointerId !== pointerId) return;
     const afterEl = getDragAfterElement(ul, e.clientY, li);
     if (afterEl == null) {
       ul.appendChild(li);
     } else if (afterEl !== li) {
       ul.insertBefore(li, afterEl);
     }
-  });
+  }
 
   async function endDrag(e) {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== pointerId) return;
     dragging = false;
+    pointerId = null;
     li.classList.remove('opacity-50');
-    try {
-      handle.releasePointerCapture(e.pointerId);
-    } catch {
-      // no-op — capture may already have been released (e.g. pointercancel)
-    }
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', endDrag);
+    document.removeEventListener('pointercancel', endDrag);
     const order = Array.from(ul.children).map((el) => Number(el.dataset.id));
     await put('/api/todos_reorder', { order });
     await loadList();
   }
-  handle.addEventListener('pointerup', endDrag);
-  handle.addEventListener('pointercancel', endDrag);
 }
 
 // Finds the row a dragged item should be inserted before, based on the
