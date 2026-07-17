@@ -53,6 +53,9 @@ func main() {
 	r.Delete("/api/reminders/{id}", handlers.RemindersDeleteDELETE(database.Read, database.Write, appCache))
 	r.Post("/api/reminders/{id}/toggle", handlers.RemindersTogglePOST(database.Read, database.Write, appCache))
 
+	r.Post("/api/push_subscribe", handlers.PushSubscribePOST(database.Read, database.Write, appCache))
+	r.Get("/api/push_public_key", handlers.PushPublicKeyGET())
+
 	r.Get("/api/bookmarks", handlers.BookmarksGET(database.Read, database.Write, appCache))
 	r.Post("/api/bookmark_categories_create", handlers.BookmarkCategoriesCreatePOST(database.Read, database.Write, appCache))
 	r.Put("/api/bookmark_categories/{id}", handlers.BookmarkCategoriesUpdatePUT(database.Read, database.Write, appCache))
