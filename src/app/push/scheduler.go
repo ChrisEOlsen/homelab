@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -15,6 +16,25 @@ import (
 // httpClient is used for all push sends so a hung connection to the push
 // relay can't block the rest of a tick's sends indefinitely.
 var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+// maxTransientRetries bounds how many consecutive ticks a reminder may be
+// retried after a transient send failure before the scheduler gives up on
+// it. At the 1-minute tick interval this is a 5-minute retry window — long
+// enough for a real network blip to resolve, short enough that a reminder
+// with a persistently-broken subscription (e.g. corrupted stored keys that
+// fail at the Go level on every attempt) doesn't retry forever and re-spam
+// every other subscription on the same reminder indefinitely.
+const maxTransientRetries = 5
+
+// transientFailureCounts tracks consecutive transient-failure attempts per
+// reminder ID, in-process. It's read/written only from the single scheduler
+// ticker goroutine, but guarded by a mutex for safety/clarity. State is lost
+// on restart, which is fine: a restart effectively resets the retry window,
+// consistent with this app's existing in-process cache convention.
+var (
+	transientFailureMu     sync.Mutex
+	transientFailureCounts = make(map[int64]int)
+)
 
 type payload struct {
 	Title string `json:"title"`
@@ -107,9 +127,28 @@ func checkAndSend(readDB, writeDB *sql.DB, appCache *cache.Cache, vapidPublicKey
 		// zero subscriptions, or every subscription outcome was a success or a
 		// permanent failure (404/410 already deleted above, or other 4xx). If any
 		// subscription failed transiently (network error or 5xx), leave
-		// notified_at NULL so the next tick retries this reminder.
+		// notified_at NULL so the next tick retries this reminder — unless it has
+		// now hit the retry cap, in which case we give up rather than risk
+		// retrying forever and re-sending to already-succeeded subscriptions on
+		// every future tick.
 		if hadTransientFailure {
-			continue
+			transientFailureMu.Lock()
+			transientFailureCounts[reminder.ID]++
+			attempts := transientFailureCounts[reminder.ID]
+			giveUp := attempts >= maxTransientRetries
+			if giveUp {
+				delete(transientFailureCounts, reminder.ID)
+			}
+			transientFailureMu.Unlock()
+
+			if !giveUp {
+				continue
+			}
+			log.Printf("push: giving up on reminder %d after %d consecutive transient failures", reminder.ID, attempts)
+		} else {
+			transientFailureMu.Lock()
+			delete(transientFailureCounts, reminder.ID)
+			transientFailureMu.Unlock()
 		}
 		if err := reminderModel.MarkNotified(reminder.ID); err != nil {
 			log.Printf("push: failed to mark reminder %d notified: %v", reminder.ID, err)
