@@ -147,10 +147,12 @@ VAPID_SUBSCRIBER=mailto:admin@localhost
 TZ=America/New_York
 ```
 
-- [ ] **Step 3: Restart the container and verify the env vars are visible inside it**
+- [ ] **Step 3: Recreate the container and verify the env vars are visible inside it**
+
+`docker compose restart` reuses the existing container's already-baked environment and does **not** re-read `.env` — only `docker compose up -d` (which recreates the container from the current compose config) picks up new or changed env vars. This distinction matters only for `.env` changes; later tasks that change only source code can use plain `restart`, since bind-mounted code is picked up either way and the environment doesn't need to change again.
 
 ```bash
-cd /Users/crispychris/Desktop/repos/homelab && docker compose restart app
+cd /Users/crispychris/Desktop/repos/homelab && docker compose up -d app
 docker compose exec app sh -c 'echo $VAPID_PUBLIC_KEY | cut -c1-10; echo $TZ; date'
 ```
 
