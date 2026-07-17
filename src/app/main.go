@@ -54,6 +54,9 @@ func main() {
 
 	// Static files
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+	r.Get("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./static/sw.js")
+	})
 
 	// Pages
 	r.Get("/", handlers.HomeGET())
