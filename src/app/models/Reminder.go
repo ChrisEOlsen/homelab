@@ -111,56 +111,10 @@ func (m *ReminderModel) GetUpcoming(limit int) ([]Reminder, error) {
 }
 
 func (m *ReminderModel) Update(id int64, title, remindAt, recurrenceType, recurrenceDays string, isActive bool) error {
-	// notified_at is reset on every edit: an edited reminder (new time, new
-	// title, re-activated, etc.) should always be eligible for a fresh
-	// notification going forward, matching user intent for "I changed this."
 	_, err := m.writeDB.Exec(
-		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ?, notified_at = NULL WHERE id = ?",
+		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ? WHERE id = ?",
 		title, remindAt, recurrenceType, recurrenceDays, isActive, id,
 	)
-	if err == nil {
-		m.cache.Bust("reminders:")
-	}
-	return err
-}
-
-// GetDueUnnotified returns active reminders whose remind_at has passed and
-// that haven't been pushed yet. One-shot only — matches the fact that
-// recurrence_type/recurrence_days are stored but never auto-advance
-// remind_at anywhere else in this app either.
-//
-// remind_at is stored as a naive "YYYY-MM-DDTHH:MM" string with no timezone
-// (straight from the browser's <input type="datetime-local">). Comparison
-// is done in Go using time.Local (set via the TZ env var — see .env) rather
-// than in SQL, since a raw string comparison against a Go-formatted "now"
-// is fragile whenever seconds are present on one side and not the other.
-func (m *ReminderModel) GetDueUnnotified() ([]Reminder, error) {
-	rows, err := m.readDB.Query(
-		"SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders WHERE is_active = 1 AND notified_at IS NULL",
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Reminder
-	for rows.Next() {
-		var item Reminder
-		var recurrenceDays sql.NullString
-		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
-			return nil, err
-		}
-		item.RecurrenceDays = recurrenceDays.String
-		due, err := time.ParseInLocation("2006-01-02T15:04", item.RemindAt, time.Local)
-		if err != nil || due.After(time.Now()) {
-			continue
-		}
-		items = append(items, item)
-	}
-	return items, nil
-}
-
-func (m *ReminderModel) MarkNotified(id int64) error {
-	_, err := m.writeDB.Exec("UPDATE reminders SET notified_at = CURRENT_TIMESTAMP WHERE id = ?", id)
 	if err == nil {
 		m.cache.Bust("reminders:")
 	}

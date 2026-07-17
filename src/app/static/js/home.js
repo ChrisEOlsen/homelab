@@ -1,5 +1,4 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
-import { registerServiceWorker, enablePushNotifications } from '/static/js/lib/push.js';
 
 const focusListEl = document.getElementById('focus-list');
 const remindersListEl = document.getElementById('reminders-list');
@@ -358,26 +357,6 @@ function setupShortcutForm() {
 
 setupFocusForm();
 setupShortcutForm();
-
-// ---- Push notifications ----
-registerServiceWorker();
-
-const enablePushBtn = document.getElementById('enable-push-btn');
-const pushStatusEl = document.getElementById('push-status');
-
-enablePushBtn.addEventListener('click', async () => {
-  enablePushBtn.disabled = true;
-  pushStatusEl.classList.add('hidden');
-  let res;
-  try {
-    res = await enablePushNotifications();
-  } catch (err) {
-    res = { ok: false, error: 'Something went wrong.' };
-  }
-  enablePushBtn.disabled = false;
-  pushStatusEl.classList.remove('hidden');
-  pushStatusEl.textContent = res.ok ? 'Notifications enabled.' : (res.error ?? 'Something went wrong.');
-});
 
 async function init() {
   await loadDashboard();

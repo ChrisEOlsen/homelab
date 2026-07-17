@@ -1,6 +1,4 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
-import { registerServiceWorker } from '/static/js/lib/push.js';
-registerServiceWorker();
 import { createModal } from '/static/js/lib/modal.js';
 
 // ---- Clock (nav signature element) ----

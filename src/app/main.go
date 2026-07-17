@@ -12,7 +12,6 @@ import (
 	"gova/app/db"
 	"gova/app/handlers"
 	"gova/app/middleware"
-	"gova/app/push"
 )
 
 func main() {
@@ -33,16 +32,7 @@ func main() {
 	defer database.Close()
 
 	appCache := cache.New()
-
-	if vapidPublicKey, vapidPrivateKey := os.Getenv("VAPID_PUBLIC_KEY"), os.Getenv("VAPID_PRIVATE_KEY"); vapidPublicKey == "" || vapidPrivateKey == "" {
-		log.Println("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — push notifications disabled")
-	} else {
-		subscriber := os.Getenv("VAPID_SUBSCRIBER")
-		if subscriber == "" {
-			subscriber = "mailto:admin@localhost"
-		}
-		push.Start(database.Read, database.Write, appCache, vapidPublicKey, vapidPrivateKey, subscriber)
-	}
+	_ = appCache
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
@@ -53,9 +43,6 @@ func main() {
 
 	// Static files
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
-	r.Get("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./static/sw.js")
-	})
 
 	// Pages
 	r.Get("/", handlers.HomeGET())
@@ -65,9 +52,6 @@ func main() {
 	r.Put("/api/reminders/{id}", handlers.RemindersUpdatePUT(database.Read, database.Write, appCache))
 	r.Delete("/api/reminders/{id}", handlers.RemindersDeleteDELETE(database.Read, database.Write, appCache))
 	r.Post("/api/reminders/{id}/toggle", handlers.RemindersTogglePOST(database.Read, database.Write, appCache))
-
-	r.Post("/api/push_subscribe", handlers.PushSubscribePOST(database.Read, database.Write, appCache))
-	r.Get("/api/push_public_key", handlers.PushPublicKeyGET())
 
 	r.Get("/api/bookmarks", handlers.BookmarksGET(database.Read, database.Write, appCache))
 	r.Post("/api/bookmark_categories_create", handlers.BookmarkCategoriesCreatePOST(database.Read, database.Write, appCache))
