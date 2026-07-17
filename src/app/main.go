@@ -12,6 +12,7 @@ import (
 	"gova/app/db"
 	"gova/app/handlers"
 	"gova/app/middleware"
+	"gova/app/push"
 )
 
 func main() {
@@ -33,6 +34,16 @@ func main() {
 
 	appCache := cache.New()
 	_ = appCache
+
+	if vapidPublicKey, vapidPrivateKey := os.Getenv("VAPID_PUBLIC_KEY"), os.Getenv("VAPID_PRIVATE_KEY"); vapidPublicKey == "" || vapidPrivateKey == "" {
+		log.Println("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — push notifications disabled")
+	} else {
+		subscriber := os.Getenv("VAPID_SUBSCRIBER")
+		if subscriber == "" {
+			subscriber = "mailto:admin@localhost"
+		}
+		push.Start(database.Read, database.Write, appCache, vapidPublicKey, vapidPrivateKey, subscriber)
+	}
 
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.Logger)
