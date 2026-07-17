@@ -600,8 +600,14 @@ threading.Thread(target=server.serve_forever, daemon=True).start()
 sub = {
     "endpoint": "http://host.docker.internal:9999/mock-endpoint",
     "keys": {
-        "p256dh": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd7VJ7VJt2QqjTrf7MBc",
-        "auth": "kMoESLdoQ9r4YAJXqmO2gA"
+        # A real P-256 keypair's public point + random 16-byte auth secret —
+        # NOT a real browser subscription, but a syntactically and
+        # cryptographically valid one, so webpush-go's ECDH step actually
+        # succeeds and the HTTP POST really reaches the mock server below
+        # (fabricated/random-looking bytes fail ECDH before any network call
+        # is attempted, since they don't lie on the curve).
+        "p256dh": "BKTsnmwps8Vzysl4poBzolwJRTlITJkvRNMzAdn_0obmjczVgqZDhUmhI1jjQwoUZc2-R_WnCwM5N9OVm_dQQUQ",
+        "auth": "byNvFb5Qmfy4s0AJ--WrgA"
     }
 }
 req = urllib.request.Request(
@@ -626,7 +632,7 @@ print("mock server received requests:", received)
 EOF
 ```
 
-Expected: `notified_at before` is `(None,)`; `notified_at after` is a non-null timestamp; `received` contains one path matching `/mock-endpoint`. If `webpush.SendNotification`'s VAPID/encryption call fails against this fake mock server (e.g. because the mock keys aren't real EC points), that's fine as long as the logs show a `push: send failed for reminder ... ` error rather than a panic, and `notified_at` still got set. Note: the p256dh/auth key values above are throwaway example EC-point-shaped strings for exercising the code path, not real subscription keys — the real correctness check (does encryption actually work) happens against a real browser subscription in Task 11.
+Expected: `notified_at before` is `(None,)`; `notified_at after` is a non-null timestamp; `received` contains one path matching `/mock-endpoint` (proving `SendNotification` completed real VAPID signing + RFC 8291 encryption against a genuine P-256 point and the resulting HTTP request actually reached the subscription's endpoint). The mock server doesn't implement the real Web Push relay protocol, so it can't validate the encrypted payload's contents — this step proves the send path executes correctly end-to-end at the transport level, not that Apple's relay will accept the payload. Real end-to-end delivery is confirmed against a genuine browser subscription in Task 11.
 
 - [ ] **Step 5: Clean up test data**
 
