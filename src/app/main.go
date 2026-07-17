@@ -33,7 +33,6 @@ func main() {
 	defer database.Close()
 
 	appCache := cache.New()
-	_ = appCache
 
 	if vapidPublicKey, vapidPrivateKey := os.Getenv("VAPID_PUBLIC_KEY"), os.Getenv("VAPID_PRIVATE_KEY"); vapidPublicKey == "" || vapidPrivateKey == "" {
 		log.Println("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — push notifications disabled")

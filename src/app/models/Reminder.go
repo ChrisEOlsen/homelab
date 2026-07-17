@@ -111,8 +111,11 @@ func (m *ReminderModel) GetUpcoming(limit int) ([]Reminder, error) {
 }
 
 func (m *ReminderModel) Update(id int64, title, remindAt, recurrenceType, recurrenceDays string, isActive bool) error {
+	// notified_at is reset on every edit: an edited reminder (new time, new
+	// title, re-activated, etc.) should always be eligible for a fresh
+	// notification going forward, matching user intent for "I changed this."
 	_, err := m.writeDB.Exec(
-		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ? WHERE id = ?",
+		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ?, notified_at = NULL WHERE id = ?",
 		title, remindAt, recurrenceType, recurrenceDays, isActive, id,
 	)
 	if err == nil {
