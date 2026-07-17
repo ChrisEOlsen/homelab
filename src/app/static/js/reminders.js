@@ -1,4 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { registerServiceWorker } from '/static/js/lib/push.js';
+registerServiceWorker();
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
