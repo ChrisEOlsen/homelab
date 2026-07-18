@@ -43,6 +43,19 @@
   --color-danger: #b0463c;
 }
 
+:root[data-theme="dark"] {
+  --color-canvas: #1c1a16;
+  --color-surface: #262319;
+  --color-surface-raised: #322d21;
+  --color-hairline: #3d382a;
+  --color-ink: #f0ece2;
+  --color-ink-dim: #a89d87;
+  --color-accent: #c98a54;
+  --color-accent-dim: #a8632b;
+  --color-ok: #6fa87f;
+  --color-danger: #d16b60;
+}
+
 @layer base {
   body {
     background-color: var(--color-canvas);
