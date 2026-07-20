@@ -131,6 +131,13 @@ function renderFocuses(items) {
 }
 
 // ---- Upcoming reminders (read-only) ----
+// Mirrors the reminders page: a past-due reminder stays in the list but is
+// styled red.
+function isOverdue(item) {
+  const d = new Date(item.remind_at);
+  return !isNaN(d.getTime()) && d.getTime() < Date.now();
+}
+
 function renderReminders(items) {
   if (items.length === 0) {
     renderEmpty(remindersListEl, 'Nothing upcoming — add a reminder to see it here.');
@@ -139,26 +146,32 @@ function renderReminders(items) {
   const ul = document.createElement('ul');
   ul.className = 'space-y-2';
   items.forEach((item) => {
+    const overdue = isOverdue(item);
+
     const li = document.createElement('li');
-    li.className = 'flex items-center justify-between gap-3 border border-hairline bg-surface-raised px-3 py-2';
+    li.className =
+      'flex items-center justify-between gap-3 border bg-surface-raised px-3 py-2' +
+      (overdue ? ' border-danger' : ' border-hairline');
 
     const left = document.createElement('div');
     left.className = 'flex flex-1 items-center gap-2 min-w-0';
 
     const dot = document.createElement('span');
-    dot.className = 'h-1.5 w-1.5 rounded-full bg-ok shrink-0';
+    dot.className =
+      'h-1.5 w-1.5 rounded-full shrink-0' + (overdue ? ' bg-danger' : ' bg-ok');
     dot.setAttribute('aria-hidden', 'true');
     left.appendChild(dot);
 
     const title = document.createElement('span');
-    title.className = 'text-sm text-ink truncate min-w-0';
+    title.className = 'text-sm truncate min-w-0' + (overdue ? ' text-danger' : ' text-ink');
     title.textContent = item.title;
     left.appendChild(title);
 
     li.appendChild(left);
 
     const time = document.createElement('span');
-    time.className = 'text-xs text-ink-dim shrink-0 tabular-nums';
+    time.className =
+      'text-xs shrink-0 tabular-nums' + (overdue ? ' text-danger' : ' text-ink-dim');
     time.textContent = formatRemindAt(item.remind_at);
     li.appendChild(time);
 
