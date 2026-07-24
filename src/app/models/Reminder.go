@@ -3,19 +3,28 @@ package models
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
+
 	"gova/app/cache"
 )
 
 type Reminder struct {
-	ID        int64     `json:"id"`
-	Title string `json:"title"`
-	RemindAt string `json:"remind_at"`
-	RecurrenceType string `json:"recurrence_type"`
-	RecurrenceDays string `json:"recurrence_days"`
-	IsActive bool `json:"is_active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             int64   `json:"id"`
+	Title          string  `json:"title"`
+	RemindAt       string  `json:"remind_at"`
+	RecurrenceType string  `json:"recurrence_type"`
+	RecurrenceDays *string `json:"recurrence_days"`
+	IsActive       bool    `json:"is_active"`
+	CreatedAt      Time    `json:"created_at"`
 }
+
+type ReminderPage struct {
+	Items []Reminder `json:"items"`
+	Total int        `json:"total"`
+}
+
+var ReminderAllowedColumns = []string{"id", "title", "remind_at", "recurrence_type", "recurrence_days", "is_active", "created_at"}
 
 type ReminderModel struct {
 	readDB  *sql.DB
@@ -27,57 +36,110 @@ func NewReminderModel(readDB, writeDB *sql.DB, c *cache.Cache) *ReminderModel {
 	return &ReminderModel{readDB: readDB, writeDB: writeDB, cache: c}
 }
 
-func (m *ReminderModel) GetAll() ([]Reminder, error) {
-	const cacheKey = "reminders:all"
+func (m *ReminderModel) GetPage(limit, offset int, opts QueryOpts) ([]Reminder, int, error) {
+	orderBy := "ORDER BY remind_at ASC"
+	if opts.Sort != "" {
+		ob, err := orderByClause(opts.Sort, ReminderAllowedColumns)
+		if err != nil {
+			return nil, 0, err
+		}
+		orderBy = ob
+	}
+	where := ""
+	args := []any{}
+	if opts.FilterField != "" {
+		col, err := filterField(opts.FilterField, ReminderAllowedColumns)
+		if err != nil {
+			return nil, 0, err
+		}
+		where = " WHERE " + col + " = ?"
+		args = append(args, opts.FilterValue)
+	}
+
+	cacheKey := fmt.Sprintf("reminders:page:%d:%d:%s:%s:%s", limit, offset, opts.Sort, opts.FilterField, opts.FilterValue)
 	if hit, ok := m.cache.Get(cacheKey); ok {
-		var items []Reminder
-		if err := json.Unmarshal(hit, &items); err == nil {
-			return items, nil
+		var page ReminderPage
+		if err := json.Unmarshal(hit, &page); err == nil {
+			return page.Items, page.Total, nil
 		}
 	}
-	rows, err := m.readDB.Query("SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders ORDER BY remind_at ASC")
+
+	var total int
+	if err := m.readDB.QueryRow("SELECT COUNT(*) FROM reminders"+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders" + where + " " + orderBy + " LIMIT ? OFFSET ?"
+	rows, err := m.readDB.Query(query, append(args, limit, offset)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-	var items []Reminder
+
+	items := []Reminder{}
 	for rows.Next() {
 		var item Reminder
-		var recurrenceDays sql.NullString
-		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
-			return nil, err
+		var recurrenceDaysNull sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDaysNull, &item.IsActive, &item.CreatedAt); err != nil {
+			return nil, 0, err
 		}
-		item.RecurrenceDays = recurrenceDays.String
+		if recurrenceDaysNull.Valid {
+			item.RecurrenceDays = &recurrenceDaysNull.String
+		}
 		items = append(items, item)
 	}
-	if data, err := json.Marshal(items); err == nil {
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	if data, err := json.Marshal(ReminderPage{Items: items, Total: total}); err == nil {
 		m.cache.Set(cacheKey, data, 5*time.Minute)
 	}
-	return items, nil
+	return items, total, nil
 }
 
 func (m *ReminderModel) Find(id int64) (*Reminder, error) {
 	row := m.readDB.QueryRow("SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders WHERE id = ?", id)
 	var item Reminder
-	var recurrenceDays sql.NullString
-	err := row.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt)
-	if err != nil {
+	var recurrenceDaysNull sql.NullString
+	if err := row.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDaysNull, &item.IsActive, &item.CreatedAt); err != nil {
 		return nil, err
 	}
-	item.RecurrenceDays = recurrenceDays.String
+	if recurrenceDaysNull.Valid {
+		item.RecurrenceDays = &recurrenceDaysNull.String
+	}
 	return &item, nil
 }
 
-func (m *ReminderModel) Create(title string, remind_at string, recurrence_type string, recurrence_days string, is_active bool) (int64, error) {
+func (m *ReminderModel) Create(title, remindAt, recurrenceType string, recurrenceDays *string, isActive bool) (int64, error) {
 	res, err := m.writeDB.Exec(
 		"INSERT INTO reminders (title, remind_at, recurrence_type, recurrence_days, is_active) VALUES (?, ?, ?, ?, ?)",
-		title, remind_at, recurrence_type, recurrence_days, is_active,
+		title, remindAt, recurrenceType, recurrenceDays, isActive,
 	)
 	if err != nil {
 		return 0, err
 	}
 	m.cache.Bust("reminders:")
 	return res.LastInsertId()
+}
+
+func (m *ReminderModel) Update(id int64, title, remindAt, recurrenceType string, recurrenceDays *string, isActive bool) error {
+	res, err := m.writeDB.Exec(
+		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ? WHERE id = ?",
+		title, remindAt, recurrenceType, recurrenceDays, isActive, id,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	m.cache.Bust("reminders:")
+	return nil
 }
 
 func (m *ReminderModel) Delete(id int64) error {
@@ -88,35 +150,18 @@ func (m *ReminderModel) Delete(id int64) error {
 	return err
 }
 
-func (m *ReminderModel) GetUpcoming(limit int) ([]Reminder, error) {
-	rows, err := m.readDB.Query(
-		"SELECT id, title, remind_at, recurrence_type, recurrence_days, is_active, created_at FROM reminders WHERE is_active = 1 ORDER BY remind_at ASC LIMIT ?",
-		limit,
-	)
+func (m *ReminderModel) Toggle(id int64) error {
+	res, err := m.writeDB.Exec("UPDATE reminders SET is_active = NOT is_active WHERE id = ?", id)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer rows.Close()
-	var items []Reminder
-	for rows.Next() {
-		var item Reminder
-		var recurrenceDays sql.NullString
-		if err := rows.Scan(&item.ID, &item.Title, &item.RemindAt, &item.RecurrenceType, &recurrenceDays, &item.IsActive, &item.CreatedAt); err != nil {
-			return nil, err
-		}
-		item.RecurrenceDays = recurrenceDays.String
-		items = append(items, item)
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
 	}
-	return items, nil
-}
-
-func (m *ReminderModel) Update(id int64, title, remindAt, recurrenceType, recurrenceDays string, isActive bool) error {
-	_, err := m.writeDB.Exec(
-		"UPDATE reminders SET title = ?, remind_at = ?, recurrence_type = ?, recurrence_days = ?, is_active = ? WHERE id = ?",
-		title, remindAt, recurrenceType, recurrenceDays, isActive, id,
-	)
-	if err == nil {
-		m.cache.Bust("reminders:")
+	if n == 0 {
+		return sql.ErrNoRows
 	}
-	return err
+	m.cache.Bust("reminders:")
+	return nil
 }

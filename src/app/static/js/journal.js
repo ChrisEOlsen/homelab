@@ -98,7 +98,7 @@ let selectedId = null;
 let jTitleInput, jMoodSelect, jDateInput, jContentInput, jErrEl, jSaveBtn, jDeleteBtn, jNewBtn;
 
 async function loadList() {
-  const res = await get('/api/journal');
+  const res = await get('/api/v1/journal_entries?limit=200');
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
@@ -163,7 +163,7 @@ function renderSidebar() {
   jNewBtn.textContent = 'New Entry';
   jNewBtn.addEventListener('click', async () => {
     jNewBtn.disabled = true;
-    const res = await post('/api/journal_entries_create', {});
+    const res = await post('/api/v1/journal_entries', {});
     jNewBtn.disabled = false;
     if (res.ok && res.data && typeof res.data.id !== 'undefined') {
       selectedId = res.data.id;
@@ -312,7 +312,7 @@ function renderDetail() {
       mood: jMoodSelect.value,
       entry_date: jDateInput.value,
     };
-    const res = await put('/api/journal_entries/' + entry.id, data);
+    const res = await put('/api/v1/journal_entries/' + entry.id, data);
     jSaveBtn.disabled = false;
     if (res.ok) {
       await loadList();
@@ -330,7 +330,7 @@ function renderDetail() {
   jDeleteBtn.addEventListener('click', async () => {
     jDeleteBtn.disabled = true;
     jErrEl.classList.add('hidden');
-    const res = await del('/api/journal_entries/' + entry.id);
+    const res = await del('/api/v1/journal_entries/' + entry.id);
     if (res.ok) {
       if (selectedId === entry.id) selectedId = null;
       await loadList();

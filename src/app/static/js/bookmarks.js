@@ -211,8 +211,8 @@ function buildCategoryModal() {
     const title = catTitleInput.value;
 
     const res = editingCategoryId
-      ? await put('/api/bookmark_categories/' + editingCategoryId, { title })
-      : await post('/api/bookmark_categories_create', { title });
+      ? await put('/api/v1/bookmark_categories/' + editingCategoryId, { title })
+      : await post('/api/v1/bookmark_categories', { title });
 
     catSubmitBtn.disabled = false;
     if (res.ok) {
@@ -348,7 +348,7 @@ function buildBookmarkModal() {
       description: bmDescriptionInput.value,
     };
 
-    const res = editingId ? await put('/api/bookmarks/' + editingId, data) : await post('/api/bookmarks_create', data);
+    const res = editingId ? await put('/api/v1/bookmarks/' + editingId, data) : await post('/api/v1/bookmarks', data);
 
     bmSubmitBtn.disabled = false;
     if (res.ok) {
@@ -403,17 +403,22 @@ function openBookmarkModalForEdit(item) {
 }
 
 async function loadList() {
-  const res = await get('/api/bookmarks');
-  if (!res.ok) {
+  // Two resource reads replace the former /api/bookmarks aggregate — the API is
+  // now a flat REST surface, so the page joins categories and bookmarks itself.
+  const [catRes, bmRes] = await Promise.all([
+    get('/api/v1/bookmark_categories?limit=200'),
+    get('/api/v1/bookmarks?limit=200'),
+  ]);
+  if (!catRes.ok || !bmRes.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
     p.className = 'text-sm text-danger';
-    p.textContent = res.error ?? 'Failed to load.';
+    p.textContent = catRes.error ?? bmRes.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
   }
-  categories = res.data?.categories ?? [];
-  bookmarks = res.data?.bookmarks ?? [];
+  categories = catRes.data ?? [];
+  bookmarks = bmRes.data ?? [];
   if (selectedCategoryId !== 'all' && !categories.some((c) => c.id === selectedCategoryId)) {
     selectedCategoryId = 'all';
   }
@@ -488,7 +493,7 @@ function renderSidebar() {
             onClick: async () => {
               if (!window.confirm('Delete this category and all its bookmarks?')) return;
               deleteErrEl.classList.add('hidden');
-              const res = await del('/api/bookmark_categories/' + cat.id);
+              const res = await del('/api/v1/bookmark_categories/' + cat.id);
               if (res.ok) {
                 if (selectedCategoryId === cat.id) selectedCategoryId = 'all';
                 await loadList();
@@ -599,7 +604,7 @@ function renderBookmarkRow(item) {
         danger: true,
         onClick: async () => {
           deleteErrEl.classList.add('hidden');
-          const res = await del('/api/bookmarks/' + item.id);
+          const res = await del('/api/v1/bookmarks/' + item.id);
           if (res.ok) {
             await loadList();
           } else {

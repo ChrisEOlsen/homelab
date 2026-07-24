@@ -288,8 +288,8 @@ function buildCategoryModal() {
       .map((entry) => ({ name: entry.nameInput.value.trim(), type: entry.typeSelect.value }));
 
     const res = editingCategoryId
-      ? await put('/api/log_categories/' + editingCategoryId, { title: catTitleInput.value, fields })
-      : await post('/api/log_categories_create', { title: catTitleInput.value, fields });
+      ? await put('/api/v1/log_categories/' + editingCategoryId, { title: catTitleInput.value, fields })
+      : await post('/api/v1/log_categories', { title: catTitleInput.value, fields });
 
     catSubmitBtn.disabled = false;
     if (res.ok) {
@@ -332,7 +332,7 @@ function openCategoryModalForEdit(cat) {
 }
 
 async function loadCategories() {
-  const res = await get('/api/logger');
+  const res = await get('/api/v1/log_categories?limit=200');
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
@@ -354,7 +354,7 @@ async function loadEntries() {
     render();
     return;
   }
-  const res = await get('/api/log_categories/' + selectedCategoryId + '/entries');
+  const res = await get('/api/v1/log_entries?filter=category_id:' + selectedCategoryId + '&limit=200');
   entries = res.ok ? (res.data ?? []) : [];
   render();
 }
@@ -421,7 +421,7 @@ function renderSidebar() {
               onClick: async () => {
                 if (!window.confirm('Delete this category and all its entries?')) return;
                 deleteErrEl.classList.add('hidden');
-                const res = await del('/api/log_categories/' + cat.id);
+                const res = await del('/api/v1/log_categories/' + cat.id);
                 if (res.ok) {
                   if (selectedCategoryId === cat.id) selectedCategoryId = null;
                   await loadCategories();
@@ -550,7 +550,7 @@ function renderEntryTable(schema) {
     deleteBtn.addEventListener('click', async () => {
       deleteBtn.disabled = true;
       deleteErrEl.classList.add('hidden');
-      const res = await del('/api/log_entries/' + entry.id);
+      const res = await del('/api/v1/log_entries/' + entry.id);
       if (res.ok) {
         await loadEntries();
       } else {
@@ -623,7 +623,7 @@ function renderEntryForm(category, schema) {
       data[field.name] = fieldInputs[field.name].value;
     });
 
-    const res = await post('/api/log_entries_create', {
+    const res = await post('/api/v1/log_entries', {
       category_id: category.id,
       data,
     });

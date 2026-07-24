@@ -195,7 +195,7 @@ function makeRowDraggable(li, handle, ul) {
     document.removeEventListener('pointerup', endDrag);
     document.removeEventListener('pointercancel', endDrag);
     const order = Array.from(ul.children).map((el) => Number(el.dataset.id));
-    await put('/api/todos_reorder', { order });
+    await put('/api/v1/todos/reorder', { order });
     await loadList();
   }
 }
@@ -248,7 +248,7 @@ let todoFormTitleEl, todoListSelect, todoTitleInput, todoSubmitBtn, todoCancelBt
 // the same form/select elements so populate/reset functions above keep working).
 let todoModalBackdrop, todoModalPanel, todoModalTriggerEl;
 
-// Inline subtasks state. The bulk /api/todos response now includes every
+// Inline subtasks state. The bulk /api/v1/todos response now includes every
 // subtask up front (grouped here by todo_id), so every todo's subtasks are
 // already in memory on page load — needed so mobile can show them all by
 // default with no per-item fetch. `expandedTodoIds` still tracks the
@@ -259,20 +259,27 @@ let expandedTodoIds = new Set();
 let subtasksByTodoId = new Map();
 
 async function loadList() {
-  const res = await get('/api/todos');
-  if (!res.ok) {
+  // Replaces the former /api/todos aggregate: three flat resource reads, joined
+  // on the client. Subtasks come back as one flat list and are grouped by
+  // todo_id here.
+  const [listsRes, todosRes, subtasksRes] = await Promise.all([
+    get('/api/v1/todo_lists?limit=200'),
+    get('/api/v1/todos?limit=200'),
+    get('/api/v1/subtasks?limit=200'),
+  ]);
+  if (!listsRes.ok || !todosRes.ok || !subtasksRes.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
     p.className = 'text-sm text-danger';
-    p.textContent = res.error ?? 'Failed to load.';
+    p.textContent = listsRes.error ?? todosRes.error ?? subtasksRes.error ?? 'Failed to load.';
     app.appendChild(p);
     return;
   }
-  lists = res.data?.lists ?? [];
-  todos = res.data?.todos ?? [];
+  lists = listsRes.data ?? [];
+  todos = todosRes.data ?? [];
 
   subtasksByTodoId = new Map();
-  (res.data?.subtasks ?? []).forEach((sub) => {
+  (subtasksRes.data ?? []).forEach((sub) => {
     if (!subtasksByTodoId.has(sub.todo_id)) subtasksByTodoId.set(sub.todo_id, []);
     subtasksByTodoId.get(sub.todo_id).push(sub);
   });
@@ -348,7 +355,7 @@ function renderSidebar() {
             onClick: async () => {
               if (!window.confirm('Delete this list and all its todos?')) return;
               deleteErrEl.classList.add('hidden');
-              const res = await del('/api/todo_lists/' + list.id);
+              const res = await del('/api/v1/todo_lists/' + list.id);
               if (res.ok) {
                 if (editingListId === list.id) resetListFormToCreateMode();
                 if (activeListId === list.id) activeListId = null;
@@ -415,7 +422,7 @@ function renderMain() {
   clearBtn.addEventListener('click', async () => {
     if (!window.confirm('Delete all completed todos in this list?')) return;
     clearBtn.disabled = true;
-    await post('/api/todo_lists/' + activeListId + '/clear_completed');
+    await post('/api/v1/todo_lists/' + activeListId + '/clear_completed');
     await loadList();
   });
   headerBtns.appendChild(clearBtn);
@@ -459,7 +466,7 @@ function renderMain() {
     checkbox.className = 'shrink-0';
     checkbox.addEventListener('change', async () => {
       checkbox.disabled = true;
-      await post('/api/todos/' + item.id + '/toggle');
+      await post('/api/v1/todos/' + item.id + '/toggle');
       await loadList();
     });
     topRow.appendChild(checkbox);
@@ -507,7 +514,7 @@ function renderMain() {
           const title = window.prompt('New subtask title:');
           if (!title || !title.trim()) return;
           deleteErrEl.classList.add('hidden');
-          const res = await post('/api/subtasks_create', { todo_id: item.id, title });
+          const res = await post('/api/v1/subtasks', { todo_id: item.id, title });
           if (res.ok) {
             // subWrap is already in the DOM (see below) — no full render()
             // needed, just refresh this one todo's scoped subtasks block.
@@ -527,7 +534,7 @@ function renderMain() {
         danger: true,
         onClick: async () => {
           deleteErrEl.classList.add('hidden');
-          const res = await del('/api/todos/' + item.id);
+          const res = await del('/api/v1/todos/' + item.id);
           if (res.ok) {
             if (editingTodoId === item.id) resetTodoFormToCreateMode();
             expandedTodoIds.delete(item.id);
@@ -578,8 +585,8 @@ function renderMain() {
 // render() — without this, adding/removing a subtask would leave the count
 // and the divider stale until the next full page load.
 async function loadSubtasks(todoId) {
-  const res = await get('/api/todos/' + todoId + '/details');
-  const subs = res.ok ? (res.data.subtasks ?? []) : [];
+  const res = await get('/api/v1/subtasks?filter=todo_id:' + todoId + '&limit=200');
+  const subs = res.ok ? (res.data ?? []) : [];
   subtasksByTodoId.set(todoId, subs);
   const todo = todos.find((t) => t.id === todoId);
   if (todo) todo.subtask_count = subs.length;
@@ -654,7 +661,7 @@ function openEditSubtaskModal(sub, todoId) {
       return;
     }
     saveBtn.disabled = true;
-    const res = await put('/api/subtasks/' + sub.id, { title: newTitle });
+    const res = await put('/api/v1/subtasks/' + sub.id, { title: newTitle });
     if (res.ok) {
       close();
       await loadSubtasks(todoId);
@@ -693,7 +700,7 @@ function renderInlineSubtasks(todoId) {
       checkbox.className = 'shrink-0';
       checkbox.addEventListener('change', async () => {
         checkbox.disabled = true;
-        await post('/api/subtasks/' + sub.id + '/toggle');
+        await post('/api/v1/subtasks/' + sub.id + '/toggle');
         await loadSubtasks(todoId);
       });
       li.appendChild(checkbox);
@@ -714,7 +721,7 @@ function renderInlineSubtasks(todoId) {
             danger: true,
             onClick: async () => {
               deleteErrEl.classList.add('hidden');
-              const res = await del('/api/subtasks/' + sub.id);
+              const res = await del('/api/v1/subtasks/' + sub.id);
               if (res.ok) {
                 await loadSubtasks(todoId);
               } else {
@@ -761,7 +768,7 @@ function renderInlineSubtasks(todoId) {
     e.preventDefault();
     if (!input.value.trim()) return;
     addBtn.disabled = true;
-    await post('/api/subtasks_create', { todo_id: todoId, title: input.value });
+    await post('/api/v1/subtasks', { todo_id: todoId, title: input.value });
     input.value = '';
     addBtn.disabled = false;
     await loadSubtasks(todoId);
@@ -901,8 +908,8 @@ function setupTodoListsCreateForm(container) {
     const data = { title: listTitleInput.value, sort_order: editingListSortOrder };
 
     const res = editingListId
-      ? await put('/api/todo_lists/' + editingListId, data)
-      : await post('/api/todo_lists_create', { title: data.title });
+      ? await put('/api/v1/todo_lists/' + editingListId, data)
+      : await post('/api/v1/todo_lists', { title: data.title });
 
     listSubmitBtn.disabled = false;
     if (res.ok) {
@@ -1040,13 +1047,13 @@ function setupTodosCreateForm() {
     const title = todoTitleInput.value;
 
     const res = editingTodoId
-      ? await put('/api/todos/' + editingTodoId, {
+      ? await put('/api/v1/todos/' + editingTodoId, {
           list_id: listId,
           title,
           is_done: editingTodoIsDone,
           sort_order: editingTodoSortOrder,
         })
-      : await post('/api/todos_create', { list_id: listId, title });
+      : await post('/api/v1/todos', { list_id: listId, title });
 
     todoSubmitBtn.disabled = false;
     if (res.ok) {

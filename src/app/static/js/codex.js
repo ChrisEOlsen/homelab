@@ -121,7 +121,7 @@ let expandedFolders = new Set();
 let expandedFileIds = new Set();
 
 async function loadList() {
-  const res = await get('/api/codex');
+  const res = await get('/api/v1/codex_entries?limit=200');
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
@@ -334,7 +334,7 @@ function renderFolderNode(node, searchActive) {
           const count = countFiles(node);
           if (!window.confirm(`Delete folder "${node.name}" and ${count} snippet(s) inside it?`)) return;
           clearErr();
-          const res = await post('/api/codex_folders_delete', { path: node.path });
+          const res = await post('/api/v1/codex_folders/delete', { path: node.path });
           if (res.ok) {
             expandedFolders.delete(node.path);
             await loadList();
@@ -408,7 +408,7 @@ function renderFileRow(entry) {
         onClick: async () => {
           if (!window.confirm(`Delete "${entry.title}"?`)) return;
           clearErr();
-          const res = await del('/api/codex_entries/' + entry.id);
+          const res = await del('/api/v1/codex_entries/' + entry.id);
           if (res.ok) {
             expandedFileIds.delete(entry.id);
             await loadList();
@@ -604,8 +604,8 @@ function buildFileModal() {
     };
 
     const res = editingFileId
-      ? await put('/api/codex_entries/' + editingFileId, data)
-      : await post('/api/codex_entries_create', data);
+      ? await put('/api/v1/codex_entries/' + editingFileId, data)
+      : await post('/api/v1/codex_entries', data);
 
     fileSubmitBtn.disabled = false;
     if (res.ok) {
@@ -722,7 +722,7 @@ function buildFolderModal() {
 
     folderSubmitBtn.disabled = true;
     folderModalErrEl.classList.add('hidden');
-    const res = await post('/api/codex_folders_rename', { old_path: renamingFolderNode.path, new_path: newPath });
+    const res = await post('/api/v1/codex_folders/rename', { old_path: renamingFolderNode.path, new_path: newPath });
     folderSubmitBtn.disabled = false;
     if (res.ok) {
       expandedFolders.delete(renamingFolderNode.path);

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -20,6 +22,12 @@ import (
 
 //go:embed templates/*
 var templateFS embed.FS
+
+// sqliteDSN matches src/app/db/db.go's Open() pragmas — WAL mode and a
+// busy timeout — so the builder's DDL connections (execute_sql,
+// scaffold_auth) behave consistently with the app container's live
+// connection instead of using SQLite's rollback-journal default.
+const sqliteDSN = "file:/data/app.db?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on&_synchronous=NORMAL"
 
 var (
 	tmplCache   = map[string]*template.Template{}
@@ -39,17 +47,15 @@ var funcMap = template.FuncMap{
 		}
 		return strings.Join(words, " ")
 	},
-	"goType": func(t string) string {
-		switch t {
-		case "int":
-			return "int64"
-		case "boolean":
-			return "bool"
-		case "float":
-			return "float64"
-		default:
-			return "string"
+	"goType": goTypeFor,
+	// goFieldType is goType plus nullability: a nullable column becomes a Go
+	// pointer, which marshals to JSON null and maps to a Swift optional.
+	"goFieldType": func(f Field) string {
+		base := goTypeFor(f.Type)
+		if f.Nullable {
+			return "*" + base
 		}
+		return base
 	},
 	"joinNames": func(fields []Field) string {
 		names := make([]string, len(fields))
@@ -58,12 +64,48 @@ var funcMap = template.FuncMap{
 		}
 		return strings.Join(names, ", ")
 	},
-	"scanFields": func(fields []Field, prefix string) string {
+	// scanDecls emits the temporaries a row scan needs for nullable columns.
+	"scanDecls": func(fields []Field, indent string) string {
+		lines := []string{}
+		for _, f := range fields {
+			if f.Nullable {
+				lines = append(lines, indent+"var "+f.Name+"Null "+nullTypeFor(f.Type))
+			}
+		}
+		if len(lines) == 0 {
+			return ""
+		}
+		return strings.Join(lines, "\n") + "\n"
+	},
+	// scanTargets emits the &-arguments for rows.Scan, routing nullable
+	// columns through their temporaries.
+	"scanTargets": func(fields []Field, prefix string) string {
 		refs := make([]string, len(fields))
 		for i, f := range fields {
-			refs[i] = prefix + toPascal(f.Name)
+			if f.Nullable {
+				refs[i] = "&" + f.Name + "Null"
+			} else {
+				refs[i] = prefix + toPascal(f.Name)
+			}
 		}
 		return strings.Join(refs, ", ")
+	},
+	// scanAssigns copies valid temporaries back onto the struct as pointers.
+	"scanAssigns": func(fields []Field, target, indent string) string {
+		lines := []string{}
+		for _, f := range fields {
+			if !f.Nullable {
+				continue
+			}
+			lines = append(lines,
+				indent+"if "+f.Name+"Null.Valid {",
+				indent+"\t"+target+toPascal(f.Name)+" = &"+f.Name+"Null."+nullFieldFor(f.Type),
+				indent+"}")
+		}
+		if len(lines) == 0 {
+			return ""
+		}
+		return strings.Join(lines, "\n") + "\n"
 	},
 	"placeholders": func(fields []Field) string {
 		p := make([]string, len(fields))
@@ -72,17 +114,20 @@ var funcMap = template.FuncMap{
 		}
 		return strings.Join(p, ", ")
 	},
+	// updateSet emits "field1 = ?, field2 = ?" for an UPDATE statement.
+	"updateSet": func(fields []Field) string {
+		parts := make([]string, len(fields))
+		for i, f := range fields {
+			parts[i] = f.Name + " = ?"
+		}
+		return strings.Join(parts, ", ")
+	},
 	"createParams": func(fields []Field) string {
 		params := make([]string, len(fields))
 		for i, f := range fields {
-			goT := "string"
-			switch f.Type {
-			case "int":
-				goT = "int64"
-			case "boolean":
-				goT = "bool"
-			case "float":
-				goT = "float64"
+			goT := goTypeFor(f.Type)
+			if f.Nullable {
+				goT = "*" + goT
 			}
 			params[i] = f.Name + " " + goT
 		}
@@ -99,6 +144,131 @@ var funcMap = template.FuncMap{
 		}
 		return strings.Join(args, ", ")
 	},
+	"sqlType": func(t string) string {
+		switch t {
+		case "int":
+			return "INTEGER"
+		case "boolean":
+			return "INTEGER"
+		case "float":
+			return "REAL"
+		default:
+			return "TEXT"
+		}
+	},
+	"testArgs": func(fields []Field) string {
+		vals := make([]string, len(fields))
+		for i, f := range fields {
+			if f.Nullable {
+				// Non-nil pointer so the round-trip actually exercises the
+				// nullable scan path rather than short-circuiting on NULL.
+				vals[i] = "&" + f.Name + "TestVal"
+				continue
+			}
+			vals[i] = testLiteralFor(f.Type)
+		}
+		return strings.Join(vals, ", ")
+	},
+	// testDecls declares the addressable locals testArgs points at.
+	"testDecls": func(fields []Field, indent string) string {
+		lines := []string{}
+		for _, f := range fields {
+			if f.Nullable {
+				lines = append(lines, indent+f.Name+"TestVal := "+testLiteralFor(f.Type))
+			}
+		}
+		if len(lines) == 0 {
+			return ""
+		}
+		return strings.Join(lines, "\n") + "\n"
+	},
+	// sqlNotNull emits the NOT NULL clause for generated fixture schemas so
+	// the test table's shape matches the model the test exercises.
+	"sqlNotNull": func(f Field) string {
+		if f.Nullable {
+			return ""
+		}
+		return " NOT NULL"
+	},
+	// structCallArgs emits "prefix.Field1, prefix.Field2" using PascalCase field
+	// names — for passing a decoded request struct's fields to Create/Update.
+	"structCallArgs": func(fields []Field, prefix string) string {
+		args := make([]string, len(fields))
+		for i, f := range fields {
+			args[i] = prefix + toPascal(f.Name)
+		}
+		return strings.Join(args, ", ")
+	},
+	// testJSON emits a JSON object literal with a test value per field, for
+	// building a create/update request body in generated tests.
+	"testJSON": func(fields []Field) string {
+		parts := make([]string, len(fields))
+		for i, f := range fields {
+			v := `"test"`
+			switch f.Type {
+			case "int":
+				v = "1"
+			case "boolean":
+				v = "true"
+			case "float":
+				v = "1.5"
+			}
+			parts[i] = `"` + f.Name + `": ` + v
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	},
+}
+
+func goTypeFor(t string) string {
+	switch t {
+	case "int":
+		return "int64"
+	case "boolean":
+		return "bool"
+	case "float":
+		return "float64"
+	default:
+		return "string"
+	}
+}
+
+func nullTypeFor(t string) string {
+	switch t {
+	case "int":
+		return "sql.NullInt64"
+	case "boolean":
+		return "sql.NullBool"
+	case "float":
+		return "sql.NullFloat64"
+	default:
+		return "sql.NullString"
+	}
+}
+
+func nullFieldFor(t string) string {
+	switch t {
+	case "int":
+		return "Int64"
+	case "boolean":
+		return "Bool"
+	case "float":
+		return "Float64"
+	default:
+		return "String"
+	}
+}
+
+func testLiteralFor(t string) string {
+	switch t {
+	case "int":
+		return "int64(1)"
+	case "boolean":
+		return "true"
+	case "float":
+		return "1.5"
+	default:
+		return `"test"`
+	}
 }
 
 func getTemplate(name string) (*template.Template, error) {
@@ -149,6 +319,9 @@ func toPlural(s string) string {
 type Field struct {
 	Name string
 	Type string
+	// Nullable is filled in by applySchema from the real table's
+	// PRAGMA table_info output — never from the caller's field argument.
+	Nullable bool
 }
 
 func parseFields(raw []string) []Field {
@@ -177,6 +350,7 @@ type TemplateData struct {
 	APIEndpoint  string
 	SubmitLabel  string
 	FormName     string
+	CRUD         bool
 }
 
 func newData(name string, fields []Field) TemplateData {
@@ -199,6 +373,14 @@ func errResult(msg string) *mcp.CallToolResult {
 	return mcp.NewToolResultError(msg)
 }
 
+// updateManifest is the production wrapper around updateManifestAt, binding
+// the real manifest/handlers paths and the wall clock. Tool handlers call
+// this after rendering their files to self-register into api.json and
+// regenerate routes_gen.go.
+func updateManifest(models []Model, endpoints []Endpoint) error {
+	return updateManifestAt(manifestFilePath, handlersDirPath, time.Now(), models, endpoints)
+}
+
 func renderToFile(tmplName, outPath string, data TemplateData) error {
 	tmpl, err := getTemplate(tmplName)
 	if err != nil {
@@ -213,6 +395,20 @@ func renderToFile(tmplName, outPath string, data TemplateData) error {
 }
 
 func renderToString(tmplName string, data TemplateData) (string, error) {
+	tmpl, err := getTemplate(tmplName)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// renderNamedToString renders tmplName with an arbitrary payload, for
+// templates (like routes_gen.go.tmpl) whose data shape isn't TemplateData.
+func renderNamedToString(tmplName string, data any) (string, error) {
 	tmpl, err := getTemplate(tmplName)
 	if err != nil {
 		return "", err
@@ -271,37 +467,45 @@ func main() {
 	), handleExecuteSQL)
 
 	s.AddTool(mcp.NewTool("create_model",
-		mcp.WithDescription("Generate models/Name.go with GetAll/Find/Create/Update/Delete and 5-min cache. Table must exist first (run execute_sql)."),
+		mcp.WithDescription("Generate models/Name.go with GetPage/Find/Create/Delete and 5-min cache. Table must exist first (run execute_sql)."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Model name in snake_case")),
 		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
 	), handleCreateModel)
 
 	s.AddTool(mcp.NewTool("create_handler",
-		mcp.WithDescription("Generate a single JSON handler stub in handlers/name.go. Implement the TODO logic. Wire route in main.go after."),
+		mcp.WithDescription("Generate a single JSON handler in handlers/name.go AND register its route in api.json + routes_gen.go. Implement the TODO logic after."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Handler name in snake_case")),
 		mcp.WithString("method", mcp.Required(), mcp.Description("HTTP method: GET, POST, PUT, DELETE")),
-		mcp.WithBoolean("auth_required", mcp.Description("Inject auth guard — returns JSON 401 if unauthenticated")),
+		mcp.WithString("path", mcp.Required(), mcp.Description("Full route path, e.g. /api/v1/projects/{id}/archive")),
+		mcp.WithBoolean("auth_required", mcp.Description("Require authentication — enforced by a RequireAuth route wrap")),
 	), handleCreateHandler)
 
 	s.AddTool(mcp.NewTool("create_page",
-		mcp.WithDescription("Generate: static/pages/filename.html + static/js/filename.js + handlers/filename.go stub. After: add forms with add_js_form, wire route in main.go."),
+		mcp.WithDescription("Generate: static/pages/filename.html + static/js/filename.js + handlers/filename.go, and register its GET route in api.json + routes_gen.go. After: add forms with add_js_form."),
 		mcp.WithString("filename", mcp.Required(), mcp.Description("Page filename without extension")),
 		mcp.WithString("title", mcp.Required(), mcp.Description("Page title")),
-		mcp.WithBoolean("auth_required", mcp.Description("JS module calls requireAuth() on load")),
+		mcp.WithString("path", mcp.Required(), mcp.Description("Full route path, e.g. /api/v1/projects")),
+		mcp.WithBoolean("auth_required", mcp.Description("JS module calls requireAuth() on load; also enforced server-side by a RequireAuth route wrap")),
 	), handleCreatePage)
 
 	s.AddTool(mcp.NewTool("scaffold_list",
-		mcp.WithDescription("Generate 4 files: model + JSON list handler + HTML shell + JS module. After: add forms with add_js_form, wire route in main.go."),
+		mcp.WithDescription("Generate 4 files: model + JSON list handler + HTML shell + JS module, and register the GET route in api.json + routes_gen.go. After: add forms with add_js_form."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Resource name in snake_case")),
 		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
 	), handleScaffoldList)
 
+	s.AddTool(mcp.NewTool("scaffold_resource",
+		mcp.WithDescription("Generate full CRUD for a resource: model (with Update) + list/detail/create/update/delete handlers + list page, and register all 5 routes in api.json + routes_gen.go. List supports ?sort=&filter= (whitelisted columns). Table must exist first (run execute_sql). Endpoints are public; protect per-endpoint via the manifest. Use scaffold_list for read-only resources."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Resource name in snake_case")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
+	), handleScaffoldResource)
+
 	s.AddTool(mcp.NewTool("scaffold_auth",
-		mcp.WithDescription("Generate full auth system: users + rate_limits tables, User model, login/logout/me JSON handlers and HTML pages. Wire 5 routes in main.go (printed in output)."),
+		mcp.WithDescription("Generate the full auth system — cookie (web) AND bearer (mobile) in one run: users + rate_limits + mobile_tokens tables, User model, cookie handlers (login/logout/me) + bearer handlers (login_token/logout_token/me_token) and the login page, all 6 routes self-registered in api.json + routes_gen.go. Run scaffold_registration after for a registration endpoint."),
 	), handleScaffoldAuth)
 
 	s.AddTool(mcp.NewTool("scaffold_registration",
-		mcp.WithDescription("Generate registration JSON handler + HTML page. Run after scaffold_auth. Wire 2 routes in main.go (printed in output)."),
+		mcp.WithDescription("Generate registration JSON handler + HTML page. Run after scaffold_auth. Registers the route in api.json + routes_gen.go."),
 	), handleScaffoldRegistration)
 
 	s.AddTool(mcp.NewTool("add_js_form",
@@ -313,10 +517,6 @@ func main() {
 		mcp.WithString("submit_label", mcp.Description("Submit button label (default: Submit)")),
 	), handleAddJSForm)
 
-	s.AddTool(mcp.NewTool("scaffold_mobile_auth",
-		mcp.WithDescription("Add token-based auth endpoints to the Go API for mobile clients (iOS, Android). Idempotent — safe to call from multiple mobile repos. Creates mobile_tokens table and handlers/mobile_auth.go with MobileLoginPOST, MobileLogoutDELETE, MobileMeGET. Requires scaffold_auth to have been run first (users table must exist)."),
-	), handleScaffoldMobileAuth)
-
 	if err := server.ServeStdio(s); err != nil {
 		log.Fatal(err)
 	}
@@ -324,52 +524,45 @@ func main() {
 
 // Tool handler stubs — implemented in subsequent tasks
 func handleInspectApp(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	listDir := func(pattern, label string) string {
+	scan := func(pattern string) []string {
 		files, _ := filepath.Glob(pattern)
-		names := make([]string, 0, len(files))
+		names := []string{}
 		for _, f := range files {
 			base := filepath.Base(f)
 			if base == ".gitkeep" {
 				continue
 			}
-			names = append(names, "  "+base)
+			names = append(names, base)
 		}
-		if len(names) == 0 {
-			return label + "\n  (none)"
-		}
-		return label + "\n" + strings.Join(names, "\n")
+		return names
 	}
-
-	sections := []string{
-		listDir("/src/app/models/*.go", "Models:"),
-		listDir("/src/app/handlers/*.go", "Handlers:"),
-		listDir("/src/app/static/pages/*.html", "Pages (HTML):"),
-		listDir("/src/app/static/js/*.js", "Pages (JS):"),
+	onDisk := onDiskFiles{
+		Models:   scan("/src/app/models/*.go"),
+		Handlers: scan("/src/app/handlers/*.go"),
+		Pages:    scan("/src/app/static/pages/*.html"),
+		JS:       scan("/src/app/static/js/*.js"),
 	}
-
-	mainContent, err := os.ReadFile("/src/app/main.go")
-	if err == nil {
-		routeRe := regexp.MustCompile(`r\.(Get|Post|Put|Delete|Patch)\("([^"]+)"`)
-		matches := routeRe.FindAllStringSubmatch(string(mainContent), -1)
-		routes := make([]string, 0, len(matches))
-		for _, m := range matches {
-			routes = append(routes, "  "+m[1]+" "+m[2])
-		}
-		if len(routes) == 0 {
-			sections = append(sections, "Routes (main.go):\n  (none registered)")
-		} else {
-			sections = append(sections, "Routes (main.go):\n"+strings.Join(routes, "\n"))
-		}
+	m, err := readManifestAt(manifestFilePath)
+	if err != nil {
+		return errResult(err.Error()), nil
 	}
-
-	return mcp.NewToolResultText(strings.Join(sections, "\n\n")), nil
+	rep := buildInspection(m, onDisk)
+	data, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		return errResult(err.Error()), nil
+	}
+	return mcp.NewToolResultText(string(data)), nil
 }
 func handleExecuteSQL(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	query, _ := req.Params.Arguments["query"].(string)
 	if query == "" {
 		return errResult("query is required"), nil
 	}
-	db, err := sql.Open("sqlite3", "/data/app.db?_foreign_keys=on")
+	// Same pragmas as db.Open (src/app/db/db.go): WAL mode and a busy
+	// timeout so DDL here doesn't collide with the app container's live
+	// connection, and so a fresh db file ends up in WAL mode immediately
+	// rather than waiting for the app to connect first.
+	db, err := sql.Open("sqlite3", sqliteDSN)
 	if err != nil {
 		return errResult(err.Error()), nil
 	}
@@ -386,20 +579,35 @@ func handleCreateModel(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	}
 	rawFields, _ := req.Params.Arguments["fields"].([]interface{})
 	fields := parseFields(rawFieldsToStrings(rawFields))
+	if err := checkReservedName(name); err != nil {
+		return errResult(err.Error()), nil
+	}
+	fields, applyErr := applySchema(toPlural(name), fields)
+	if applyErr != nil {
+		return errResult(applyErr.Error()), nil
+	}
 	data := newData(name, fields)
 
 	outPath := "/src/app/models/" + toPascal(name) + ".go"
 	if err := renderToFile("model.go.tmpl", outPath, data); err != nil {
 		return errResult(err.Error()), nil
 	}
-	return mcp.NewToolResultText("Created: " + outPath), nil
+	testPath := "/src/app/models/" + toPascal(name) + "_test.go"
+	if err := renderToFile("model_test.go.tmpl", testPath, data); err != nil {
+		return errResult(err.Error()), nil
+	}
+	return mcp.NewToolResultText("Created: " + outPath + "\nCreated: " + testPath), nil
 }
 func handleCreateHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	name, _ := req.Params.Arguments["name"].(string)
 	method, _ := req.Params.Arguments["method"].(string)
+	path, _ := req.Params.Arguments["path"].(string)
 	authRequired, _ := req.Params.Arguments["auth_required"].(bool)
 	if !isSafeIdent(name) {
 		return errResult("invalid handler name"), nil
+	}
+	if !strings.HasPrefix(path, "/api/v1/") {
+		return errResult("path must start with /api/v1/"), nil
 	}
 	data := newData(name, nil)
 	data.Method = strings.ToUpper(method)
@@ -409,14 +617,31 @@ func handleCreateHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	if err := renderToFile("handler.go.tmpl", outPath, data); err != nil {
 		return errResult(err.Error()), nil
 	}
-	return mcp.NewToolResultText("Created: " + outPath + "\n\nImplement the TODO logic. Wire route in main.go.\n\n" + runPatternChecks()), nil
+
+	endpoint := Endpoint{
+		Method: strings.ToUpper(method), Path: path,
+		Handler: toPascal(name) + strings.ToUpper(method),
+		Deps:    []string{"read", "write", "cache"},
+		Auth:    authRequired, Kind: "custom",
+	}
+	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText("Created: " + outPath +
+		"\nRegistered " + strings.ToUpper(method) + " " + path +
+		" in api.json + routes_gen.go.\nImplement the TODO logic.\n\n" + runPatternChecks()), nil
 }
 func handleCreatePage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	filename, _ := req.Params.Arguments["filename"].(string)
 	title, _ := req.Params.Arguments["title"].(string)
+	path, _ := req.Params.Arguments["path"].(string)
 	authRequired, _ := req.Params.Arguments["auth_required"].(bool)
 	if !isSafeIdent(filename) {
 		return errResult("invalid filename"), nil
+	}
+	if !strings.HasPrefix(path, "/api/v1/") {
+		return errResult("path must start with /api/v1/"), nil
 	}
 	data := newData(filename, nil)
 	data.Title = title
@@ -435,9 +660,19 @@ func handleCreatePage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	if err := renderToFile("handler.go.tmpl", handlerPath, data); err != nil {
 		return errResult(err.Error()), nil
 	}
+
+	endpoint := Endpoint{
+		Method: "GET", Path: path, Handler: toPascal(filename) + "GET",
+		Deps: []string{"read", "write", "cache"}, Auth: authRequired, Kind: "custom",
+	}
+	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
 	return mcp.NewToolResultText(
 		"Created: " + htmlPath + "\nCreated: " + jsPath + "\nCreated: " + handlerPath +
-			"\n\nNext: wire route in main.go. Add forms with add_js_form.\n\n" + runPatternChecks(),
+			"\nRegistered GET " + path + " in api.json + routes_gen.go.\n" +
+			"Add forms with add_js_form.\n\n" + runPatternChecks(),
 	), nil
 }
 func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -450,13 +685,22 @@ func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 	if len(fields) == 0 {
 		return errResult("at least one field is required"), nil
 	}
+	if err := checkReservedName(name); err != nil {
+		return errResult(err.Error()), nil
+	}
+	fields, applyErr := applySchema(toPlural(name), fields)
+	if applyErr != nil {
+		return errResult(applyErr.Error()), nil
+	}
 	data := newData(name, fields)
 	data.Title = toPascal(toPlural(name))
 
 	type fileSpec struct{ tmpl, out string }
 	specs := []fileSpec{
 		{"model.go.tmpl", "/src/app/models/" + toPascal(name) + ".go"},
+		{"model_test.go.tmpl", "/src/app/models/" + toPascal(name) + "_test.go"},
 		{"list_handler.go.tmpl", "/src/app/handlers/" + name + "_list.go"},
+		{"list_handler_test.go.tmpl", "/src/app/handlers/" + name + "_list_test.go"},
 		{"list_page.html.tmpl", "/src/app/static/pages/" + toPlural(name) + ".html"},
 		{"list_page.js.tmpl", "/src/app/static/js/" + toPlural(name) + ".js"},
 	}
@@ -468,14 +712,112 @@ func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 		}
 		results = append(results, "Created: "+spec.out)
 	}
+
+	model := fieldsToModel(name, toPlural(name), fields)
+	endpoint := Endpoint{
+		Method: "GET", Path: "/api/v1/" + toPlural(name),
+		Handler: toPascal(name) + "ListGET",
+		Deps:    []string{"read", "write", "cache"},
+		Auth:    false, Model: name, Kind: "list",
+	}
+	if err := updateManifest([]Model{model}, []Endpoint{endpoint}); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
 	return mcp.NewToolResultText(
 		strings.Join(results, "\n") +
-			"\n\nNext: wire GET route in main.go, add POST handler with create_handler, add form with add_js_form.\n\n" +
-			runPatternChecks(),
+			"\n\nRegistered route GET /api/v1/" + toPlural(name) + " and updated api.json + routes_gen.go.\n" +
+			"Add forms with add_js_form.\n\n" + runPatternChecks(),
+	), nil
+}
+// resourceEndpoints returns the five CRUD endpoints scaffold_resource registers.
+// The handler symbols must match resource_handlers.go.tmpl exactly.
+func resourceEndpoints(name string) []Endpoint {
+	p := toPascal(name)
+	plural := toPlural(name)
+	base := "/api/v1/" + plural
+	rwc := []string{"read", "write", "cache"}
+	return []Endpoint{
+		{Method: "GET", Path: base, Handler: p + "ListGET", Deps: rwc, Model: name, Kind: "list"},
+		{Method: "GET", Path: base + "/{id}", Handler: p + "DetailGET", Deps: rwc, Model: name, Kind: "detail"},
+		{Method: "POST", Path: base, Handler: p + "CreatePOST", Deps: rwc, Model: name, Kind: "create"},
+		{Method: "PUT", Path: base + "/{id}", Handler: p + "UpdatePUT", Deps: rwc, Model: name, Kind: "update"},
+		{Method: "DELETE", Path: base + "/{id}", Handler: p + "DeleteDELETE", Deps: rwc, Model: name, Kind: "delete"},
+	}
+}
+
+// authEndpoints returns the six endpoints scaffold_auth registers — the cookie
+// set (login/logout/me) and the bearer set (login_token/logout_token/me_token).
+// The three token endpoints are auth:false: they self-enforce the bearer token
+// in the handler; a session-cookie RequireAuth wrap would 401 them.
+func authEndpoints() []Endpoint {
+	rwc := []string{"read", "write", "cache"}
+	return []Endpoint{
+		{Method: "POST", Path: "/api/v1/auth/login", Handler: "LoginPOST", Deps: rwc, Kind: "auth_login"},
+		{Method: "POST", Path: "/api/v1/auth/logout", Handler: "LogoutPOST", Deps: []string{}, Kind: "auth_logout"},
+		{Method: "GET", Path: "/api/v1/auth/me", Handler: "MeGET", Deps: rwc, Auth: true, Kind: "auth_me"},
+		{Method: "POST", Path: "/api/v1/auth/login_token", Handler: "MobileLoginPOST", Deps: rwc, Kind: "mobile_login"},
+		{Method: "DELETE", Path: "/api/v1/auth/logout_token", Handler: "MobileLogoutDELETE", Deps: []string{"write"}, Kind: "mobile_logout"},
+		{Method: "GET", Path: "/api/v1/auth/me_token", Handler: "MobileMeGET", Deps: rwc, Kind: "mobile_me"},
+	}
+}
+
+func handleScaffoldResource(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name, _ := req.Params.Arguments["name"].(string)
+	rawFields, _ := req.Params.Arguments["fields"].([]interface{})
+	if !isSafeIdent(name) {
+		return errResult("invalid name"), nil
+	}
+	fields := parseFields(rawFieldsToStrings(rawFields))
+	if len(fields) == 0 {
+		return errResult("at least one field is required"), nil
+	}
+	if err := checkReservedName(name); err != nil {
+		return errResult(err.Error()), nil
+	}
+	fields, applyErr := applySchema(toPlural(name), fields)
+	if applyErr != nil {
+		return errResult(applyErr.Error()), nil
+	}
+	data := newData(name, fields)
+	data.CRUD = true
+	data.Title = toPascal(toPlural(name))
+
+	type fileSpec struct{ tmpl, out string }
+	specs := []fileSpec{
+		{"model.go.tmpl", "/src/app/models/" + toPascal(name) + ".go"},
+		{"model_test.go.tmpl", "/src/app/models/" + toPascal(name) + "_test.go"},
+		{"resource_handlers.go.tmpl", "/src/app/handlers/" + name + "_resource.go"},
+		{"resource_handlers_test.go.tmpl", "/src/app/handlers/" + name + "_resource_test.go"},
+		{"list_page.html.tmpl", "/src/app/static/pages/" + toPlural(name) + ".html"},
+		{"list_page.js.tmpl", "/src/app/static/js/" + toPlural(name) + ".js"},
+	}
+	results := []string{}
+	for _, spec := range specs {
+		if err := renderToFile(spec.tmpl, spec.out, data); err != nil {
+			return errResult(err.Error()), nil
+		}
+		results = append(results, "Created: "+spec.out)
+	}
+
+	model := fieldsToModel(name, toPlural(name), fields)
+	if err := updateManifest([]Model{model}, resourceEndpoints(name)); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(
+		strings.Join(results, "\n") +
+			"\n\nRegistered full CRUD (list, detail, create, update, delete) for /api/v1/" + toPlural(name) +
+			" in api.json + routes_gen.go. Endpoints are public — set auth:true per endpoint in api.json to protect them (requires scaffold_auth).\n" +
+			"Add a create form with add_js_form.\n\n" + runPatternChecks(),
 	), nil
 }
 func handleScaffoldAuth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	db, err := sql.Open("sqlite3", "/data/app.db?_foreign_keys=on")
+	// Same pragmas as db.Open (src/app/db/db.go): WAL mode and a busy
+	// timeout so DDL here doesn't collide with the app container's live
+	// connection, and so a fresh db file ends up in WAL mode immediately
+	// rather than waiting for the app to connect first.
+	db, err := sql.Open("sqlite3", sqliteDSN)
 	if err != nil {
 		return errResult(err.Error()), nil
 	}
@@ -495,21 +837,30 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 	locked_until DATETIME,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY (ip)
+);
+CREATE TABLE IF NOT EXISTS mobile_tokens (
+	token_hash TEXT PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	expires_at DATETIME NOT NULL
 );`
 	if _, err := db.ExecContext(ctx, ddl); err != nil {
 		return errResult(err.Error()), nil
 	}
 
-	results := []string{"Created tables: users, rate_limits"}
+	results := []string{"Created tables: users, rate_limits, mobile_tokens"}
 	data := newData("user", nil)
 
 	type fileSpec struct{ tmpl, out string }
 	specs := []fileSpec{
 		{"user_model.go.tmpl", "/src/app/models/User.go"},
 		{"auth_handler.go.tmpl", "/src/app/handlers/auth.go"},
+		{"auth_test.go.tmpl", "/src/app/handlers/auth_test.go"},
 		{"logout_handler.go.tmpl", "/src/app/handlers/logout.go"},
 		{"login_page.html.tmpl", "/src/app/static/pages/login.html"},
 		{"login.js.tmpl", "/src/app/static/js/login.js"},
+		{"mobile_auth_handler.go.tmpl", "/src/app/handlers/mobile_auth.go"},
+		{"mobile_auth_test.go.tmpl", "/src/app/handlers/mobile_auth_test.go"},
 	}
 	for _, spec := range specs {
 		if err := renderToFile(spec.tmpl, spec.out, data); err != nil {
@@ -517,10 +868,18 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 		}
 		results = append(results, "Created: "+spec.out)
 	}
-	results = append(results, "\nRegister routes in main.go:\n"+
-		"  r.Post(\"/api/auth/login\",  handlers.LoginPOST(database.Read, database.Write, appCache))\n"+
-		"  r.Post(\"/api/auth/logout\", handlers.LogoutPOST())\n"+
-		"  r.Get(\"/api/auth/me\",      handlers.MeGET(database.Read, database.Write, appCache))")
+
+	userModel := Model{Name: "user", Table: "users", Fields: []ModelField{
+		{Name: "id", Type: "int", Nullable: false},
+		{Name: "name", Type: "string", Nullable: false},
+		{Name: "email", Type: "string", Nullable: false},
+		{Name: "created_at", Type: "timestamp", Nullable: false},
+	}}
+	if err := updateManifest([]Model{userModel}, authEndpoints()); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
+	results = append(results, "\nRegistered full auth — cookie (login, logout, me) and bearer (login_token, logout_token, me_token) — plus the user model in api.json + routes_gen.go.")
 
 	return mcp.NewToolResultText(strings.Join(results, "\n") + "\n\n" + runPatternChecks()), nil
 }
@@ -529,6 +888,7 @@ func handleScaffoldRegistration(ctx context.Context, req mcp.CallToolRequest) (*
 	type fileSpec struct{ tmpl, out string }
 	specs := []fileSpec{
 		{"register_handler.go.tmpl", "/src/app/handlers/register.go"},
+		{"register_test.go.tmpl", "/src/app/handlers/register_test.go"},
 		{"register_page.html.tmpl", "/src/app/static/pages/register.html"},
 		{"register.js.tmpl", "/src/app/static/js/register.js"},
 	}
@@ -539,8 +899,14 @@ func handleScaffoldRegistration(ctx context.Context, req mcp.CallToolRequest) (*
 		}
 		results = append(results, "Created: "+spec.out)
 	}
-	results = append(results, "\nAdd routes in main.go:\n"+
-		"  r.Post(\"/api/auth/register\", handlers.RegisterPOST(database.Read, database.Write, appCache))")
+
+	endpoint := Endpoint{Method: "POST", Path: "/api/v1/auth/register", Handler: "RegisterPOST",
+		Deps: []string{"read", "write", "cache"}, Kind: "register"}
+	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
+	results = append(results, "\nRegistered registration route in api.json + routes_gen.go.")
 	return mcp.NewToolResultText(strings.Join(results, "\n") + "\n\n" + runPatternChecks()), nil
 }
 func handleAddJSForm(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -556,7 +922,11 @@ func handleAddJSForm(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		return errResult("invalid page name"), nil
 	}
 
-	endpointSlug := strings.TrimPrefix(apiEndpoint, "/api/")
+	// Strip the versioned API prefix so the generated form function is named
+	// after the resource, not after "v1".
+	endpointSlug := strings.TrimPrefix(apiEndpoint, "/api/v1/")
+	endpointSlug = strings.TrimPrefix(endpointSlug, "/api/")
+	endpointSlug = strings.TrimPrefix(endpointSlug, "/")
 	endpointSlug = strings.Trim(endpointSlug, "/")
 	formName := toPascal(endpointSlug)
 	if formName == "" {
@@ -599,49 +969,4 @@ func handleAddJSForm(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		return errResult(err.Error()), nil
 	}
 	return mcp.NewToolResultText("Form injected into " + targetPath + "\n\n" + runPatternChecks()), nil
-}
-func handleScaffoldMobileAuth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Step 1: Create mobile_tokens table (idempotent — IF NOT EXISTS)
-	db, err := sql.Open("sqlite3", "/data/app.db?_foreign_keys=on")
-	if err != nil {
-		return errResult(err.Error()), nil
-	}
-	defer db.Close()
-
-	ddl := `CREATE TABLE IF NOT EXISTS mobile_tokens (
-	token_hash TEXT PRIMARY KEY,
-	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-	expires_at DATETIME NOT NULL
-);`
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
-		return errResult("SQL failed: " + err.Error()), nil
-	}
-
-	results := []string{"Table: mobile_tokens (created or already existed)"}
-
-	// Step 2: Generate handler file — skip if already exists (idempotent)
-	outPath := "/src/app/handlers/mobile_auth.go"
-	if _, statErr := os.Stat(outPath); statErr == nil {
-		results = append(results, "handlers/mobile_auth.go already exists — skipping (idempotent)")
-		return mcp.NewToolResultText(strings.Join(results, "\n") + mobileAuthRouteInstructions()), nil
-	}
-
-	if err := renderToFile("mobile_auth_handler.go.tmpl", outPath, TemplateData{}); err != nil {
-		return errResult(err.Error()), nil
-	}
-	results = append(results, "Created: "+outPath)
-
-	return mcp.NewToolResultText(strings.Join(results, "\n") + mobileAuthRouteInstructions() + "\n\n" + runPatternChecks()), nil
-}
-
-func mobileAuthRouteInstructions() string {
-	return `
-
-Register routes in main.go (check for duplicates before adding):
-  r.Post("/api/auth/login_token",    handlers.MobileLoginPOST(database.Read, database.Write, appCache))
-  r.Delete("/api/auth/logout_token", handlers.MobileLogoutDELETE(database.Write))
-  r.Get("/api/auth/me_token",        handlers.MobileMeGET(database.Read, database.Write, appCache))
-
-Web cookie auth is untouched. Mobile clients use Bearer token headers instead of cookies.`
 }

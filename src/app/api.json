@@ -1,0 +1,1347 @@
+{
+  "api_version": "1.0.0",
+  "hash": "sha256:e7b25441000e9850d2ebc8d0e5e1fd10161ba03ba5416820140a632f38603b25",
+  "generated_at": "2026-07-24T00:00:00Z",
+  "models": [
+    {
+      "name": "Bookmark",
+      "table": "bookmarks",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "category_id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "BookmarkCategory",
+      "table": "bookmark_categories",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "CodexEntry",
+      "table": "codex_entries",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "folder",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Focus",
+      "table": "focuses",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "JournalEntry",
+      "table": "journal_entries",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "mood",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "entry_date",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "LogCategory",
+      "table": "log_categories",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "schema_def",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "LogEntry",
+      "table": "log_entries",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "category_id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "entry_data",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Reminder",
+      "table": "reminders",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "remind_at",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "recurrence_type",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "recurrence_days",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Shortcut",
+      "table": "shortcuts",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Subtask",
+      "table": "subtasks",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "todo_id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "is_done",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "Todo",
+      "table": "todos",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "list_id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "is_done",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        },
+        {
+          "name": "subtask_count",
+          "type": "int",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "TodoBlock",
+      "table": "todo_blocks",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "todo_id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "header",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "TodoList",
+      "table": "todo_lists",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "sort_order",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/bookmark_categories",
+      "handler": "BookmarkCategoryListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "BookmarkCategory",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bookmark_categories",
+      "handler": "BookmarkCategoryCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "BookmarkCategory",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/bookmark_categories/{id}",
+      "handler": "BookmarkCategoryDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "BookmarkCategory",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bookmark_categories/{id}",
+      "handler": "BookmarkCategoryDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "BookmarkCategory",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/bookmark_categories/{id}",
+      "handler": "BookmarkCategoryUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "BookmarkCategory",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bookmarks",
+      "handler": "BookmarkListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Bookmark",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/bookmarks",
+      "handler": "BookmarkCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Bookmark",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/bookmarks/{id}",
+      "handler": "BookmarkDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Bookmark",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/bookmarks/{id}",
+      "handler": "BookmarkDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Bookmark",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/bookmarks/{id}",
+      "handler": "BookmarkUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Bookmark",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/codex_entries",
+      "handler": "CodexEntryListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/codex_entries",
+      "handler": "CodexEntryCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/codex_entries/{id}",
+      "handler": "CodexEntryDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/codex_entries/{id}",
+      "handler": "CodexEntryDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/codex_entries/{id}",
+      "handler": "CodexEntryUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/codex_folders/delete",
+      "handler": "CodexFolderDeletePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "custom"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/codex_folders/rename",
+      "handler": "CodexFolderRenamePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "CodexEntry",
+      "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/focuses",
+      "handler": "FocusListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Focus",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/focuses",
+      "handler": "FocusCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Focus",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/focuses/{id}",
+      "handler": "FocusDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Focus",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/focuses/{id}",
+      "handler": "FocusDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Focus",
+      "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/journal_entries",
+      "handler": "JournalEntryListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "JournalEntry",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/journal_entries",
+      "handler": "JournalEntryCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "JournalEntry",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/journal_entries/{id}",
+      "handler": "JournalEntryDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "JournalEntry",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/journal_entries/{id}",
+      "handler": "JournalEntryDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "JournalEntry",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/journal_entries/{id}",
+      "handler": "JournalEntryUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "JournalEntry",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/log_categories",
+      "handler": "LogCategoryListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogCategory",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/log_categories",
+      "handler": "LogCategoryCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogCategory",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/log_categories/{id}",
+      "handler": "LogCategoryDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogCategory",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/log_categories/{id}",
+      "handler": "LogCategoryDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogCategory",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/log_categories/{id}",
+      "handler": "LogCategoryUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogCategory",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/log_entries",
+      "handler": "LogEntryListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogEntry",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/log_entries",
+      "handler": "LogEntryCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogEntry",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/log_entries/{id}",
+      "handler": "LogEntryDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogEntry",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/log_entries/{id}",
+      "handler": "LogEntryDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "LogEntry",
+      "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reminders",
+      "handler": "ReminderListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/reminders",
+      "handler": "ReminderCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/reminders/{id}",
+      "handler": "ReminderDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/reminders/{id}",
+      "handler": "ReminderDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/reminders/{id}",
+      "handler": "ReminderUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/reminders/{id}/toggle",
+      "handler": "ReminderTogglePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Reminder",
+      "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shortcuts",
+      "handler": "ShortcutListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Shortcut",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/shortcuts",
+      "handler": "ShortcutCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Shortcut",
+      "kind": "create"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/shortcuts/reorder",
+      "handler": "ShortcutReorderPUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Shortcut",
+      "kind": "custom"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/shortcuts/{id}",
+      "handler": "ShortcutDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Shortcut",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shortcuts/{id}",
+      "handler": "ShortcutDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Shortcut",
+      "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subtasks",
+      "handler": "SubtaskListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subtasks",
+      "handler": "SubtaskCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/subtasks/{id}",
+      "handler": "SubtaskDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subtasks/{id}",
+      "handler": "SubtaskDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/subtasks/{id}",
+      "handler": "SubtaskUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subtasks/{id}/toggle",
+      "handler": "SubtaskTogglePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Subtask",
+      "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todo_blocks",
+      "handler": "TodoBlockListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoBlock",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/todo_blocks",
+      "handler": "TodoBlockCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoBlock",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/todo_blocks/{id}",
+      "handler": "TodoBlockDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoBlock",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todo_blocks/{id}",
+      "handler": "TodoBlockDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoBlock",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/todo_blocks/{id}",
+      "handler": "TodoBlockUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoBlock",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todo_lists",
+      "handler": "TodoListListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/todo_lists",
+      "handler": "TodoListCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/todo_lists/{id}",
+      "handler": "TodoListDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todo_lists/{id}",
+      "handler": "TodoListDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/todo_lists/{id}",
+      "handler": "TodoListUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/todo_lists/{id}/clear_completed",
+      "handler": "TodoListClearCompletedPOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "TodoList",
+      "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todos",
+      "handler": "TodoListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/todos",
+      "handler": "TodoCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "create"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/todos/reorder",
+      "handler": "TodoReorderPUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "custom"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/todos/{id}",
+      "handler": "TodoDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/todos/{id}",
+      "handler": "TodoDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/todos/{id}",
+      "handler": "TodoUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/todos/{id}/toggle",
+      "handler": "TodoTogglePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "Todo",
+      "kind": "custom"
+    }
+  ]
+}

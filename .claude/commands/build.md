@@ -19,7 +19,7 @@ Read `.env`. Verify `SESSION_SECRET` is set to something other than the placehol
 
 ## Step 2: Brainstorm
 
-Use the `superpowers:brainstorming` skill with the contents of `SEED.md` as input.
+Use the `gova-brainstorm` skill with the contents of `SEED.md` as input.
 
 - Clarify the app's features and data model
 - Confirm auth requirements, resource types, external integrations
@@ -29,21 +29,23 @@ Use the `superpowers:brainstorming` skill with the contents of `SEED.md` as inpu
 
 ## Step 3: Write an Implementation Plan
 
-Use the `superpowers:writing-plans` skill.
+Use the `gova-writing-plans` skill.
 
 **Mandatory constraints for the plan:**
 - Tasks are **MCP tool calls**, not Go code or JS written by hand
-- Skip TDD — there is no test suite
+- Scaffold-generated code (models, handlers, auth) already has tests from its scaffold call — only plan a test-writing step for hand-customized logic, per `gova-writing-plans` Step 3b
 - One task per feature: `execute_sql` → `scaffold_*` → `add_js_form`
 - Follow the Golden Recipe from `CLAUDE.md` for every feature
-- If a create form exists, plan edit + delete too (CRUD completeness)
+- For a resource that needs create/edit/delete, use `scaffold_resource` (full CRUD, self-registered) rather than `scaffold_list` (read-only). Reserve `scaffold_list` for reference/read-only data.
 - Plan steps scaffold first, then customize. Never plan "implement X handler" — always start with the MCP scaffold tool.
 
 ---
 
 ## Step 4: Create Feature Branch
 
-Use `superpowers:using-git-worktrees` to create an isolated branch.
+**Do not use `superpowers:using-git-worktrees` or any worktree.** The `gova-builder` MCP server and SQLite db are singleton, path-bound infrastructure (see `CLAUDE.md` § No Git Worktrees for Builds) — a worktree at a different path breaks the MCP container's bind mounts and forces a disruptive container remount + manual `/mcp` reconnect mid-build.
+
+Create a plain feature branch directly in the current checkout instead: `git checkout -b build/<app-name>`.
 
 Derive branch name from app name in SEED.md: "Task Manager" → `build/task-manager`
 
@@ -51,7 +53,7 @@ Derive branch name from app name in SEED.md: "Task Manager" → `build/task-mana
 
 ## Step 5: Implement
 
-Use `superpowers:subagent-driven-development` to execute the plan.
+Use `gova-build-execution` to execute the plan.
 
 ### Mandatory Scaffolding Rule for every subagent:
 
@@ -78,7 +80,7 @@ Subagents must confirm at the start of each task:
 - Follow the Golden Recipe from CLAUDE.md
 - Never write raw SQL in handler files — use model methods only
 - CSS recompiles automatically on `docker compose restart app` — restart once after a JS/HTML-only UI pass with no Go changes
-- Use the `frontend-design` skill before any UI work
+- Use the `ui-ux-pro-max` skill before any UI work — this project's stack is `html-tailwind` (vanilla JS + Tailwind, no framework), not React/Vue/etc.; pass `--stack html-tailwind` to its search CLI
 - Use `context7` MCP for any external API documentation
 - Do not add manual cache calls to model methods — caching is automatic
 - JS safety: NEVER use `element.innerHTML = userValue` (XSS). ALWAYS use `element.textContent` for user-supplied text. ALWAYS use `createElement` for structured HTML.
@@ -117,26 +119,41 @@ If Critical, High, or Medium findings exist:
 
 ## Step 8: Pre-Completion Verification
 
-Use `superpowers:verification-before-completion`.
+**No completion claim without fresh verification evidence.** If you haven't run the check in this message, you cannot claim it passes. "Should work," "looks right," or trusting a subagent's self-report without checking the diff are not verification — run the actual check, read the actual output, then claim the result.
 
-Verify:
-- **Features:** All SEED.md features implemented? Auth-required pages call `requireAuth()`? No placeholder text?
+Verify, with evidence for each:
+- **Features:** All SEED.md features implemented? Auth-required pages call `requireAuth()`? No placeholder text? (Read the files — don't infer from the plan.)
 - **CRUD:** If a create form exists, do edit and delete exist?
-- **Architecture:** Tables via `execute_sql`? Models via `create_model`? No raw SQL in handlers? JS never uses `innerHTML` with user data?
-- **Design:** `frontend-design` invoked? Titles set? Mobile-responsive?
-- **App:** `docker compose logs app` shows no errors?
+- **Architecture:** Tables via `execute_sql`? Models via `create_model`? No raw SQL in handlers? JS never uses `innerHTML` with user data? (Grep for `innerHTML` and `db.Query`/`db.Exec` outside models/ to confirm, don't assume the rule held.)
+- **Tests:** Run `docker compose exec app go test ./...` now and read the output — all passing? A failing test blocks completion the same as a failing build.
+- **Design:** `ui-ux-pro-max` invoked? Titles set? Mobile-responsive?
+- **App:** Run `docker compose logs app` now and read the output — no errors?
 - **Environment:** New env vars documented in `env.example`? No hardcoded secrets?
+
+If any check fails, fix it and re-run that specific check before moving on — don't batch fixes and assume they worked.
 
 ---
 
-## Step 9: Done
+## Step 9: Merge Decision
+
+Ask the developer:
+
+> "Build complete on branch `build/[app-name]`. Merge to `main` now, or leave the branch as-is for you to review/PR first?"
+
+**If merge:** `git checkout main && git merge build/[app-name] --no-edit && git branch -d build/[app-name]` (local merge only — do not push unless the developer explicitly asks).
+
+**If leave as-is:** Report the branch name and stop. Do not merge or delete the branch.
+
+---
+
+## Step 10: Done
 
 Report to the developer:
 
 > **Build complete.**
 >
 > App running at: `http://localhost:[APP_PORT]`
-> Branch: `build/[app-name]`
+> Branch: `build/[app-name]` [merged to main | left for review]
 > Security report: `.security/SECURITY_REPORT.md`
 >
 > Next steps: review the running app, then run `/launch` to go live.

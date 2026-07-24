@@ -3,19 +3,28 @@ package models
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
+
 	"gova/app/cache"
 )
 
 type CodexEntry struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Language    string    `json:"language"`
-	Code        string    `json:"code"`
-	Description string    `json:"description"`
-	Folder      string    `json:"folder"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64   `json:"id"`
+	Title       string  `json:"title"`
+	Language    *string `json:"language"`
+	Code        string  `json:"code"`
+	Description *string `json:"description"`
+	Folder      string  `json:"folder"`
+	CreatedAt   Time    `json:"created_at"`
 }
+
+type CodexEntryPage struct {
+	Items []CodexEntry `json:"items"`
+	Total int          `json:"total"`
+}
+
+var CodexEntryAllowedColumns = []string{"id", "title", "language", "code", "description", "folder", "created_at"}
 
 type CodexEntryModel struct {
 	readDB  *sql.DB
@@ -27,50 +36,88 @@ func NewCodexEntryModel(readDB, writeDB *sql.DB, c *cache.Cache) *CodexEntryMode
 	return &CodexEntryModel{readDB: readDB, writeDB: writeDB, cache: c}
 }
 
-func (m *CodexEntryModel) GetAll() ([]CodexEntry, error) {
-	const cacheKey = "codex_entries:all"
+func (m *CodexEntryModel) GetPage(limit, offset int, opts QueryOpts) ([]CodexEntry, int, error) {
+	orderBy := "ORDER BY folder ASC, title ASC"
+	if opts.Sort != "" {
+		ob, err := orderByClause(opts.Sort, CodexEntryAllowedColumns)
+		if err != nil {
+			return nil, 0, err
+		}
+		orderBy = ob
+	}
+	where := ""
+	args := []any{}
+	if opts.FilterField != "" {
+		col, err := filterField(opts.FilterField, CodexEntryAllowedColumns)
+		if err != nil {
+			return nil, 0, err
+		}
+		where = " WHERE " + col + " = ?"
+		args = append(args, opts.FilterValue)
+	}
+
+	cacheKey := fmt.Sprintf("codex_entries:page:%d:%d:%s:%s:%s", limit, offset, opts.Sort, opts.FilterField, opts.FilterValue)
 	if hit, ok := m.cache.Get(cacheKey); ok {
-		var items []CodexEntry
-		if err := json.Unmarshal(hit, &items); err == nil {
-			return items, nil
+		var page CodexEntryPage
+		if err := json.Unmarshal(hit, &page); err == nil {
+			return page.Items, page.Total, nil
 		}
 	}
-	rows, err := m.readDB.Query("SELECT id, title, language, code, description, folder, created_at FROM codex_entries ORDER BY folder ASC, title ASC")
+
+	var total int
+	if err := m.readDB.QueryRow("SELECT COUNT(*) FROM codex_entries"+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT id, title, language, code, description, folder, created_at FROM codex_entries" + where + " " + orderBy + " LIMIT ? OFFSET ?"
+	rows, err := m.readDB.Query(query, append(args, limit, offset)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
-	var items []CodexEntry
+
+	items := []CodexEntry{}
 	for rows.Next() {
 		var item CodexEntry
-		var language, description sql.NullString
-		if err := rows.Scan(&item.ID, &item.Title, &language, &item.Code, &description, &item.Folder, &item.CreatedAt); err != nil {
-			return nil, err
+		var languageNull, descriptionNull sql.NullString
+		if err := rows.Scan(&item.ID, &item.Title, &languageNull, &item.Code, &descriptionNull, &item.Folder, &item.CreatedAt); err != nil {
+			return nil, 0, err
 		}
-		item.Language = language.String
-		item.Description = description.String
+		if languageNull.Valid {
+			item.Language = &languageNull.String
+		}
+		if descriptionNull.Valid {
+			item.Description = &descriptionNull.String
+		}
 		items = append(items, item)
 	}
-	if data, err := json.Marshal(items); err == nil {
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	if data, err := json.Marshal(CodexEntryPage{Items: items, Total: total}); err == nil {
 		m.cache.Set(cacheKey, data, 5*time.Minute)
 	}
-	return items, nil
+	return items, total, nil
 }
 
 func (m *CodexEntryModel) Find(id int64) (*CodexEntry, error) {
 	row := m.readDB.QueryRow("SELECT id, title, language, code, description, folder, created_at FROM codex_entries WHERE id = ?", id)
 	var item CodexEntry
-	var language, description sql.NullString
-	err := row.Scan(&item.ID, &item.Title, &language, &item.Code, &description, &item.Folder, &item.CreatedAt)
-	if err != nil {
+	var languageNull, descriptionNull sql.NullString
+	if err := row.Scan(&item.ID, &item.Title, &languageNull, &item.Code, &descriptionNull, &item.Folder, &item.CreatedAt); err != nil {
 		return nil, err
 	}
-	item.Language = language.String
-	item.Description = description.String
+	if languageNull.Valid {
+		item.Language = &languageNull.String
+	}
+	if descriptionNull.Valid {
+		item.Description = &descriptionNull.String
+	}
 	return &item, nil
 }
 
-func (m *CodexEntryModel) Create(title, language, code, description, folder string) (int64, error) {
+func (m *CodexEntryModel) Create(title string, language *string, code string, description *string, folder string) (int64, error) {
 	res, err := m.writeDB.Exec(
 		"INSERT INTO codex_entries (title, language, code, description, folder) VALUES (?, ?, ?, ?, ?)",
 		title, language, code, description, folder,
@@ -82,15 +129,23 @@ func (m *CodexEntryModel) Create(title, language, code, description, folder stri
 	return res.LastInsertId()
 }
 
-func (m *CodexEntryModel) Update(id int64, title, language, code, description, folder string) error {
-	_, err := m.writeDB.Exec(
+func (m *CodexEntryModel) Update(id int64, title string, language *string, code string, description *string, folder string) error {
+	res, err := m.writeDB.Exec(
 		"UPDATE codex_entries SET title = ?, language = ?, code = ?, description = ?, folder = ? WHERE id = ?",
 		title, language, code, description, folder, id,
 	)
-	if err == nil {
-		m.cache.Bust("codex_entries:")
+	if err != nil {
+		return err
 	}
-	return err
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	m.cache.Bust("codex_entries:")
+	return nil
 }
 
 func (m *CodexEntryModel) Delete(id int64) error {

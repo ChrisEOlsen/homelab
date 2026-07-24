@@ -106,7 +106,7 @@ let editingIsActive = true;
 let formTitleEl, titleInput, remindAtInput, recurrenceSelect, daysFieldset, dayCheckboxes, submitBtn, cancelBtn, errEl;
 
 async function loadList() {
-  const res = await get('/api/reminders');
+  const res = await get('/api/v1/reminders?limit=200');
   if (!res.ok) {
     app.replaceChildren();
     const p = document.createElement('p');
@@ -159,7 +159,7 @@ function renderList(items) {
     if (!window.confirm(`Delete ${completed.length} completed reminder(s)?`)) return;
     clearBtn.disabled = true;
     deleteErrEl.classList.add('hidden');
-    const results = await Promise.all(completed.map((item) => del('/api/reminders/' + item.id)));
+    const results = await Promise.all(completed.map((item) => del('/api/v1/reminders/' + item.id)));
     if (results.some((res) => !res.ok)) {
       deleteErrEl.textContent = 'Some reminders failed to delete.';
       deleteErrEl.classList.remove('hidden');
@@ -197,7 +197,7 @@ function renderList(items) {
     checkbox.setAttribute('aria-label', 'Mark reminder complete');
     checkbox.addEventListener('change', async () => {
       checkbox.disabled = true;
-      await post('/api/reminders/' + item.id + '/toggle');
+      await post('/api/v1/reminders/' + item.id + '/toggle');
       await loadList();
     });
     li.appendChild(checkbox);
@@ -229,7 +229,7 @@ function renderList(items) {
       e.stopPropagation();
       deleteBtn.disabled = true;
       deleteErrEl.classList.add('hidden');
-      const res = await del('/api/reminders/' + item.id);
+      const res = await del('/api/v1/reminders/' + item.id);
       if (res.ok) {
         if (editingId === item.id) resetFormToCreateMode();
         await loadList();
@@ -410,8 +410,8 @@ function setupRemindersForm(container) {
     };
 
     const res = editingId
-      ? await put('/api/reminders/' + editingId, { ...data, is_active: editingIsActive })
-      : await post('/api/reminders_create', data);
+      ? await put('/api/v1/reminders/' + editingId, { ...data, is_active: editingIsActive })
+      : await post('/api/v1/reminders', data);
 
     submitBtn.disabled = false;
     if (res.ok) {

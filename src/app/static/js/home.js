@@ -114,7 +114,7 @@ function renderFocuses(items) {
     delBtn.addEventListener('click', async () => {
       delBtn.disabled = true;
       focusDeleteErrEl.classList.add('hidden');
-      const res = await del('/api/focuses/' + item.id);
+      const res = await del('/api/v1/focuses/' + item.id);
       if (res.ok) {
         await loadDashboard();
       } else {
@@ -213,7 +213,7 @@ function renderShortcuts(items) {
       const insertBefore = e.clientX - rect.left < rect.width / 2;
       shortcutsGridEl.insertBefore(draggedEl, insertBefore ? tile : tile.nextSibling);
       const order = Array.from(shortcutsGridEl.children).map((el) => Number(el.dataset.id));
-      await put('/api/shortcuts_reorder', { order });
+      await put('/api/v1/shortcuts/reorder', { order });
       await loadDashboard();
     });
 
@@ -225,7 +225,7 @@ function renderShortcuts(items) {
     delBtn.addEventListener('click', async () => {
       delBtn.disabled = true;
       shortcutDeleteErrEl.classList.add('hidden');
-      const res = await del('/api/shortcuts/' + item.id);
+      const res = await del('/api/v1/shortcuts/' + item.id);
       if (res.ok) {
         await loadDashboard();
       } else {
@@ -258,18 +258,25 @@ function renderShortcuts(items) {
 
 // ---- Load ----
 async function loadDashboard() {
-  const res = await get('/api/dashboard');
-  if (!res.ok) {
-    const message = res.error ?? 'Failed to load.';
+  // The former /api/dashboard aggregate is gone — the home page reads the three
+  // resources directly and composes them. "Upcoming reminders" (active, soonest
+  // first, top 5) is derived here rather than by a bespoke server endpoint.
+  const [focusRes, remindersRes, shortcutsRes] = await Promise.all([
+    get('/api/v1/focuses?limit=200'),
+    get('/api/v1/reminders?limit=200'),
+    get('/api/v1/shortcuts?limit=200'),
+  ]);
+  if (!focusRes.ok || !remindersRes.ok || !shortcutsRes.ok) {
+    const message = focusRes.error ?? remindersRes.error ?? shortcutsRes.error ?? 'Failed to load.';
     renderError(focusListEl, message);
     renderError(remindersListEl, message);
     renderError(shortcutsGridEl, message);
     return;
   }
-  const data = res.data ?? {};
-  renderFocuses(data.focuses ?? []);
-  renderReminders(data.reminders ?? []);
-  renderShortcuts(data.shortcuts ?? []);
+  const upcoming = (remindersRes.data ?? []).filter((r) => r.is_active).slice(0, 5);
+  renderFocuses(focusRes.data ?? []);
+  renderReminders(upcoming);
+  renderShortcuts(shortcutsRes.data ?? []);
 }
 
 // ---- Add-focus form (hand-built: home.js has no @inject-forms marker) ----
@@ -300,7 +307,7 @@ function setupFocusForm() {
     e.preventDefault();
     submitBtn.disabled = true;
     errEl.classList.add('hidden');
-    const res = await post('/api/focuses_create', { text: input.value });
+    const res = await post('/api/v1/focuses', { text: input.value });
     submitBtn.disabled = false;
     if (res.ok) {
       input.value = '';
@@ -352,7 +359,7 @@ function setupShortcutForm() {
     e.preventDefault();
     submitBtn.disabled = true;
     errEl.classList.add('hidden');
-    const res = await post('/api/shortcuts_create', { title: titleInput.value, url: urlInput.value });
+    const res = await post('/api/v1/shortcuts', { title: titleInput.value, url: urlInput.value });
     submitBtn.disabled = false;
     if (res.ok) {
       titleInput.value = '';
