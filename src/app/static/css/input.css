@@ -78,6 +78,12 @@
   --glow-soft: rgb(11 95 216 / 0.16);
   --text-glow: none;
 
+  /* Chrome and overlays are opaque, not glass. Panels sit *in* the page
+     and can afford to let the field through; the header, the drawer, a
+     dialog and a dropdown all sit *over* content, where translucency
+     turns whatever is behind them into noise under the text. */
+  --color-surface-solid: #ffffff;
+
   --panel-sheen: rgb(255 255 255 / 0.55);
   --panel-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.65),
@@ -110,6 +116,8 @@
   --glow-accent: rgb(61 149 255 / 0.75);
   --glow-soft: rgb(61 149 255 / 0.30);
   --text-glow: 0 0 14px rgb(61 149 255 / 0.40);
+
+  --color-surface-solid: #0d1526;
 
   --panel-sheen: rgb(96 156 255 / 0.10);
   --panel-shadow:
@@ -189,6 +197,27 @@ body::before {
 .bg-surface {
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
+}
+
+/* ...but anything that floats OVER content is solid. `.absolute.bg-surface`
+   is the kebab-menu dropdown; the header, drawer and dialogs are named
+   directly. This is the one place a skin rule overrides a utility's
+   background-color, and it is deliberately scoped to those four. */
+header.bg-surface,
+aside.bg-surface,
+[role="dialog"].bg-surface,
+.absolute.bg-surface {
+  background-color: var(--color-surface-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* The segmented nav rides on the now-opaque header, so it has nothing
+   left to blur — but it keeps its translucency, which reads as a raised
+   control against the chrome behind it. */
+header nav.bg-surface {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* `.border` (all four sides) marks a panel or card; the header and the
@@ -325,6 +354,82 @@ aside.bg-surface {
     background-clip: text;
     color: transparent;
   }
+}
+
+/*
+ * Dialogs rise into place. Opt-in via playDialogEntrance() in lib/modal.js
+ * rather than a bare `[role="dialog"]` rule, because the Add/Edit Todo
+ * modal is reused across opens and a plain animation would only ever play
+ * the first time.
+ */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+.dialog-enter {
+  animation: dialog-in 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/*
+ * Subtasks unfold. Desktop only — below 768px subtasks are always shown
+ * and there is no toggle to animate, so none of this applies.
+ *
+ * `height` is animated in pixels by setSubtasksExpanded() in todos.js,
+ * not here. The CSS-only alternative — transitioning grid-template-rows
+ * between 0fr and 1fr — needs interpolation of flexible track sizes,
+ * which older Safari doesn't do; this app is opened from iOS, so the
+ * panel would simply snap there. A pixel height transition is plain
+ * CSS 1 and behaves the same everywhere.
+ *
+ * CSS still owns the resting collapsed state (so the first render is
+ * correct before any JS runs, and so cleanup can drop the inline height)
+ * plus the opacity and border fade, which need no measurement.
+ */
+@media (min-width: 768px) {
+  .subtasks-panel {
+    overflow: hidden;
+    transition:
+      height 320ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 220ms ease,
+      border-top-color 220ms ease;
+  }
+
+  .subtasks-panel[data-collapsed="true"] {
+    height: 0;
+    opacity: 0;
+    border-top-color: transparent;
+  }
+}
+
+/*
+ * A cleared task collapses out of the stack. Height goes to zero along
+ * with its own padding, margin and borders, so the rows below slide up
+ * into the gap on their own — no FLIP bookkeeping needed, the normal
+ * flow does the reflow. `!important` is here to outrank the `p-3` and
+ * `space-y-2` utilities on the row rather than to win a specificity war.
+ */
+.task-clearing {
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-18px);
+  height: 0 !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  transition:
+    height 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    margin 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-width 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease,
+    transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /*
