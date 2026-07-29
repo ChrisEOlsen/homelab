@@ -174,6 +174,28 @@ html {
   background-color: var(--color-canvas);
 }
 
+/*
+ * No page scrollbar.
+ * Hidden, not disabled — overflow is untouched, so the wheel, trackpad,
+ * touch, keyboard (Space / PageDown / arrows / Home / End) and
+ * scroll-into-view all behave exactly as before; only the 14px chrome
+ * down the right edge is gone.
+ *
+ * Scoped to the document scroller on purpose. Scroll containers inside
+ * the page — the wide code blocks and tables in Codex notes, the nav
+ * strip, the drawer — keep their bars, because there the scrollbar is
+ * the only hint that content continues past the edge.
+ */
+html {
+  scrollbar-width: none; /* standard; Firefox and Chrome 121+ */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 body.bg-canvas {
   background-color: transparent;
 }
