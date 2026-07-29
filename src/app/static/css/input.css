@@ -3,17 +3,24 @@
 @source "../pages/**/*.html";
 
 /*
- * Homelab design tokens
- * ---------------------
- * Direction: an elegant, warm-neutral, light interface — a polished
- * everyday app, not a techno/cyberpunk console. Warm ivory canvas,
- * a single restrained accent (used for links, buttons, focus rings),
- * plus two functional colors: ok (success/done) and danger
- * (destructive). No gradients, no glassmorphism — depth comes from
- * three flat elevation layers (canvas < surface < surface-raised)
- * separated by 1px hairlines.
+ * Homelab design tokens — "Uplink"
+ * --------------------------------
+ * Direction: the homelab as a lit instrument panel. A deep navy field
+ * (never pure black) with dark glass panels whose hairlines emit azure
+ * light. Depth comes from three layers as before — canvas < surface <
+ * surface-raised — but surface and surface-raised are now translucent,
+ * so the ambient gradient behind the page shows through them and the
+ * panels read as backlit glass instead of flat fills.
  *
- * Reuse these tokens on every other page for a consistent system:
+ * Corners stay sharp (zero radius, as they always were). A neon HUD
+ * with hard edges reads as instrumentation; the same palette with big
+ * rounded cards reads as generic glassmorphism.
+ *
+ * The one primary is electric azure. Violet and cyan appear ONLY as
+ * gradient endpoints — never as standalone UI colors — so the interface
+ * keeps a single accent while gradients still have somewhere to travel.
+ *
+ * Reuse these tokens on every page for a consistent system:
  *   bg-canvas / bg-surface / bg-surface-raised
  *   text-ink / text-ink-dim
  *   border-hairline
@@ -26,34 +33,100 @@
  * utility and produce a confusing/ambiguous class name.
  *
  * Note: the hairline/border token is named "--color-hairline" (kept
- * from the prior theme's naming) rather than "--color-border" — only
- * the value changed here, not the name, to minimize diff churn for
- * pages that already reference border-hairline/divide-hairline.
+ * from earlier themes) rather than "--color-border" — only the value
+ * has ever changed, so pages already referencing border-hairline /
+ * divide-hairline keep working untouched.
+ *
+ * Note: surface / surface-raised carry alpha. Tailwind's slash-opacity
+ * modifier (bg-surface/50) would compound with that alpha, so it is not
+ * used anywhere in this app — use the token as-is.
  */
 @theme {
-  --color-canvas: #faf7f2;
-  --color-surface: #ffffff;
-  --color-surface-raised: #f3efe6;
-  --color-hairline: #e6dfd2;
-  --color-ink: #2b2620;
-  --color-ink-dim: #77705f;
-  --color-accent: #a8632b;
-  --color-accent-dim: #c98a54;
-  --color-ok: #4b7a5b;
-  --color-danger: #b0463c;
+  /* Light — "daylight panel". Same system, sun on it: the glows drop
+     to near-nothing and the accent darkens enough to stay readable on
+     a pale field. */
+  --color-canvas: #eef3fc;
+  --color-surface: rgb(255 255 255 / 0.78);
+  --color-surface-raised: rgb(224 234 251 / 0.72);
+  --color-hairline: rgb(38 96 190 / 0.22);
+  --color-ink: #0c1730;
+  --color-ink-dim: #4a5f88;
+  --color-accent: #0b5fd8;
+  --color-accent-dim: #4d96ff;
+  --color-ok: #00734d;
+  --color-danger: #cc2a4a;
+
+  /* Instrument register: monospace for labels, clocks, counts and
+     metadata; sans for prose. The split is the subject's own
+     vernacular — a console reading out over a document. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono",
+    "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+/*
+ * Non-utility design variables
+ * ----------------------------
+ * These do not generate Tailwind classes — they feed the skin rules at
+ * the bottom of this file (ambient field, panel depth, glow strength,
+ * gradient endpoints). Split light/dark the same way the colors are.
+ */
+:root {
+  --ambient-1: rgb(59 130 246 / 0.26);
+  --ambient-2: rgb(124 92 255 / 0.20);
+  --ambient-3: rgb(34 211 238 / 0.18);
+  --grid-line: rgb(38 96 190 / 0.06);
+
+  --grad-violet: #6d4bff;
+  --grad-azure: #0b5fd8;
+  --grad-cyan: #0aa8c8;
+  --title-start: var(--color-ink);
+
+  --glow-accent: rgb(11 95 216 / 0.45);
+  --glow-soft: rgb(11 95 216 / 0.16);
+  --text-glow: none;
+
+  --panel-sheen: rgb(255 255 255 / 0.55);
+  --panel-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    0 18px 40px -32px rgb(12 23 48 / 0.55);
+  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5);
+  --panel-blur: blur(14px) saturate(130%);
 }
 
 :root[data-theme="dark"] {
-  --color-canvas: #1c1a16;
-  --color-surface: #262319;
-  --color-surface-raised: #322d21;
-  --color-hairline: #3d382a;
-  --color-ink: #f0ece2;
-  --color-ink-dim: #a89d87;
-  --color-accent: #c98a54;
-  --color-accent-dim: #a8632b;
-  --color-ok: #6fa87f;
-  --color-danger: #d16b60;
+  --color-canvas: #060b18;
+  --color-surface: rgb(14 22 44 / 0.72);
+  --color-surface-raised: rgb(26 38 72 / 0.6);
+  --color-hairline: rgb(96 156 255 / 0.22);
+  --color-ink: #e8f0ff;
+  --color-ink-dim: #8aa0cc;
+  --color-accent: #3d95ff;
+  --color-accent-dim: #1e5fd0;
+  --color-ok: #2ff2a8;
+  --color-danger: #ff5470;
+
+  --ambient-1: rgb(61 149 255 / 0.30);
+  --ambient-2: rgb(124 92 255 / 0.26);
+  --ambient-3: rgb(34 224 255 / 0.17);
+  --grid-line: rgb(120 170 255 / 0.05);
+
+  --grad-violet: #7c5cff;
+  --grad-azure: #3d95ff;
+  --grad-cyan: #22e0ff;
+  --title-start: #ffffff;
+
+  --glow-accent: rgb(61 149 255 / 0.75);
+  --glow-soft: rgb(61 149 255 / 0.30);
+  --text-glow: 0 0 14px rgb(61 149 255 / 0.40);
+
+  --panel-sheen: rgb(96 156 255 / 0.10);
+  --panel-shadow:
+    inset 0 1px 0 rgb(140 190 255 / 0.10),
+    0 24px 50px -34px rgb(0 0 0 / 0.95);
+  --row-shadow: inset 0 1px 0 rgb(140 190 255 / 0.07);
+  --panel-blur: blur(14px) saturate(150%);
 }
 
 @layer base {
@@ -74,9 +147,240 @@
   }
 }
 
+/* ------------------------------------------------------------------
+ * Skin
+ * ------------------------------------------------------------------
+ * Everything below is UNLAYERED on purpose. Tailwind ships its
+ * utilities inside `@layer utilities`, and unlayered author CSS always
+ * outranks layered author CSS regardless of specificity — so these
+ * rules can decorate the existing token classes without !important and
+ * without specificity escalation.
+ *
+ * They are also strictly ADDITIVE where it matters: none of them set
+ * `background-color`, `display`, or `position` on a shared utility, so
+ * the utility keeps ownership of the fill and nothing in the existing
+ * markup or JS changes behavior. This is what lets one stylesheet
+ * re-skin ~5,900 lines of JS-built DOM across all seven pages.
+ * ------------------------------------------------------------------ */
+
+/*
+ * Ambient field.
+ * A fixed pseudo-element rather than `background-attachment: fixed`,
+ * which iOS Safari ignores and desktop repaints expensively on scroll.
+ * The canvas color moves to <html> so the layer has something to sit
+ * in front of; body's own fill goes transparent to let it through.
+ * body is `flex flex-col`, but a fixed-position pseudo-element is out
+ * of flow and never becomes a flex item.
+ */
+html {
+  background-color: var(--color-canvas);
+}
+
+body.bg-canvas {
+  background-color: transparent;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1100px 620px at 10% -10%, var(--ambient-1), transparent 62%),
+    radial-gradient(900px 560px at 94% 2%, var(--ambient-2), transparent 60%),
+    radial-gradient(1000px 700px at 48% 112%, var(--ambient-3), transparent 62%),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 72px 72px, 72px 72px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
+}
+
+/* Backlit glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
+   already sit on top of a blurred panel, so blurring them again costs
+   compositing for no visible gain. */
+.bg-surface {
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+}
+
+/* `.border` (all four sides) marks a panel or card; the header and the
+   drawer use `border-b` / `border-l` and are skinned separately below.
+   The sheen is a background-IMAGE, so the `bg-surface` utility keeps
+   owning the background-color underneath it — the panel reads as lit
+   from its own top edge. */
+.border.bg-surface {
+  box-shadow: var(--panel-shadow);
+  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 96px);
+}
+
+.border.bg-surface-raised {
+  box-shadow: var(--row-shadow);
+}
+
+/* Sticky header: the panel it floats over is the whole page, so it
+   gets the blur but a downward-only shadow. `position: sticky` already
+   establishes a containing block for the rail below. */
+header.bg-surface {
+  box-shadow: 0 10px 30px -26px rgb(0 0 0 / 0.8);
+}
+
+aside.bg-surface {
+  box-shadow: -24px 0 60px -40px rgb(0 0 0 / 0.9);
+}
+
+/* A dialog floats over the scrim rather than over the page, so it needs
+   a harder edge and a deeper cast than an in-page panel to separate. */
+[role="dialog"].bg-surface {
+  box-shadow:
+    var(--panel-shadow),
+    0 0 0 1px var(--color-hairline),
+    0 44px 90px -44px rgb(0 0 0 / 0.95);
+}
+
+/*
+ * Signature: the uplink rail.
+ * A packet of light crossing the hairline under the header, on the
+ * slow loop of a switch's link-activity LED. It is the only ambient
+ * animation on the page — everything else moves on interaction.
+ */
+.uplink-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.uplink-rail::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 18%;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--grad-violet),
+    var(--grad-cyan),
+    transparent
+  );
+  animation: uplink-sweep 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes uplink-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(620%);
+  }
+}
+
+/* Accent surfaces emit. The LED dots, the primary buttons and the
+   focus counters all carry `bg-accent`, so the glow lands exactly on
+   the elements that are meant to look powered. */
+/* Solid accent fills stay azure→cyan. Violet is reserved for the rail,
+   the ambient field and the page title — places where nothing sits on
+   top of it — because dark `text-canvas` labels ride on these fills and
+   violet is the one endpoint that drops their contrast. */
+.bg-accent {
+  background-image: linear-gradient(
+    120deg,
+    var(--grad-azure),
+    var(--grad-cyan)
+  );
+  box-shadow: 0 0 14px -2px var(--glow-accent);
+}
+
+.text-accent {
+  text-shadow: var(--text-glow);
+}
+
+.border-accent {
+  box-shadow: 0 0 20px -8px var(--glow-accent);
+}
+
+/* Ghost buttons ignite on hover: the flat accent fill becomes the full
+   violet→cyan sweep. */
+.hover\:bg-accent:hover {
+  background-image: linear-gradient(
+    100deg,
+    var(--grad-azure),
+    var(--grad-cyan)
+  );
+  box-shadow: 0 0 26px -6px var(--glow-accent);
+}
+
+.hover\:border-accent:hover,
+.border.bg-surface-raised:hover {
+  box-shadow:
+    var(--row-shadow),
+    0 0 22px -8px var(--glow-soft);
+}
+
+/* Page titles pick up the gradient once, at the top of the page.
+   `width: fit-content` is load-bearing: an <h1> is a block element, so
+   without it the gradient spans the full content column and a short
+   word like "Codex" only ever shows its first few percent. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .page-title {
+    width: fit-content;
+    background-image: linear-gradient(
+      100deg,
+      var(--title-start),
+      var(--grad-azure) 62%,
+      var(--grad-cyan)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Instrument labels — the small uppercase section eyebrows read in the
+   same monospace register as the nav, clock and footer. */
+.uppercase.tracking-widest {
+  font-family: var(--font-mono);
+}
+
+/*
+ * Boot sequence: panels rise as the page comes up.
+ * `backwards` fill, not `both` — the element holds the from-state
+ * during its delay but reverts to no transform once finished, so it
+ * never leaves behind a containing block that would capture a
+ * fixed-position descendant.
+ */
+@keyframes boot-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+main > * {
+  animation: boot-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+main > *:nth-child(1) { animation-delay: 40ms; }
+main > *:nth-child(2) { animation-delay: 110ms; }
+main > *:nth-child(3) { animation-delay: 180ms; }
+main > *:nth-child(4) { animation-delay: 250ms; }
+main > *:nth-child(n + 5) { animation-delay: 320ms; }
+
+/* The header beacon: opacity carries the pulse, the halo breathes with
+   it. Animations outrank the normal `.bg-accent` box-shadow above. */
 @keyframes led-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 16px 1px var(--glow-accent);
+  }
+  50% {
+    opacity: 0.45;
+    box-shadow: 0 0 6px -1px var(--glow-soft);
+  }
 }
 
 .led-pulse {
@@ -84,12 +388,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .led-pulse {
+  .led-pulse,
+  .uplink-rail::after {
     animation: none;
   }
   * {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    /* Without this, an `infinite` animation collapsed to 0.01ms spins
+       at ~100k iterations/second instead of stopping. */
+    animation-iteration-count: 1 !important;
   }
 }
 
