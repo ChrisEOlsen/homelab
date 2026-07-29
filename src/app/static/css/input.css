@@ -55,14 +55,6 @@
   --color-accent-dim: #4d96ff;
   --color-ok: #00734d;
   --color-danger: #cc2a4a;
-
-  /* Instrument register: monospace for labels, clocks, counts and
-     metadata; sans for prose. The split is the subject's own
-     vernacular — a console reading out over a document. */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono",
-    "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 /*
@@ -76,7 +68,6 @@
   --ambient-1: rgb(59 130 246 / 0.26);
   --ambient-2: rgb(124 92 255 / 0.20);
   --ambient-3: rgb(34 211 238 / 0.18);
-  --grid-line: rgb(38 96 190 / 0.06);
 
   --grad-violet: #6d4bff;
   --grad-azure: #0b5fd8;
@@ -110,7 +101,6 @@
   --ambient-1: rgb(61 149 255 / 0.30);
   --ambient-2: rgb(124 92 255 / 0.26);
   --ambient-3: rgb(34 224 255 / 0.17);
-  --grid-line: rgb(120 170 255 / 0.05);
 
   --grad-violet: #7c5cff;
   --grad-azure: #3d95ff;
@@ -189,11 +179,8 @@ body::before {
   background-image:
     radial-gradient(1100px 620px at 10% -10%, var(--ambient-1), transparent 62%),
     radial-gradient(900px 560px at 94% 2%, var(--ambient-2), transparent 60%),
-    radial-gradient(1000px 700px at 48% 112%, var(--ambient-3), transparent 62%),
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 72px 72px, 72px 72px;
-  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
+    radial-gradient(1000px 700px at 48% 112%, var(--ambient-3), transparent 62%);
+  background-repeat: no-repeat;
 }
 
 /* Backlit glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
@@ -338,12 +325,6 @@ aside.bg-surface {
     background-clip: text;
     color: transparent;
   }
-}
-
-/* Instrument labels — the small uppercase section eyebrows read in the
-   same monospace register as the nav, clock and footer. */
-.uppercase.tracking-widest {
-  font-family: var(--font-mono);
 }
 
 /*
