@@ -1,4 +1,83 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { confirmAction, playDialogEntrance } from '/static/js/lib/modal.js';
+
+// Every timing here has a matching transition/animation duration in
+// input.css. Kept together so the two can't drift apart silently.
+const CLEAR_ROW_MS = 380;
+const CLEAR_STAGGER_MS = 45;
+
+const prefersReducedMotion = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const SUBTASK_PANEL_MS = 320;
+
+// Opens or closes a todo's inline subtasks panel.
+//
+// The height is animated here in pixels rather than in CSS because the
+// CSS-only version (transitioning grid-template-rows 0fr <-> 1fr) relies
+// on interpolating flexible track sizes, which older Safari doesn't
+// support — and this app gets opened from iOS. See the .subtasks-panel
+// note in input.css. CSS keeps the opacity/border fade and the resting
+// collapsed state; only height is scripted.
+//
+// The natural height is read off the inner content wrapper, which stays
+// laid out at full size even while the panel is clipped to zero — so no
+// state has to be flipped and re-measured to find the target.
+function setSubtasksExpanded(panel, expand) {
+  const inner = panel.firstElementChild;
+  const animate =
+    window.matchMedia('(min-width: 768px)').matches && !prefersReducedMotion();
+
+  if (panel._subtaskTransitionEnd) {
+    panel.removeEventListener('transitionend', panel._subtaskTransitionEnd);
+    panel._subtaskTransitionEnd = null;
+  }
+
+  if (!animate || !inner) {
+    panel.style.height = '';
+    panel.dataset.collapsed = String(!expand);
+    return;
+  }
+
+  const from = panel.getBoundingClientRect().height;
+  const to = expand ? inner.getBoundingClientRect().height : 0;
+
+  // Pin the current height before flipping state — the inline value
+  // outranks the collapsed rule's `height: 0`, so this works in both
+  // directions and the panel never jumps before it animates.
+  panel.style.height = from + 'px';
+  panel.dataset.collapsed = String(!expand);
+  void panel.offsetHeight;
+  panel.style.height = to + 'px';
+
+  const onEnd = (e) => {
+    if (e.propertyName !== 'height' || e.target !== panel) return;
+    panel.removeEventListener('transitionend', onEnd);
+    panel._subtaskTransitionEnd = null;
+    // Back to auto so the panel tracks content added later.
+    panel.style.height = '';
+  };
+  panel._subtaskTransitionEnd = onEnd;
+  panel.addEventListener('transitionend', onEnd);
+}
+
+// Collapses a row out of the list: pin its current height, then let the
+// .task-clearing transition run it to zero. Height has to be an explicit
+// number first — `auto` is not an animatable starting value.
+function collapseRowOut(el, delay) {
+  if (prefersReducedMotion()) {
+    el.remove();
+    return Promise.resolve();
+  }
+  el.style.height = el.getBoundingClientRect().height + 'px';
+  void el.offsetHeight;
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      el.classList.add('task-clearing');
+      setTimeout(resolve, CLEAR_ROW_MS);
+    }, delay);
+  });
+}
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
@@ -254,7 +333,7 @@ let todoModalBackdrop, todoModalPanel, todoModalTriggerEl;
 // default with no per-item fetch. `expandedTodoIds` still tracks the
 // desktop show/hide toggle (several todos can be expanded independently);
 // on mobile the toggle button is hidden and subtasks always render
-// regardless of this set (see the `md:hidden` class logic below).
+// regardless of this set (see the `.subtasks-panel` class logic below).
 let expandedTodoIds = new Set();
 let subtasksByTodoId = new Map();
 
@@ -419,10 +498,38 @@ function renderMain() {
   clearBtn.className =
     'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   clearBtn.textContent = 'Clear Completed';
-  clearBtn.addEventListener('click', async () => {
-    if (!window.confirm('Delete all completed todos in this list?')) return;
+  clearBtn.addEventListener('click', async (e) => {
+    const doneCount = listTodos.filter((t) => t.is_done).length;
+    if (doneCount === 0) {
+      deleteErrEl.textContent = 'Nothing to clear — no completed tasks in this list.';
+      deleteErrEl.classList.remove('hidden');
+      return;
+    }
+    deleteErrEl.classList.add('hidden');
+
+    const ok = await confirmAction({
+      title: doneCount === 1 ? 'Clear 1 completed task?' : `Clear ${doneCount} completed tasks?`,
+      message: 'They are deleted from this list. This cannot be undone.',
+      confirmLabel: 'Clear',
+      danger: true,
+      trigger: e.currentTarget,
+    });
+    if (!ok) return;
+
     clearBtn.disabled = true;
-    await post('/api/v1/todo_lists/' + activeListId + '/clear_completed');
+
+    // Animate first, then delete. Each cleared row collapses to nothing
+    // and the rows below slide up to close the gap; the reload afterwards
+    // lands on a list that already looks the way it's about to be.
+    const doneIds = new Set(listTodos.filter((t) => t.is_done).map((t) => t.id));
+    const rows = [...ul.children].filter((li) => doneIds.has(Number(li.dataset.id)));
+    await Promise.all(rows.map((li, i) => collapseRowOut(li, i * CLEAR_STAGGER_MS)));
+
+    const res = await post('/api/v1/todo_lists/' + activeListId + '/clear_completed');
+    if (!res.ok) {
+      deleteErrEl.textContent = res.error ?? 'Failed to clear completed tasks.';
+      deleteErrEl.classList.remove('hidden');
+    }
     await loadList();
   });
   headerBtns.appendChild(clearBtn);
@@ -488,18 +595,28 @@ function renderMain() {
     subtasksBtn.type = 'button';
     subtasksBtn.className =
       'hidden md:inline-block px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-    subtasksBtn.textContent = expandedTodoIds.has(item.id)
-      ? 'Hide Subtasks'
-      : item.subtask_count > 0
-        ? `Subtasks (${item.subtask_count})`
-        : 'Subtasks';
+    const subtasksBtnLabel = () =>
+      expandedTodoIds.has(item.id)
+        ? 'Hide Subtasks'
+        : item.subtask_count > 0
+          ? `Subtasks (${item.subtask_count})`
+          : 'Subtasks';
+    subtasksBtn.textContent = subtasksBtnLabel();
+    subtasksBtn.setAttribute('aria-expanded', String(expandedTodoIds.has(item.id)));
+    subtasksBtn.setAttribute('aria-controls', 'subtasks-inline-' + item.id);
+    // Toggles the panel in place instead of re-rendering the list. A
+    // render() would replace the element mid-flight and the unfold
+    // transition would have nothing to animate from.
     subtasksBtn.addEventListener('click', () => {
-      if (expandedTodoIds.has(item.id)) {
+      const wasExpanded = expandedTodoIds.has(item.id);
+      if (wasExpanded) {
         expandedTodoIds.delete(item.id);
       } else {
         expandedTodoIds.add(item.id);
       }
-      render();
+      setSubtasksExpanded(subWrap, !wasExpanded);
+      subtasksBtn.textContent = subtasksBtnLabel();
+      subtasksBtn.setAttribute('aria-expanded', String(!wasExpanded));
     });
     actions.appendChild(subtasksBtn);
 
@@ -554,19 +671,30 @@ function renderMain() {
 
     // Always in the DOM (data's already loaded — see loadList) so mobile
     // can show it unconditionally. On mobile it's always visible; on
-    // desktop `md:hidden` hides it unless this todo is expanded.
+    // desktop `.subtasks-panel[data-collapsed]` folds it away unless this
+    // todo is expanded.
     // The divider (border+padding) only applies where something is actually
     // visible — with zero subtasks, mobile shows nothing at all (the empty
     // text and add-form are desktop-only), so a bare border there read as a
     // stray line with nothing under it.
+    // The border stays on the panel but the top padding moves onto the
+    // inner wrapper, so the panel's height is the only thing that has to
+    // animate — padding on the animating box would need its own
+    // transition and a second measurement to stay in step.
     const hasSubtasks = item.subtask_count > 0;
-    const dividerClass = hasSubtasks
-      ? 'border-t border-hairline pt-3'
-      : 'md:border-t md:border-hairline md:pt-3';
+    const dividerClass = hasSubtasks ? 'border-t border-hairline' : 'md:border-t md:border-hairline';
+    const innerPadClass = hasSubtasks ? 'pt-3' : 'md:pt-3';
+    // `subtasks-panel` + data-collapsed replaces the old `md:hidden`
+    // toggle: same desktop-only hiding, but as an animatable state rather
+    // than display:none, which can't transition. Below 768px the CSS rule
+    // doesn't apply at all and the panel stays open, exactly as before.
     const subWrap = document.createElement('div');
     subWrap.id = 'subtasks-inline-' + item.id;
-    subWrap.className = 'pl-8 ' + dividerClass + (expandedTodoIds.has(item.id) ? '' : ' md:hidden');
-    subWrap.appendChild(renderInlineSubtasks(item.id));
+    subWrap.className = 'subtasks-panel pl-8 ' + dividerClass;
+    subWrap.dataset.collapsed = String(!expandedTodoIds.has(item.id));
+    const subInner = renderInlineSubtasks(item.id);
+    subInner.className += ' ' + innerPadClass;
+    subWrap.appendChild(subInner);
     li.appendChild(subWrap);
 
     makeRowDraggable(li, dragHandle, ul);
@@ -602,11 +730,15 @@ function openEditSubtaskModal(sub, todoId) {
   backdrop.className = 'fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4';
 
   const modal = document.createElement('div');
-  modal.className = 'bg-surface border border-hairline p-5 w-full max-w-md space-y-3';
+  modal.className = 'bg-surface border border-hairline p-5 w-full max-w-md space-y-3 dialog-enter';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'edit-subtask-title');
   modal.addEventListener('click', (e) => e.stopPropagation());
   backdrop.appendChild(modal);
 
   const heading = document.createElement('h3');
+  heading.id = 'edit-subtask-title';
   heading.className = 'text-sm font-semibold text-ink';
   heading.textContent = 'Edit Subtask';
   modal.appendChild(heading);
@@ -931,6 +1063,7 @@ function setupTodoListsCreateForm(container) {
 function openTodoModal(trigger) {
   todoModalTriggerEl = trigger ?? document.activeElement;
   todoModalBackdrop.classList.remove('hidden');
+  playDialogEntrance(todoModalPanel);
   document.addEventListener('keydown', onTodoModalKeydown);
   todoTitleInput.focus();
 }

@@ -8,10 +8,14 @@ function getStoredTheme() {
   }
 }
 
+// Dark is the app's default: the Uplink theme is built around emitted
+// light on a deep field, and the light theme is the daylight variant of
+// it rather than the other way round. An explicit choice still wins, and
+// the toggle writes one on first use.
 function getEffectiveTheme() {
   const stored = getStoredTheme();
   if (stored === 'light' || stored === 'dark') return stored;
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'dark';
 }
 
 function applyTheme(theme) {
