@@ -1,15 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 import { confirmAction, playDialogEntrance } from '/static/js/lib/modal.js';
-
-// Every timing here has a matching transition/animation duration in
-// input.css. Kept together so the two can't drift apart silently.
-const CLEAR_ROW_MS = 380;
-const CLEAR_STAGGER_MS = 45;
-
-const prefersReducedMotion = () =>
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-const SUBTASK_PANEL_MS = 320;
+import { collapseRowsOut, prefersReducedMotion } from '/static/js/lib/motion.js';
 
 // Opens or closes a todo's inline subtasks panel.
 //
@@ -59,24 +50,6 @@ function setSubtasksExpanded(panel, expand) {
   };
   panel._subtaskTransitionEnd = onEnd;
   panel.addEventListener('transitionend', onEnd);
-}
-
-// Collapses a row out of the list: pin its current height, then let the
-// .task-clearing transition run it to zero. Height has to be an explicit
-// number first — `auto` is not an animatable starting value.
-function collapseRowOut(el, delay) {
-  if (prefersReducedMotion()) {
-    el.remove();
-    return Promise.resolve();
-  }
-  el.style.height = el.getBoundingClientRect().height + 'px';
-  void el.offsetHeight;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      el.classList.add('task-clearing');
-      setTimeout(resolve, CLEAR_ROW_MS);
-    }, delay);
-  });
 }
 
 // ---- Clock (nav signature element) ----
@@ -523,7 +496,7 @@ function renderMain() {
     // lands on a list that already looks the way it's about to be.
     const doneIds = new Set(listTodos.filter((t) => t.is_done).map((t) => t.id));
     const rows = [...ul.children].filter((li) => doneIds.has(Number(li.dataset.id)));
-    await Promise.all(rows.map((li, i) => collapseRowOut(li, i * CLEAR_STAGGER_MS)));
+    await collapseRowsOut(rows);
 
     const res = await post('/api/v1/todo_lists/' + activeListId + '/clear_completed');
     if (!res.ok) {

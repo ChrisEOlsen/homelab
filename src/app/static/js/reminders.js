@@ -1,4 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { confirmAction } from '/static/js/lib/modal.js';
+import { collapseRowsOut } from '/static/js/lib/motion.js';
 
 // ---- Clock (nav signature element) ----
 function tickClock() {
@@ -153,18 +155,44 @@ function renderList(items) {
   clearBtn.className =
     'px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
   clearBtn.textContent = 'Clear Completed';
-  clearBtn.addEventListener('click', async () => {
+  clearBtn.addEventListener('click', async (e) => {
     const completed = items.filter((item) => !item.is_active);
-    if (completed.length === 0) return;
-    if (!window.confirm(`Delete ${completed.length} completed reminder(s)?`)) return;
-    clearBtn.disabled = true;
+    if (completed.length === 0) {
+      deleteErrEl.textContent = 'Nothing to clear — no completed reminders.';
+      deleteErrEl.classList.remove('hidden');
+      return;
+    }
     deleteErrEl.classList.add('hidden');
+
+    const ok = await confirmAction({
+      title:
+        completed.length === 1
+          ? 'Clear 1 completed reminder?'
+          : `Clear ${completed.length} completed reminders?`,
+      message: 'They are deleted for good. This cannot be undone.',
+      confirmLabel: 'Clear',
+      danger: true,
+      trigger: e.currentTarget,
+    });
+    if (!ok) return;
+
+    clearBtn.disabled = true;
+
+    // Animate first, then delete. Each cleared row collapses to nothing and
+    // the rows below slide up to close the gap; the reload afterwards lands
+    // on a list that already looks the way it's about to be.
+    const clearedIds = new Set(completed.map((item) => item.id));
+    const rows = [...app.querySelectorAll('li[data-id]')].filter((li) =>
+      clearedIds.has(Number(li.dataset.id))
+    );
+    await collapseRowsOut(rows);
+
     const results = await Promise.all(completed.map((item) => del('/api/v1/reminders/' + item.id)));
     if (results.some((res) => !res.ok)) {
       deleteErrEl.textContent = 'Some reminders failed to delete.';
       deleteErrEl.classList.remove('hidden');
     }
-    if (completed.some((item) => item.id === editingId)) resetFormToCreateMode();
+    if (clearedIds.has(editingId)) resetFormToCreateMode();
     await loadList();
   });
   header.appendChild(clearBtn);
@@ -186,6 +214,7 @@ function renderList(items) {
     const overdue = !completed && isOverdue(item);
 
     const li = document.createElement('li');
+    li.dataset.id = String(item.id);
     li.className =
       'border bg-surface-raised p-4 flex items-center gap-4' +
       (completed ? ' opacity-60 border-hairline' : overdue ? ' border-danger' : ' border-hairline');
