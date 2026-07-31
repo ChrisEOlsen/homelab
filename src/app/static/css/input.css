@@ -267,13 +267,29 @@ body::before {
   }
 }
 
+/*
+ * NEVER hand-write `-webkit-backdrop-filter` in this file.
+ *
+ * Tailwind's `--minify` runs Lightning CSS, which adds vendor prefixes
+ * itself. If the pair is already present it collapses them and keeps
+ * ONLY the `-webkit-` one — and Chrome does not implement that alias,
+ * so the blur silently never applies. Writing just the standard
+ * property makes Lightning emit both, which is what we want. (The
+ * previous theme carried the manual prefix and had no working blur
+ * anywhere as a result.)
+ *
+ * Verify after any change here:
+ *   docker compose exec app sh -c \
+ *     'grep -o "backdrop-filter:[^;}]*" ./static/css/style.css | sort | uniq -c'
+ * Each value must appear twice — once prefixed, once not.
+ */
+
 /* Frosted glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
    already sit on top of a blurred panel, so blurring them again costs
    compositing for no visible gain. With 124 raised elements in the app,
    that matters on iOS. */
 .bg-surface {
   backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
 }
 
 /* Chrome floats over content and over the wallpaper's bright sky band,
@@ -285,7 +301,6 @@ aside.bg-surface,
 [role="dialog"].bg-surface {
   background-color: var(--color-surface-chrome);
   backdrop-filter: var(--chrome-blur);
-  -webkit-backdrop-filter: var(--chrome-blur);
 }
 
 /* The kebab dropdown stays effectively opaque: it is small, it pops
@@ -294,7 +309,6 @@ aside.bg-surface,
 .absolute.bg-surface {
   background-color: var(--color-surface-solid);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 /* The segmented nav rides on already-blurred chrome, so it has nothing
@@ -302,7 +316,6 @@ aside.bg-surface,
    control against the chrome behind it. */
 header nav.bg-surface {
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 /* Ghost buttons — bordered, with no fill of their own — frequently sit
@@ -317,7 +330,6 @@ header nav.bg-surface {
 button.border:not(.bg-accent):not(.bg-surface):not(.bg-surface-raised):not(.bg-canvas):not(.bg-ok):not(.bg-danger) {
   background-color: var(--color-surface);
   backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
 }
 
 /* `.border` (all four sides) marks a panel or card; the header and the
@@ -566,7 +578,6 @@ main > *:nth-child(n + 5) { animation-delay: 320ms; }
 footer {
   background-color: var(--color-surface-chrome);
   backdrop-filter: var(--chrome-blur);
-  -webkit-backdrop-filter: var(--chrome-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {
