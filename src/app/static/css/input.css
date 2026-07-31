@@ -335,6 +335,76 @@ aside.bg-surface {
     0 44px 90px -44px rgb(0 0 0 / 0.95);
 }
 
+/* ------------------------------------------------------------------
+ * Corners
+ * ------------------------------------------------------------------
+ * Ordered generic → specific on purpose. Every rule below is unlayered
+ * and most are specificity 0,2,0, so ties are broken by source order,
+ * not by weight. Moving a rule up or down changes the result.
+ * ------------------------------------------------------------------ */
+
+/* Base: anything with a full border is a box — buttons, inputs, code
+   blocks, tables, chips. */
+.border {
+  border-radius: var(--r-well);
+}
+
+/* A table with border-collapse cannot round its own corners; the cells
+   square them off again and you get a visible mismatch. */
+table.border {
+  border-radius: 0;
+}
+
+.border.bg-surface-raised {
+  border-radius: var(--r-row);
+}
+
+.border.bg-surface {
+  border-radius: var(--r-panel);
+}
+
+/* Inline code chips are ~16px tall; the well radius swallows them. */
+.bg-canvas.px-1 {
+  border-radius: var(--r-chip);
+}
+
+[role="dialog"].bg-surface {
+  border-radius: var(--r-dialog);
+}
+
+/* The drawer slides in from the right, so only its left corners are
+   ever visible. */
+aside.bg-surface {
+  border-radius: var(--r-dialog) 0 0 var(--r-dialog);
+}
+
+/* The segmented nav becomes a pill. `overflow: hidden` is required, not
+   decorative: the segments' hover fills (hover:bg-surface-raised) paint
+   past a rounded parent's corners without it. */
+header nav.bg-surface {
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* Same reason — the dropdown's hovered rows would square its corners. */
+.absolute.bg-surface {
+  border-radius: var(--r-row);
+  overflow: hidden;
+}
+
+/* Filled accent buttons that carry no `.border`. */
+.bg-accent:not(.rounded-full) {
+  border-radius: var(--r-well);
+}
+
+/* Re-assert pills LAST. `rounded-full` is a Tailwind utility, so it
+   lives in @layer utilities — and every unlayered rule above outranks
+   it regardless of specificity. Without this line the 22 status dots
+   and pills in the app quietly become squares. */
+.rounded-full {
+  border-radius: 9999px;
+}
+
 /*
  * Signature: the uplink rail.
  * A packet of light crossing the hairline under the header, on the
