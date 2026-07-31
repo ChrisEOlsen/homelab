@@ -263,28 +263,37 @@ body::before {
   }
 }
 
-/* Backlit glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
+/* Frosted glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
    already sit on top of a blurred panel, so blurring them again costs
-   compositing for no visible gain. */
+   compositing for no visible gain. With 124 raised elements in the app,
+   that matters on iOS. */
 .bg-surface {
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
 }
 
-/* ...but anything that floats OVER content is solid. `.absolute.bg-surface`
-   is the kebab-menu dropdown; the header, drawer and dialogs are named
-   directly. This is the one place a skin rule overrides a utility's
-   background-color, and it is deliberately scoped to those four. */
+/* Chrome floats over content and over the wallpaper's bright sky band,
+   so it is glass at a higher alpha and a stronger blur than the panels
+   in the page. This is the one place a skin rule overrides a utility's
+   background-color, and it is deliberately scoped. */
 header.bg-surface,
 aside.bg-surface,
-[role="dialog"].bg-surface,
+[role="dialog"].bg-surface {
+  background-color: var(--color-surface-chrome);
+  backdrop-filter: var(--chrome-blur);
+  -webkit-backdrop-filter: var(--chrome-blur);
+}
+
+/* The kebab dropdown stays effectively opaque: it is small, it pops
+   over dense list rows, and translucency buys it nothing. Specificity
+   0,2,0 beats the 0,1,1 chrome selectors above regardless of order. */
 .absolute.bg-surface {
   background-color: var(--color-surface-solid);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
-/* The segmented nav rides on the now-opaque header, so it has nothing
+/* The segmented nav rides on already-blurred chrome, so it has nothing
    left to blur — but it keeps its translucency, which reads as a raised
    control against the chrome behind it. */
 header nav.bg-surface {
@@ -299,7 +308,7 @@ header nav.bg-surface {
    from its own top edge. */
 .border.bg-surface {
   box-shadow: var(--panel-shadow);
-  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 96px);
+  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 140px);
 }
 
 .border.bg-surface-raised {
