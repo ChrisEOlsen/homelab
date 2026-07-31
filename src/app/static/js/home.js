@@ -296,7 +296,7 @@ function setupFocusForm() {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
+    'text-xs font-medium px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
   submitBtn.textContent = 'Add';
   form.appendChild(submitBtn);
 
@@ -348,7 +348,7 @@ function setupShortcutForm() {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.className =
-    'text-xs uppercase tracking-wide px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
+    'text-xs font-medium px-3 py-2 border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors shrink-0';
   submitBtn.textContent = 'Add';
   form.appendChild(submitBtn);
 

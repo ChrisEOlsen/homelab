@@ -105,15 +105,15 @@ export function confirmAction({
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = cancelLabel;
   row.appendChild(cancelBtn);
 
   const confirmBtn = document.createElement('button');
   confirmBtn.type = 'button';
   confirmBtn.className = danger
-    ? 'px-4 py-2 border border-danger text-danger text-xs uppercase tracking-wide hover:bg-danger hover:text-canvas transition-colors'
-    : 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    ? 'px-4 py-2 border border-danger text-danger text-xs font-medium hover:bg-danger hover:text-canvas transition-colors'
+    : 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   confirmBtn.textContent = confirmLabel;
   row.appendChild(confirmBtn);
 

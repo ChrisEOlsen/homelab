@@ -196,7 +196,7 @@ function buildTable(headers, alignments, bodyRows) {
   headers.forEach((cell, index) => {
     const th = document.createElement('th');
     th.className =
-      'border border-hairline px-2 py-1 text-xs uppercase tracking-wide text-ink-dim ' +
+      'border border-hairline px-2 py-1 text-xs font-medium text-ink-dim ' +
       alignmentClass(alignments[index]);
     appendInline(th, cell);
     headRow.appendChild(th);

@@ -3,22 +3,16 @@
 @source "../pages/**/*.html";
 
 /*
- * Homelab design tokens — "Uplink"
+ * Homelab design tokens — "Sonoma"
  * --------------------------------
- * Direction: the homelab as a lit instrument panel. A deep navy field
- * (never pure black) with dark glass panels whose hairlines emit azure
- * light. Depth comes from three layers as before — canvas < surface <
- * surface-raised — but surface and surface-raised are now translucent,
- * so the ambient gradient behind the page shows through them and the
- * panels read as backlit glass instead of flat fills.
+ * Direction: frosted glass over a photograph. Panels are translucent
+ * enough that the wallpaper reads through them as color and shape, but
+ * never as detail — legibility outranks the effect everywhere it is a
+ * choice between the two. Depth is still three layers: canvas <
+ * surface < surface-raised.
  *
- * Corners stay sharp (zero radius, as they always were). A neon HUD
- * with hard edges reads as instrumentation; the same palette with big
- * rounded cards reads as generic glassmorphism.
- *
- * The one primary is electric azure. Violet and cyan appear ONLY as
- * gradient endpoints — never as standalone UI colors — so the interface
- * keeps a single accent while gradients still have somewhere to travel.
+ * The one accent is sunset apricot, sampled from the horizon in the
+ * wallpaper. It is flat: no gradients, no glow, no emitted light.
  *
  * Reuse these tokens on every page for a consistent system:
  *   bg-canvas / bg-surface / bg-surface-raised
@@ -37,94 +31,140 @@
  * has ever changed, so pages already referencing border-hairline /
  * divide-hairline keep working untouched.
  *
+ * Note: `canvas` is OPAQUE and must stay that way. It is not only the
+ * page fill — it is the background of every input well and code block
+ * (42 uses), and `text-canvas` is the LABEL COLOR on accent buttons.
+ * Give it alpha and every button label goes see-through. The page
+ * background is `--color-backdrop`, a separate non-utility var.
+ *
  * Note: surface / surface-raised carry alpha. Tailwind's slash-opacity
  * modifier (bg-surface/50) would compound with that alpha, so it is not
  * used anywhere in this app — use the token as-is.
  */
 @theme {
-  /* Light — "daylight panel". Same system, sun on it: the glows drop
-     to near-nothing and the accent darkens enough to stay readable on
-     a pale field. */
-  --color-canvas: #eef3fc;
-  --color-surface: rgb(255 255 255 / 0.78);
-  --color-surface-raised: rgb(224 234 251 / 0.72);
-  --color-hairline: rgb(38 96 190 / 0.22);
-  --color-ink: #0c1730;
-  --color-ink-dim: #4a5f88;
-  --color-accent: #0b5fd8;
-  --color-accent-dim: #4d96ff;
-  --color-ok: #00734d;
-  --color-danger: #cc2a4a;
+  /* Light — "day glass". NOT white panels with dark text: the wallpaper
+     is a dusk scene and stays dark enough that white type on smoked
+     glass is both more legible and more iOS-like. What actually makes
+     this the light theme is that the photo comes through brighter and
+     the panels are thinner (lower alpha) than in dark — same glass,
+     less of it. */
+  --color-canvas: #101714;
+  --color-surface: rgb(26 34 31 / 0.50);
+  /* Raised is opaque enough to stand on its own, because it does not
+     always sit on a panel — TaskMaster's rows sit straight on the
+     wallpaper. */
+  --color-surface-raised: rgb(74 88 82 / 0.44);
+  --color-hairline: rgb(255 255 255 / 0.22);
+  --color-ink: #f4f7f4;
+  --color-ink-dim: #c3cec8;
+  --color-accent: #ffb067;
+  --color-accent-dim: #c9762f;
+  --color-ok: #6fdba0;
+  --color-danger: #ff8080;
 }
 
 /*
  * Non-utility design variables
  * ----------------------------
  * These do not generate Tailwind classes — they feed the skin rules at
- * the bottom of this file (ambient field, panel depth, glow strength,
- * gradient endpoints). Split light/dark the same way the colors are.
+ * the bottom of this file (wallpaper, scrim, glass depth, radius).
+ * Split light/dark the same way the colors are.
  */
 :root {
-  --ambient-1: rgb(59 130 246 / 0.26);
-  --ambient-2: rgb(124 92 255 / 0.20);
-  --ambient-3: rgb(34 211 238 / 0.18);
+  /* Painted on <html>, behind the wallpaper. Its only job is to be the
+     first paint before the JPEG decodes, so it must not be white-hot
+     or the load reads as a flash. */
+  --color-backdrop: #1b2420;
 
-  --grad-violet: #6d4bff;
-  --grad-azure: #0b5fd8;
-  --grad-cyan: #0aa8c8;
-  --title-start: var(--color-ink);
+  /* Chrome — header, drawer, dialogs — is glass, but the least
+     transparent glass on the page. It floats over content AND over the
+     wallpaper's bright sky band, so it is where text sits closest to
+     noise. */
+  --color-surface-chrome: rgb(20 27 24 / 0.68);
+  --color-surface-solid: #19211d;
 
-  --glow-accent: rgb(11 95 216 / 0.45);
-  --glow-soft: rgb(11 95 216 / 0.16);
-  --text-glow: none;
+  /* The scrim sits between the photo and the content. Light mode lets
+     the photo through brightest, so it only darkens enough to guarantee
+     white type — top-weighted, because the apricot sky band is the
+     photo's brightest region and the sticky header lands right on it. */
+  --scrim:
+    linear-gradient(
+      180deg,
+      rgb(10 16 13 / 0.46) 0%,
+      rgb(10 16 13 / 0.24) 30%,
+      rgb(10 16 13 / 0.18) 100%
+    ),
+    radial-gradient(
+      130% 95% at 50% 38%,
+      transparent 45%,
+      rgb(6 11 9 / 0.30) 100%
+    );
 
-  /* Chrome and overlays are opaque, not glass. Panels sit *in* the page
-     and can afford to let the field through; the header, the drawer, a
-     dialog and a dropdown all sit *over* content, where translucency
-     turns whatever is behind them into noise under the text. */
-  --color-surface-solid: #ffffff;
+  --panel-blur: blur(28px) saturate(180%);
+  --chrome-blur: blur(34px) saturate(190%);
 
-  --panel-sheen: rgb(255 255 255 / 0.55);
+  --panel-sheen: rgb(255 255 255 / 0.10);
   --panel-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.65),
-    0 18px 40px -32px rgb(12 23 48 / 0.55);
-  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5);
-  --panel-blur: blur(14px) saturate(130%);
+    inset 0 1px 0 rgb(255 255 255 / 0.20),
+    0 18px 44px -30px rgb(0 0 0 / 0.6);
+  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+
+  --halo-accent: rgb(255 176 103 / 0.30);
+
+  /* Corner radius. One scale, referenced by the radius block below. */
+  --r-panel: 14px;
+  --r-row: 10px;
+  --r-well: 8px;
+  --r-dialog: 16px;
+  --r-chip: 4px;
 }
 
 :root[data-theme="dark"] {
-  --color-canvas: #060b18;
-  --color-surface: rgb(14 22 44 / 0.72);
-  --color-surface-raised: rgb(26 38 72 / 0.6);
-  --color-hairline: rgb(96 156 255 / 0.22);
-  --color-ink: #e8f0ff;
-  --color-ink-dim: #8aa0cc;
-  --color-accent: #3d95ff;
-  --color-accent-dim: #1e5fd0;
-  --color-ok: #2ff2a8;
-  --color-danger: #ff5470;
+  --color-canvas: #0b1210;
+  --color-surface: rgb(20 28 26 / 0.72);
+  --color-surface-raised: rgb(42 53 49 / 0.76);
+  --color-hairline: rgb(255 255 255 / 0.14);
+  --color-ink: #f1f5f2;
+  --color-ink-dim: #a6b3ac;
+  --color-accent: #ffb067;
+  --color-accent-dim: #c9762f;
+  --color-ok: #6fdba0;
+  --color-danger: #ff8080;
 
-  --ambient-1: rgb(61 149 255 / 0.30);
-  --ambient-2: rgb(124 92 255 / 0.26);
-  --ambient-3: rgb(34 224 255 / 0.17);
+  --color-backdrop: #0a100e;
 
-  --grad-violet: #7c5cff;
-  --grad-azure: #3d95ff;
-  --grad-cyan: #22e0ff;
-  --title-start: #ffffff;
+  --color-surface-chrome: rgb(16 23 21 / 0.85);
+  --color-surface-solid: #131a18;
 
-  --glow-accent: rgb(61 149 255 / 0.75);
-  --glow-soft: rgb(61 149 255 / 0.30);
-  --text-glow: 0 0 14px rgb(61 149 255 / 0.40);
+  --scrim:
+    linear-gradient(
+      180deg,
+      rgb(6 11 9 / 0.74) 0%,
+      rgb(6 11 9 / 0.52) 30%,
+      rgb(6 11 9 / 0.44) 100%
+    ),
+    radial-gradient(
+      130% 95% at 50% 38%,
+      transparent 42%,
+      rgb(4 8 7 / 0.48) 100%
+    );
 
-  --color-surface-solid: #0d1526;
+  --panel-blur: blur(28px) saturate(180%);
+  --chrome-blur: blur(34px) saturate(190%);
 
-  --panel-sheen: rgb(96 156 255 / 0.10);
+  --panel-sheen: rgb(255 255 255 / 0.07);
   --panel-shadow:
-    inset 0 1px 0 rgb(140 190 255 / 0.10),
-    0 24px 50px -34px rgb(0 0 0 / 0.95);
-  --row-shadow: inset 0 1px 0 rgb(140 190 255 / 0.07);
-  --panel-blur: blur(14px) saturate(150%);
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 22px 50px -30px rgb(0 0 0 / 0.9);
+  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+
+  --halo-accent: rgb(255 176 103 / 0.34);
+
+  --r-panel: 14px;
+  --r-row: 10px;
+  --r-well: 8px;
+  --r-dialog: 16px;
+  --r-chip: 4px;
 }
 
 @layer base {
@@ -162,16 +202,12 @@
  * ------------------------------------------------------------------ */
 
 /*
- * Ambient field.
- * A fixed pseudo-element rather than `background-attachment: fixed`,
- * which iOS Safari ignores and desktop repaints expensively on scroll.
- * The canvas color moves to <html> so the layer has something to sit
- * in front of; body's own fill goes transparent to let it through.
- * body is `flex flex-col`, but a fixed-position pseudo-element is out
- * of flow and never becomes a flex item.
+ * The backdrop color sits on <html>, behind the wallpaper, so the first
+ * paint before the JPEG decodes is a deep neutral rather than a flash.
+ * body's own fill goes transparent to let it through.
  */
 html {
-  background-color: var(--color-canvas);
+  background-color: var(--color-backdrop);
 }
 
 /*
@@ -200,46 +236,103 @@ body.bg-canvas {
   background-color: transparent;
 }
 
+/*
+ * Wallpaper.
+ * A fixed pseudo-element rather than `background-attachment: fixed`,
+ * which iOS Safari ignores and desktop repaints expensively on scroll.
+ * body is `flex flex-col`, but a fixed-position pseudo-element is out
+ * of flow and never becomes a flex item.
+ *
+ * The scrim is an earlier background layer in the same element, so it
+ * paints ON TOP of the photo — background layers stack first-on-top.
+ * One element, two layers, no extra DOM.
+ */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(1100px 620px at 10% -10%, var(--ambient-1), transparent 62%),
-    radial-gradient(900px 560px at 94% 2%, var(--ambient-2), transparent 60%),
-    radial-gradient(1000px 700px at 48% 112%, var(--ambient-3), transparent 62%);
-  background-repeat: no-repeat;
+  background-image: var(--scrim), url("/static/img/sonoma-evening.jpg");
+  background-size: auto, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
 }
 
-/* Backlit glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
+/*
+ * Phones get the 1600px file — a quarter the bytes. This is a media
+ * query, not image-set(): image-set() selects on pixel density, which
+ * cannot express "smaller viewport".
+ */
+@media (max-width: 899px) {
+  body::before {
+    background-image: var(--scrim), url("/static/img/sonoma-evening-sm.jpg");
+  }
+}
+
+/*
+ * NEVER hand-write `-webkit-backdrop-filter` in this file.
+ *
+ * Tailwind's `--minify` runs Lightning CSS, which adds vendor prefixes
+ * itself. If the pair is already present it collapses them and keeps
+ * ONLY the `-webkit-` one — and Chrome does not implement that alias,
+ * so the blur silently never applies. Writing just the standard
+ * property makes Lightning emit both, which is what we want. (The
+ * previous theme carried the manual prefix and had no working blur
+ * anywhere as a result.)
+ *
+ * Verify after any change here:
+ *   docker compose exec app sh -c \
+ *     'grep -o "backdrop-filter:[^;}]*" ./static/css/style.css | sort | uniq -c'
+ * Each value must appear twice — once prefixed, once not.
+ */
+
+/* Frosted glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
    already sit on top of a blurred panel, so blurring them again costs
-   compositing for no visible gain. */
+   compositing for no visible gain. With 124 raised elements in the app,
+   that matters on iOS. */
 .bg-surface {
   backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
 }
 
-/* ...but anything that floats OVER content is solid. `.absolute.bg-surface`
-   is the kebab-menu dropdown; the header, drawer and dialogs are named
-   directly. This is the one place a skin rule overrides a utility's
-   background-color, and it is deliberately scoped to those four. */
+/* Chrome floats over content and over the wallpaper's bright sky band,
+   so it is glass at a higher alpha and a stronger blur than the panels
+   in the page. This is the one place a skin rule overrides a utility's
+   background-color, and it is deliberately scoped. */
 header.bg-surface,
 aside.bg-surface,
-[role="dialog"].bg-surface,
+[role="dialog"].bg-surface {
+  background-color: var(--color-surface-chrome);
+  backdrop-filter: var(--chrome-blur);
+}
+
+/* The kebab dropdown stays effectively opaque: it is small, it pops
+   over dense list rows, and translucency buys it nothing. Specificity
+   0,2,0 beats the 0,1,1 chrome selectors above regardless of order. */
 .absolute.bg-surface {
   background-color: var(--color-surface-solid);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
-/* The segmented nav rides on the now-opaque header, so it has nothing
+/* The segmented nav rides on already-blurred chrome, so it has nothing
    left to blur — but it keeps its translucency, which reads as a raised
    control against the chrome behind it. */
 header nav.bg-surface {
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+}
+
+/* Ghost buttons — bordered, with no fill of their own — frequently sit
+   directly on the wallpaper rather than on a panel: TaskMaster's
+   "Add Task" / "Clear Completed" toolbar, a form's Cancel. Give them
+   the panel glass so their label has something to sit on.
+ *
+ * This does set background-color on a shared utility, which the rest of
+ * this file avoids — but only additively: the :not() chain excludes
+ * every fill utility in the system, so a button that already owns a
+ * background keeps it. Add any new bg-* token to that chain. */
+button.border:not(.bg-accent):not(.bg-surface):not(.bg-surface-raised):not(.bg-canvas):not(.bg-ok):not(.bg-danger) {
+  background-color: var(--color-surface);
+  backdrop-filter: var(--panel-blur);
 }
 
 /* `.border` (all four sides) marks a panel or card; the header and the
@@ -249,7 +342,7 @@ header nav.bg-surface {
    from its own top edge. */
 .border.bg-surface {
   box-shadow: var(--panel-shadow);
-  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 96px);
+  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 140px);
 }
 
 .border.bg-surface-raised {
@@ -276,106 +369,99 @@ aside.bg-surface {
     0 44px 90px -44px rgb(0 0 0 / 0.95);
 }
 
-/*
- * Signature: the uplink rail.
- * A packet of light crossing the hairline under the header, on the
- * slow loop of a switch's link-activity LED. It is the only ambient
- * animation on the page — everything else moves on interaction.
- */
-.uplink-rail {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
+/* ------------------------------------------------------------------
+ * Corners
+ * ------------------------------------------------------------------
+ * Ordered generic → specific on purpose. Every rule below is unlayered
+ * and most are specificity 0,2,0, so ties are broken by source order,
+ * not by weight. Moving a rule up or down changes the result.
+ * ------------------------------------------------------------------ */
+
+/* Base: anything with a full border is a box — buttons, inputs, code
+   blocks, tables, chips. */
+.border {
+  border-radius: var(--r-well);
+}
+
+/* A table with border-collapse cannot round its own corners; the cells
+   square them off again and you get a visible mismatch. */
+table.border {
+  border-radius: 0;
+}
+
+.border.bg-surface-raised {
+  border-radius: var(--r-row);
+}
+
+.border.bg-surface {
+  border-radius: var(--r-panel);
+}
+
+/* Inline code chips are ~16px tall; the well radius swallows them. */
+.bg-canvas.px-1 {
+  border-radius: var(--r-chip);
+}
+
+[role="dialog"].bg-surface {
+  border-radius: var(--r-dialog);
+}
+
+/* The drawer slides in from the right, so only its left corners are
+   ever visible. */
+aside.bg-surface {
+  border-radius: var(--r-dialog) 0 0 var(--r-dialog);
+}
+
+/* The segmented nav becomes a pill. `overflow: hidden` is required, not
+   decorative: the segments' hover fills (hover:bg-surface-raised) paint
+   past a rounded parent's corners without it. */
+header nav.bg-surface {
+  border-radius: 999px;
   overflow: hidden;
-  pointer-events: none;
 }
 
-.uplink-rail::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 18%;
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    var(--grad-violet),
-    var(--grad-cyan),
-    transparent
-  );
-  animation: uplink-sweep 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+/* Same reason — the dropdown's hovered rows would square its corners. */
+.absolute.bg-surface {
+  border-radius: var(--r-row);
+  overflow: hidden;
 }
 
-@keyframes uplink-sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(620%);
-  }
+/* Filled accent buttons that carry no `.border`. */
+.bg-accent:not(.rounded-full) {
+  border-radius: var(--r-well);
 }
 
-/* Accent surfaces emit. The LED dots, the primary buttons and the
-   focus counters all carry `bg-accent`, so the glow lands exactly on
-   the elements that are meant to look powered. */
-/* Solid accent fills stay azure→cyan. Violet is reserved for the rail,
-   the ambient field and the page title — places where nothing sits on
-   top of it — because dark `text-canvas` labels ride on these fills and
-   violet is the one endpoint that drops their contrast. */
-.bg-accent {
-  background-image: linear-gradient(
-    120deg,
-    var(--grad-azure),
-    var(--grad-cyan)
-  );
-  box-shadow: 0 0 14px -2px var(--glow-accent);
+/* Re-assert pills LAST. `rounded-full` is a Tailwind utility, so it
+   lives in @layer utilities — and every unlayered rule above outranks
+   it regardless of specificity. Without this line the 22 status dots
+   and pills in the app quietly become squares. */
+.rounded-full {
+  border-radius: 9999px;
 }
 
-.text-accent {
-  text-shadow: var(--text-glow);
-}
-
-.border-accent {
-  box-shadow: 0 0 20px -8px var(--glow-accent);
-}
-
-/* Ghost buttons ignite on hover: the flat accent fill becomes the full
-   violet→cyan sweep. */
+/* The accent is flat. No gradient fill, no emitted glow — apricot is
+   the light in the photograph, and the UI does not need to also glow.
+   `.bg-accent` deliberately sets no background-image, so the utility
+   keeps sole ownership of the fill. */
 .hover\:bg-accent:hover {
-  background-image: linear-gradient(
-    100deg,
-    var(--grad-azure),
-    var(--grad-cyan)
-  );
-  box-shadow: 0 0 26px -6px var(--glow-accent);
+  color: var(--color-canvas);
 }
 
+/* Rows lift on hover instead of igniting. */
 .hover\:border-accent:hover,
 .border.bg-surface-raised:hover {
   box-shadow:
     var(--row-shadow),
-    0 0 22px -8px var(--glow-soft);
+    0 6px 18px -12px rgb(0 0 0 / 0.4);
 }
 
-/* Page titles pick up the gradient once, at the top of the page.
-   `width: fit-content` is load-bearing: an <h1> is a block element, so
-   without it the gradient spans the full content column and a short
-   word like "Codex" only ever shows its first few percent. */
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  .page-title {
-    width: fit-content;
-    background-image: linear-gradient(
-      100deg,
-      var(--title-start),
-      var(--grad-azure) 62%,
-      var(--grad-cyan)
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
+/*
+ * Page titles are the one piece of text with no panel behind it — the
+ * <h1> sits directly on the wallpaper. Solid ink plus a soft shadow to
+ * hold it against whatever the photo is doing underneath.
+ */
+.page-title {
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.45);
 }
 
 /*
@@ -478,28 +564,22 @@ main > *:nth-child(3) { animation-delay: 180ms; }
 main > *:nth-child(4) { animation-delay: 250ms; }
 main > *:nth-child(n + 5) { animation-delay: 320ms; }
 
-/* The header beacon: opacity carries the pulse, the halo breathes with
-   it. Animations outrank the normal `.bg-accent` box-shadow above. */
-@keyframes led-pulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 16px 1px var(--glow-accent);
-  }
-  50% {
-    opacity: 0.45;
-    box-shadow: 0 0 6px -1px var(--glow-soft);
-  }
+/* The header beacon. Steady, not throbbing — a lit indicator rather
+   than a blinking link-activity LED. */
+.led-pulse {
+  box-shadow:
+    0 0 0 3px var(--halo-accent),
+    0 0 12px 0 var(--halo-accent);
 }
 
-.led-pulse {
-  animation: led-pulse 2.4s ease-in-out infinite;
+/* The footer is the only chrome with no fill of its own — it would
+   otherwise put text-ink-dim directly on the photograph. */
+footer {
+  background-color: var(--color-surface-chrome);
+  backdrop-filter: var(--chrome-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .led-pulse,
-  .uplink-rail::after {
-    animation: none;
-  }
   * {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

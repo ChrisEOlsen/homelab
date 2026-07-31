@@ -159,7 +159,7 @@ function renderSidebar() {
 
   jNewBtn = document.createElement('button');
   jNewBtn.type = 'button';
-  jNewBtn.className = 'w-full px-3 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  jNewBtn.className = 'w-full px-3 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   jNewBtn.textContent = 'New Entry';
   jNewBtn.addEventListener('click', async () => {
     jNewBtn.disabled = true;
@@ -186,7 +186,7 @@ function renderSidebar() {
     monthWrap.className = 'space-y-1';
 
     const header = document.createElement('p');
-    header.className = 'text-xs uppercase tracking-wide text-ink-dim pt-2';
+    header.className = 'text-xs font-medium text-ink-dim pt-2';
     header.textContent = monthLabel(key);
     monthWrap.appendChild(header);
 
@@ -233,7 +233,7 @@ function renderDetail() {
   }
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   jTitleInput = document.createElement('input');
   jTitleInput.type = 'text';
@@ -248,7 +248,7 @@ function renderDetail() {
   const moodWrap = document.createElement('div');
   moodWrap.className = 'flex-1';
   const moodLabel = document.createElement('label');
-  moodLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  moodLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   moodLabel.textContent = 'Mood';
   jMoodSelect = document.createElement('select');
   jMoodSelect.className = 'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
@@ -266,7 +266,7 @@ function renderDetail() {
   const dateWrap = document.createElement('div');
   dateWrap.className = 'flex-1';
   const dateLabel = document.createElement('label');
-  dateLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  dateLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   dateLabel.textContent = 'Date';
   jDateInput = document.createElement('input');
   jDateInput.type = 'date';
@@ -279,7 +279,7 @@ function renderDetail() {
   detail.appendChild(metaRow);
 
   const contentLabel = document.createElement('label');
-  contentLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  contentLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   contentLabel.textContent = 'Content';
   jContentInput = document.createElement('textarea');
   jContentInput.rows = 20;
@@ -301,7 +301,7 @@ function renderDetail() {
 
   jSaveBtn = document.createElement('button');
   jSaveBtn.type = 'button';
-  jSaveBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  jSaveBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   jSaveBtn.textContent = 'Save';
   jSaveBtn.addEventListener('click', async () => {
     jSaveBtn.disabled = true;
@@ -325,7 +325,7 @@ function renderDetail() {
 
   jDeleteBtn = document.createElement('button');
   jDeleteBtn.type = 'button';
-  jDeleteBtn.className = 'px-4 py-2 text-xs uppercase tracking-wide border border-danger text-danger hover:bg-danger/10 transition-colors';
+  jDeleteBtn.className = 'px-4 py-2 text-xs font-medium border border-danger text-danger hover:bg-danger/10 transition-colors';
   jDeleteBtn.textContent = 'Delete';
   jDeleteBtn.addEventListener('click', async () => {
     jDeleteBtn.disabled = true;

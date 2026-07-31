@@ -497,7 +497,7 @@ function buildFileModal() {
   const titleWrap = document.createElement('div');
   titleWrap.className = 'flex-1';
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   fileTitleInput = document.createElement('input');
   fileTitleInput.type = 'text';
@@ -511,7 +511,7 @@ function buildFileModal() {
   const langWrap = document.createElement('div');
   langWrap.className = 'w-32';
   const langLabel = document.createElement('label');
-  langLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  langLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   langLabel.textContent = 'Language';
   fileLanguageInput = document.createElement('input');
   fileLanguageInput.type = 'text';
@@ -525,7 +525,7 @@ function buildFileModal() {
   form.appendChild(row1);
 
   const folderLabel = document.createElement('label');
-  folderLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  folderLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   folderLabel.textContent = 'Folder';
   fileFolderInput = document.createElement('input');
   fileFolderInput.type = 'text';
@@ -545,7 +545,7 @@ function buildFileModal() {
   form.appendChild(folderHint);
 
   const codeLabel = document.createElement('label');
-  codeLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  codeLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   codeLabel.textContent = 'Code';
   fileCodeInput = document.createElement('textarea');
   fileCodeInput.rows = 10;
@@ -557,7 +557,7 @@ function buildFileModal() {
   form.appendChild(fileCodeInput);
 
   const descLabel = document.createElement('label');
-  descLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  descLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   descLabel.textContent = 'Notes (Markdown)';
   fileDescriptionInput = document.createElement('textarea');
   fileDescriptionInput.rows = 4;
@@ -572,7 +572,7 @@ function buildFileModal() {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => fileModal.close());
   btnRow.appendChild(cancelBtn);
@@ -580,7 +580,7 @@ function buildFileModal() {
   fileSubmitBtn = document.createElement('button');
   fileSubmitBtn.type = 'submit';
   fileSubmitBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   fileSubmitBtn.textContent = 'Add File';
   btnRow.appendChild(fileSubmitBtn);
 
@@ -675,7 +675,7 @@ function buildFolderModal() {
   form.className = 'space-y-3';
 
   const label = document.createElement('label');
-  label.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  label.className = 'block text-xs font-medium text-ink-dim mb-1';
   label.textContent = 'Folder name';
   folderNameInput = document.createElement('input');
   folderNameInput.type = 'text';
@@ -691,7 +691,7 @@ function buildFolderModal() {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => folderModal.close());
   btnRow.appendChild(cancelBtn);
@@ -699,7 +699,7 @@ function buildFolderModal() {
   folderSubmitBtn = document.createElement('button');
   folderSubmitBtn.type = 'submit';
   folderSubmitBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   folderSubmitBtn.textContent = 'Save';
   btnRow.appendChild(folderSubmitBtn);
 

@@ -13,33 +13,34 @@
       } catch (e) {}
     })();
   </script>
+  <link rel="preload" as="image" href="/static/img/sonoma-evening.jpg" media="(min-width: 900px)">
+  <link rel="preload" as="image" href="/static/img/sonoma-evening-sm.jpg" media="(max-width: 899px)">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="bg-canvas text-ink min-h-screen flex flex-col font-sans antialiased">
 
   <header class="sticky top-0 z-20 border-b border-hairline bg-surface">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-      <a href="/static/pages/home.html" class="flex items-center gap-2 text-sm tracking-wide shrink-0">
+      <a href="/static/pages/home.html" class="flex items-center gap-2 text-sm font-medium shrink-0">
         <span class="h-2 w-2 rounded-full bg-accent led-pulse" aria-hidden="true"></span>
-        HOMELAB
+        Homelab
       </a>
 
-      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline bg-surface text-xs tracking-wide overflow-x-auto">
-        <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">DASHBOARD</a>
-        <a href="/static/pages/reminders.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">REMINDERS</a>
-        <a href="/static/pages/todos.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">TASKS</a>
-        <a href="/static/pages/journal.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">JOURNAL</a>
+      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline bg-surface text-xs overflow-x-auto">
+        <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Dashboard</a>
+        <a href="/static/pages/reminders.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Reminders</a>
+        <a href="/static/pages/todos.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Tasks</a>
+        <a href="/static/pages/journal.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Journal</a>
         <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
           <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-          CODEX
+          Codex
         </span>
-        <a href="/static/pages/bookmarks.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">BOOKMARKS</a>
-        <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">LOGGER</a>
+        <a href="/static/pages/bookmarks.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Bookmarks</a>
+        <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Logger</a>
       </nav>
 
       <div class="hidden md:flex items-center gap-3 shrink-0 text-xs text-ink-dim tabular-nums">
         <span class="flex items-center gap-1.5">
-          <span>LOCAL</span>
           <time id="clock">--:--:--</time>
         </span>
         <button type="button" data-theme-toggle aria-pressed="false" aria-label="Toggle dark mode" class="inline-flex items-center justify-center h-7 w-7 text-ink-dim hover:text-ink transition-colors">
@@ -59,34 +60,32 @@
         <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
       </button>
     </div>
-    <div class="uplink-rail" aria-hidden="true"></div>
   </header>
 
   <div id="mobile-drawer-backdrop" class="md:hidden fixed inset-0 bg-black/60 z-30 hidden"></div>
 
   <aside id="mobile-drawer" class="md:hidden fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-surface border-l border-hairline z-40 translate-x-full transition-transform duration-200 ease-out flex flex-col">
     <div class="h-14 flex items-center justify-between px-4 border-b border-hairline shrink-0">
-      <span class="text-xs tracking-widest text-ink-dim">MENU</span>
+      <span class="text-xs text-ink-dim">Menu</span>
       <button id="nav-close" type="button" class="text-ink-dim hover:text-ink text-lg leading-none px-2 py-1">
         <span aria-hidden="true">&times;</span>
         <span class="sr-only">Close menu</span>
       </button>
     </div>
-    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 text-sm tracking-wide overflow-y-auto">
-      <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">DASHBOARD</a>
-      <a href="/static/pages/reminders.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">REMINDERS</a>
-      <a href="/static/pages/todos.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">TASKS</a>
-      <a href="/static/pages/journal.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">JOURNAL</a>
+    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 text-sm overflow-y-auto">
+      <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Dashboard</a>
+      <a href="/static/pages/reminders.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Reminders</a>
+      <a href="/static/pages/todos.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Tasks</a>
+      <a href="/static/pages/journal.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Journal</a>
       <span class="px-3 py-3 flex items-center gap-2 text-ink border-b border-hairline">
         <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-        CODEX
+        Codex
       </span>
-      <a href="/static/pages/bookmarks.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">BOOKMARKS</a>
-      <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">LOGGER</a>
+      <a href="/static/pages/bookmarks.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Bookmarks</a>
+      <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">Logger</a>
     </nav>
     <div class="mt-auto px-4 py-3 border-t border-hairline text-xs text-ink-dim flex items-center justify-between gap-1.5 tabular-nums shrink-0">
       <span class="flex items-center gap-1.5">
-        <span>LOCAL</span>
         <time id="clock-mobile">--:--:--</time>
       </span>
       <button type="button" data-theme-toggle aria-pressed="false" aria-label="Toggle dark mode" class="inline-flex items-center justify-center h-7 w-7 text-ink-dim hover:text-ink transition-colors">
@@ -106,7 +105,7 @@
   </main>
 
   <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim">
-    HOMELAB
+    Homelab
   </footer>
 
   <script type="module" src="/static/js/lib/theme.js"></script>
