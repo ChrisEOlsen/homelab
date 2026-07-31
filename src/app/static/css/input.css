@@ -42,23 +42,25 @@
  * used anywhere in this app — use the token as-is.
  */
 @theme {
-  /* Light — the same glass with the sun on it. Panels go white-frosted
-     and the accent darkens well past the sky's literal color, because
-     apricot-on-white has to clear contrast as text and as a border. */
-  --color-canvas: #ffffff;
-  --color-surface: rgb(255 255 255 / 0.72);
+  /* Light — "day glass". NOT white panels with dark text: the wallpaper
+     is a dusk scene and stays dark enough that white type on smoked
+     glass is both more legible and more iOS-like. What actually makes
+     this the light theme is that the photo comes through brighter and
+     the panels are thinner (lower alpha) than in dark — same glass,
+     less of it. */
+  --color-canvas: #101714;
+  --color-surface: rgb(26 34 31 / 0.50);
   /* Raised is opaque enough to stand on its own, because it does not
      always sit on a panel — TaskMaster's rows sit straight on the
-     wallpaper. Slightly greyer than surface so it still reads as a lift
-     when it IS on a panel. */
-  --color-surface-raised: rgb(250 250 248 / 0.78);
-  --color-hairline: rgb(28 46 38 / 0.24);
-  --color-ink: #16211c;
-  --color-ink-dim: #55635c;
-  --color-accent: #b85c18;
-  --color-accent-dim: #d98b4a;
-  --color-ok: #16714a;
-  --color-danger: #b3243f;
+     wallpaper. */
+  --color-surface-raised: rgb(74 88 82 / 0.44);
+  --color-hairline: rgb(255 255 255 / 0.22);
+  --color-ink: #f4f7f4;
+  --color-ink-dim: #c3cec8;
+  --color-accent: #ffb067;
+  --color-accent-dim: #c9762f;
+  --color-ok: #6fdba0;
+  --color-danger: #ff8080;
 }
 
 /*
@@ -72,47 +74,48 @@
   /* Painted on <html>, behind the wallpaper. Its only job is to be the
      first paint before the JPEG decodes, so it must not be white-hot
      or the load reads as a flash. */
-  --color-backdrop: #e9e4dc;
+  --color-backdrop: #1b2420;
 
   /* Chrome — header, drawer, dialogs — is glass, but the least
      transparent glass on the page. It floats over content AND over the
      wallpaper's bright sky band, so it is where text sits closest to
      noise. */
-  --color-surface-chrome: rgb(255 255 255 / 0.86);
-  --color-surface-solid: #ffffff;
+  --color-surface-chrome: rgb(20 27 24 / 0.68);
+  --color-surface-solid: #19211d;
 
-  /* The scrim sits between the photo and the content. Top-weighted,
-     because the photo's apricot sky band is its brightest region and
-     the sticky header lands right on it. */
+  /* The scrim sits between the photo and the content. Light mode lets
+     the photo through brightest, so it only darkens enough to guarantee
+     white type — top-weighted, because the apricot sky band is the
+     photo's brightest region and the sticky header lands right on it. */
   --scrim:
     linear-gradient(
       180deg,
-      rgb(255 255 255 / 0.46) 0%,
-      rgb(255 251 246 / 0.28) 30%,
-      rgb(255 255 255 / 0.20) 100%
+      rgb(10 16 13 / 0.46) 0%,
+      rgb(10 16 13 / 0.24) 30%,
+      rgb(10 16 13 / 0.18) 100%
     ),
     radial-gradient(
       130% 95% at 50% 38%,
       transparent 45%,
-      rgb(255 255 255 / 0.18) 100%
+      rgb(6 11 9 / 0.30) 100%
     );
 
   --panel-blur: blur(28px) saturate(180%);
   --chrome-blur: blur(34px) saturate(190%);
 
-  --panel-sheen: rgb(255 255 255 / 0.55);
+  --panel-sheen: rgb(255 255 255 / 0.10);
   --panel-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 18px 44px -30px rgb(20 40 30 / 0.38);
-  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
+    inset 0 1px 0 rgb(255 255 255 / 0.20),
+    0 18px 44px -30px rgb(0 0 0 / 0.6);
+  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
 
-  --halo-accent: rgb(184 92 24 / 0.30);
+  --halo-accent: rgb(255 176 103 / 0.30);
 
   /* Corner radius. One scale, referenced by the radius block below. */
-  --r-panel: 18px;
-  --r-row: 12px;
-  --r-well: 10px;
-  --r-dialog: 20px;
+  --r-panel: 14px;
+  --r-row: 10px;
+  --r-well: 8px;
+  --r-dialog: 16px;
   --r-chip: 4px;
 }
 
@@ -157,10 +160,10 @@
 
   --halo-accent: rgb(255 176 103 / 0.34);
 
-  --r-panel: 18px;
-  --r-row: 12px;
-  --r-well: 10px;
-  --r-dialog: 20px;
+  --r-panel: 14px;
+  --r-row: 10px;
+  --r-well: 8px;
+  --r-dialog: 16px;
   --r-chip: 4px;
 }
 
@@ -458,11 +461,7 @@ header nav.bg-surface {
  * hold it against whatever the photo is doing underneath.
  */
 .page-title {
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.28);
-}
-
-:root:not([data-theme="dark"]) .page-title {
-  text-shadow: 0 1px 10px rgb(255 255 255 / 0.65);
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.45);
 }
 
 /*
