@@ -226,7 +226,7 @@ function buildCategoryModal() {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   catTitleInput = document.createElement('input');
   catTitleInput.type = 'text';
@@ -238,7 +238,7 @@ function buildCategoryModal() {
   form.appendChild(catTitleInput);
 
   const fieldsLabel = document.createElement('label');
-  fieldsLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  fieldsLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   fieldsLabel.textContent = 'Fields';
   form.appendChild(fieldsLabel);
 
@@ -260,7 +260,7 @@ function buildCategoryModal() {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => categoryModal.close());
   btnRow.appendChild(cancelBtn);
@@ -268,7 +268,7 @@ function buildCategoryModal() {
   catSubmitBtn = document.createElement('button');
   catSubmitBtn.type = 'submit';
   catSubmitBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   catSubmitBtn.textContent = 'Add Category';
   btnRow.appendChild(catSubmitBtn);
 
@@ -506,13 +506,13 @@ function renderEntryTable(schema) {
 
   schema.forEach((field) => {
     const th = document.createElement('th');
-    th.className = 'text-left px-4 py-2 text-xs uppercase tracking-wide text-ink-dim';
+    th.className = 'text-left px-4 py-2 text-xs font-medium text-ink-dim';
     th.textContent = field.name;
     headRow.appendChild(th);
   });
 
   const actionsTh = document.createElement('th');
-  actionsTh.className = 'text-left px-4 py-2 text-xs uppercase tracking-wide text-ink-dim';
+  actionsTh.className = 'text-left px-4 py-2 text-xs font-medium text-ink-dim';
   actionsTh.textContent = 'Actions';
   headRow.appendChild(actionsTh);
 
@@ -588,7 +588,7 @@ function renderEntryForm(category, schema) {
 
   schema.forEach((field) => {
     const label = document.createElement('label');
-    label.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+    label.className = 'block text-xs font-medium text-ink-dim mb-1';
     label.textContent = field.name;
 
     const input = document.createElement('input');
@@ -605,7 +605,7 @@ function renderEntryForm(category, schema) {
 
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Entry';
   form.appendChild(submitBtn);
 

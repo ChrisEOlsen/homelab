@@ -169,7 +169,7 @@ function buildCategoryModal() {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   catTitleInput = document.createElement('input');
   catTitleInput.type = 'text';
@@ -186,7 +186,7 @@ function buildCategoryModal() {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => categoryModal.close());
   btnRow.appendChild(cancelBtn);
@@ -194,7 +194,7 @@ function buildCategoryModal() {
   catSubmitBtn = document.createElement('button');
   catSubmitBtn.type = 'submit';
   catSubmitBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   catSubmitBtn.textContent = 'Add Category';
   btnRow.appendChild(catSubmitBtn);
 
@@ -262,7 +262,7 @@ function buildBookmarkModal() {
   form.className = 'space-y-3';
 
   const categoryLabel = document.createElement('label');
-  categoryLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  categoryLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   categoryLabel.textContent = 'Category';
   bmCategorySelect = document.createElement('select');
   bmCategorySelect.name = 'category_id';
@@ -273,7 +273,7 @@ function buildBookmarkModal() {
   form.appendChild(bmCategorySelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   bmTitleInput = document.createElement('input');
   bmTitleInput.type = 'text';
@@ -285,7 +285,7 @@ function buildBookmarkModal() {
   form.appendChild(bmTitleInput);
 
   const urlLabel = document.createElement('label');
-  urlLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  urlLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   urlLabel.textContent = 'Url';
   bmUrlInput = document.createElement('input');
   bmUrlInput.type = 'text';
@@ -297,7 +297,7 @@ function buildBookmarkModal() {
   form.appendChild(bmUrlInput);
 
   const descriptionLabel = document.createElement('label');
-  descriptionLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  descriptionLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   descriptionLabel.textContent = 'Description';
   bmDescriptionInput = document.createElement('input');
   bmDescriptionInput.type = 'text';
@@ -313,7 +313,7 @@ function buildBookmarkModal() {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => bookmarkModal.close());
   btnRow.appendChild(cancelBtn);
@@ -321,7 +321,7 @@ function buildBookmarkModal() {
   bmSubmitBtn = document.createElement('button');
   bmSubmitBtn.type = 'submit';
   bmSubmitBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   bmSubmitBtn.textContent = 'Add Bookmark';
   btnRow.appendChild(bmSubmitBtn);
 

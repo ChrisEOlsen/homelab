@@ -744,7 +744,7 @@ function openEditSubtaskModal(sub, todoId) {
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', close);
   btnRow.appendChild(cancelBtn);
@@ -752,7 +752,7 @@ function openEditSubtaskModal(sub, todoId) {
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.className =
-    'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   saveBtn.textContent = 'Save';
   saveBtn.addEventListener('click', async () => {
     const newTitle = textarea.value.trim();
@@ -972,7 +972,7 @@ function setupTodoListsCreateForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   listTitleInput = document.createElement('input');
   listTitleInput.type = 'text';
@@ -988,14 +988,14 @@ function setupTodoListsCreateForm(container) {
 
   listSubmitBtn = document.createElement('button');
   listSubmitBtn.type = 'submit';
-  listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   listSubmitBtn.textContent = 'Add List';
   btnRow.appendChild(listSubmitBtn);
 
   listCancelBtn = document.createElement('button');
   listCancelBtn.type = 'button';
   listCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors hidden';
   listCancelBtn.textContent = 'Cancel';
   listCancelBtn.addEventListener('click', resetListFormToCreateMode);
   btnRow.appendChild(listCancelBtn);
@@ -1092,7 +1092,7 @@ function setupTodosCreateForm() {
   form.className = 'space-y-3';
 
   const listLabel = document.createElement('label');
-  listLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  listLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   listLabel.textContent = 'List';
   todoListSelect = document.createElement('select');
   todoListSelect.name = 'list_id';
@@ -1103,7 +1103,7 @@ function setupTodosCreateForm() {
   form.appendChild(todoListSelect);
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   todoTitleInput = document.createElement('input');
   todoTitleInput.type = 'text';
@@ -1120,7 +1120,7 @@ function setupTodosCreateForm() {
   todoCancelBtn = document.createElement('button');
   todoCancelBtn.type = 'button';
   todoCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   todoCancelBtn.textContent = 'Cancel';
   todoCancelBtn.addEventListener('click', () => {
     resetTodoFormToCreateMode();
@@ -1130,7 +1130,7 @@ function setupTodosCreateForm() {
 
   todoSubmitBtn = document.createElement('button');
   todoSubmitBtn.type = 'submit';
-  todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  todoSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   todoSubmitBtn.textContent = 'Add Todo';
   btnRow.appendChild(todoSubmitBtn);
 

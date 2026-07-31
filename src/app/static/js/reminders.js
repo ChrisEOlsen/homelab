@@ -333,7 +333,7 @@ function setupRemindersForm(container) {
   form.className = 'space-y-3';
 
   const titleLabel = document.createElement('label');
-  titleLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  titleLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   titleLabel.textContent = 'Title';
   titleInput = document.createElement('input');
   titleInput.type = 'text';
@@ -345,7 +345,7 @@ function setupRemindersForm(container) {
   form.appendChild(titleInput);
 
   const remindAtLabel = document.createElement('label');
-  remindAtLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  remindAtLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   remindAtLabel.textContent = 'Remind At';
   remindAtInput = document.createElement('input');
   remindAtInput.type = 'datetime-local';
@@ -357,7 +357,7 @@ function setupRemindersForm(container) {
   form.appendChild(remindAtInput);
 
   const recurrenceFieldLabel = document.createElement('label');
-  recurrenceFieldLabel.className = 'block text-xs uppercase tracking-wide text-ink-dim mb-1';
+  recurrenceFieldLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
   recurrenceFieldLabel.textContent = 'Recurrence';
   recurrenceSelect = document.createElement('select');
   recurrenceSelect.name = 'recurrence_type';
@@ -403,14 +403,14 @@ function setupRemindersForm(container) {
 
   submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs uppercase tracking-wide hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   submitBtn.textContent = 'Add Reminder';
   btnRow.appendChild(submitBtn);
 
   cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs uppercase tracking-wide hover:text-ink hover:bg-surface-raised transition-colors hidden';
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors hidden';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', resetFormToCreateMode);
   btnRow.appendChild(cancelBtn);
