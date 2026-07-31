@@ -195,16 +195,12 @@
  * ------------------------------------------------------------------ */
 
 /*
- * Ambient field.
- * A fixed pseudo-element rather than `background-attachment: fixed`,
- * which iOS Safari ignores and desktop repaints expensively on scroll.
- * The canvas color moves to <html> so the layer has something to sit
- * in front of; body's own fill goes transparent to let it through.
- * body is `flex flex-col`, but a fixed-position pseudo-element is out
- * of flow and never becomes a flex item.
+ * The backdrop color sits on <html>, behind the wallpaper, so the first
+ * paint before the JPEG decodes is a deep neutral rather than a flash.
+ * body's own fill goes transparent to let it through.
  */
 html {
-  background-color: var(--color-canvas);
+  background-color: var(--color-backdrop);
 }
 
 /*
@@ -233,17 +229,38 @@ body.bg-canvas {
   background-color: transparent;
 }
 
+/*
+ * Wallpaper.
+ * A fixed pseudo-element rather than `background-attachment: fixed`,
+ * which iOS Safari ignores and desktop repaints expensively on scroll.
+ * body is `flex flex-col`, but a fixed-position pseudo-element is out
+ * of flow and never becomes a flex item.
+ *
+ * The scrim is an earlier background layer in the same element, so it
+ * paints ON TOP of the photo — background layers stack first-on-top.
+ * One element, two layers, no extra DOM.
+ */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(1100px 620px at 10% -10%, var(--ambient-1), transparent 62%),
-    radial-gradient(900px 560px at 94% 2%, var(--ambient-2), transparent 60%),
-    radial-gradient(1000px 700px at 48% 112%, var(--ambient-3), transparent 62%);
-  background-repeat: no-repeat;
+  background-image: var(--scrim), url("/static/img/sonoma-evening.jpg");
+  background-size: auto, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/*
+ * Phones get the 1600px file — a quarter the bytes. This is a media
+ * query, not image-set(): image-set() selects on pixel density, which
+ * cannot express "smaller viewport".
+ */
+@media (max-width: 899px) {
+  body::before {
+    background-image: var(--scrim), url("/static/img/sonoma-evening-sm.jpg");
+  }
 }
 
 /* Backlit glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
