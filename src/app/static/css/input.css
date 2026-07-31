@@ -405,106 +405,33 @@ header nav.bg-surface {
   border-radius: 9999px;
 }
 
-/*
- * Signature: the uplink rail.
- * A packet of light crossing the hairline under the header, on the
- * slow loop of a switch's link-activity LED. It is the only ambient
- * animation on the page — everything else moves on interaction.
- */
-.uplink-rail {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.uplink-rail::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 18%;
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    var(--grad-violet),
-    var(--grad-cyan),
-    transparent
-  );
-  animation: uplink-sweep 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-}
-
-@keyframes uplink-sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(620%);
-  }
-}
-
-/* Accent surfaces emit. The LED dots, the primary buttons and the
-   focus counters all carry `bg-accent`, so the glow lands exactly on
-   the elements that are meant to look powered. */
-/* Solid accent fills stay azure→cyan. Violet is reserved for the rail,
-   the ambient field and the page title — places where nothing sits on
-   top of it — because dark `text-canvas` labels ride on these fills and
-   violet is the one endpoint that drops their contrast. */
-.bg-accent {
-  background-image: linear-gradient(
-    120deg,
-    var(--grad-azure),
-    var(--grad-cyan)
-  );
-  box-shadow: 0 0 14px -2px var(--glow-accent);
-}
-
-.text-accent {
-  text-shadow: var(--text-glow);
-}
-
-.border-accent {
-  box-shadow: 0 0 20px -8px var(--glow-accent);
-}
-
-/* Ghost buttons ignite on hover: the flat accent fill becomes the full
-   violet→cyan sweep. */
+/* The accent is flat. No gradient fill, no emitted glow — apricot is
+   the light in the photograph, and the UI does not need to also glow.
+   `.bg-accent` deliberately sets no background-image, so the utility
+   keeps sole ownership of the fill. */
 .hover\:bg-accent:hover {
-  background-image: linear-gradient(
-    100deg,
-    var(--grad-azure),
-    var(--grad-cyan)
-  );
-  box-shadow: 0 0 26px -6px var(--glow-accent);
+  color: var(--color-canvas);
 }
 
+/* Rows lift on hover instead of igniting. */
 .hover\:border-accent:hover,
 .border.bg-surface-raised:hover {
   box-shadow:
     var(--row-shadow),
-    0 0 22px -8px var(--glow-soft);
+    0 6px 18px -12px rgb(0 0 0 / 0.4);
 }
 
-/* Page titles pick up the gradient once, at the top of the page.
-   `width: fit-content` is load-bearing: an <h1> is a block element, so
-   without it the gradient spans the full content column and a short
-   word like "Codex" only ever shows its first few percent. */
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  .page-title {
-    width: fit-content;
-    background-image: linear-gradient(
-      100deg,
-      var(--title-start),
-      var(--grad-azure) 62%,
-      var(--grad-cyan)
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
+/*
+ * Page titles are the one piece of text with no panel behind it — the
+ * <h1> sits directly on the wallpaper. Solid ink plus a soft shadow to
+ * hold it against whatever the photo is doing underneath.
+ */
+.page-title {
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.28);
+}
+
+:root:not([data-theme="dark"]) .page-title {
+  text-shadow: 0 1px 10px rgb(255 255 255 / 0.65);
 }
 
 /*
@@ -607,28 +534,23 @@ main > *:nth-child(3) { animation-delay: 180ms; }
 main > *:nth-child(4) { animation-delay: 250ms; }
 main > *:nth-child(n + 5) { animation-delay: 320ms; }
 
-/* The header beacon: opacity carries the pulse, the halo breathes with
-   it. Animations outrank the normal `.bg-accent` box-shadow above. */
-@keyframes led-pulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 16px 1px var(--glow-accent);
-  }
-  50% {
-    opacity: 0.45;
-    box-shadow: 0 0 6px -1px var(--glow-soft);
-  }
+/* The header beacon. Steady, not throbbing — a lit indicator rather
+   than a blinking link-activity LED. */
+.led-pulse {
+  box-shadow:
+    0 0 0 3px var(--halo-accent),
+    0 0 12px 0 var(--halo-accent);
 }
 
-.led-pulse {
-  animation: led-pulse 2.4s ease-in-out infinite;
+/* The footer is the only chrome with no fill of its own — it would
+   otherwise put text-ink-dim directly on the photograph. */
+footer {
+  background-color: var(--color-surface-chrome);
+  backdrop-filter: var(--chrome-blur);
+  -webkit-backdrop-filter: var(--chrome-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .led-pulse,
-  .uplink-rail::after {
-    animation: none;
-  }
   * {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
