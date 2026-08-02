@@ -46,24 +46,24 @@
  * used anywhere in this app — use the token as-is.
  */
 @theme {
-  /* Light — "day glass". NOT white panels with dark text: the field
-     behind is black, so white type on smoked glass is both more legible
-     and more iOS-like. What actually makes this the light theme is that
-     the lattice comes through brighter and the panels are thinner
-     (lower alpha) than in dark — same glass, less of it. */
-  --color-canvas: #101314;
-  --color-surface: rgb(28 31 33 / 0.50);
-  /* Raised is opaque enough to stand on its own, because it does not
-     always sit on a panel — TaskMaster's rows sit straight on the
-     background. */
-  --color-surface-raised: rgb(78 84 88 / 0.44);
-  --color-hairline: rgb(255 255 255 / 0.22);
-  --color-ink: #f5f7f8;
-  --color-ink-dim: #c4cbcf;
+  /* Light — "day". NOT white panels with dark text: the field behind is
+     black, so white type on a dark console is both more legible and more
+     iOS-like. What makes this the light theme is that every surface sits
+     one step lighter and the lattice reads brighter around it.
+
+     Every surface here is OPAQUE. That is the defining change of this
+     skin: the background is animated, and translucency drags moving
+     lines under running text. Panels cut the lattice out instead. */
+  --color-canvas: #0e1012;
+  --color-surface: #15171a;
+  --color-surface-raised: #1e2125;
+  --color-hairline: rgb(255 255 255 / 0.10);
+  --color-ink: #f2f4f6;
+  --color-ink-dim: #9aa1a9;
   --color-accent: #ffb067;
   --color-accent-dim: #c9762f;
-  --color-ok: #6fdba0;
-  --color-danger: #ff8080;
+  --color-ok: #5fd39a;
+  --color-danger: #ff7b72;
 }
 
 /*
@@ -78,12 +78,17 @@
      themes — the lines are the only thing in it. */
   --color-backdrop: #000000;
 
-  /* Chrome — header, drawer, dialogs — is glass, but the least
-     transparent glass on the page. It floats over content AND over the
-     densest part of the lattice, so it is where text sits closest to
-     noise. */
-  --color-surface-chrome: rgb(22 24 26 / 0.68);
-  --color-surface-solid: #1a1c1e;
+  /* Chrome — header, drawer, dialogs. One step darker than a panel so
+     the console reads as content and the chrome as frame. */
+  --color-surface-chrome: #111316;
+  --color-surface-solid: #1e2125;
+
+  /* The rail. 2px of accent on the leading edge of whatever is current.
+     This is the skin's one signature device: the background is built
+     entirely from straight lines, so the interface marks state with a
+     line rather than with a fill. It replaces the solid apricot block
+     that used to shout from every sidebar. */
+  --rail: 2px;
 
   /* How much of the lattice survives. One knob per theme, applied as
      `opacity` on the three line layers — the gradients themselves carry
@@ -110,41 +115,45 @@
       transparent 22%
     );
 
-  --panel-blur: blur(28px) saturate(180%);
-  --chrome-blur: blur(34px) saturate(190%);
-
-  --panel-sheen: rgb(255 255 255 / 0.10);
-  --panel-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.20),
-    0 18px 44px -30px rgb(0 0 0 / 0.6);
-  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
-
+  /* No blur, no sheen, no inset highlight. Surfaces are opaque and flat;
+     depth comes from the tone step alone. Dropping backdrop-filter also
+     stops the browser re-blurring an animated background every frame,
+     which was the single most expensive thing on the page. */
   --halo-accent: rgb(255 176 103 / 0.30);
 
-  /* Corner radius. One scale, referenced by the radius block below. */
-  --r-panel: 14px;
-  --r-row: 10px;
-  --r-well: 8px;
-  --r-dialog: 16px;
-  --r-chip: 4px;
+  /* Corner radius. One scale, referenced by the radius block below.
+     Zeroed: the skin is a field of straight lines meeting at hard
+     angles, and a softened box sitting on top of it reads as borrowed
+     from a different design. The scale is kept rather than deleted so
+     the radius block below stays one edit away from a rounded variant,
+     and so nothing has to be re-derived to put it back. */
+  --r-panel: 0px;
+  --r-row: 0px;
+  --r-well: 0px;
+  --r-dialog: 0px;
+  --r-chip: 0px;
 }
 
 :root[data-theme="dark"] {
-  --color-canvas: #0a0c0d;
-  --color-surface: rgb(22 24 26 / 0.72);
-  --color-surface-raised: rgb(48 52 56 / 0.76);
-  --color-hairline: rgb(255 255 255 / 0.14);
-  --color-ink: #f1f4f5;
-  --color-ink-dim: #a8b0b4;
+  /* Dark is the primary. The ramp is deliberately tight — #08 to #16
+     across three levels — because on a black field a small step is
+     already legible, and a large one turns every panel into a box. */
+  --color-canvas: #08090a;
+  --color-surface: #0e0f11;
+  --color-surface-raised: #16181b;
+  --color-hairline: rgb(255 255 255 / 0.07);
+  /* Not pure white: #fff on near-black vibrates and fatigues. */
+  --color-ink: #e9ebee;
+  --color-ink-dim: #878d95;
   --color-accent: #ffb067;
   --color-accent-dim: #c9762f;
-  --color-ok: #6fdba0;
-  --color-danger: #ff8080;
+  --color-ok: #5fd39a;
+  --color-danger: #ff7b72;
 
   --color-backdrop: #000000;
 
-  --color-surface-chrome: rgb(16 18 20 / 0.85);
-  --color-surface-solid: #141618;
+  --color-surface-chrome: #0b0c0e;
+  --color-surface-solid: #16181b;
 
   --web-strength: 0.72;
 
@@ -161,22 +170,15 @@
       transparent 22%
     );
 
-  --panel-blur: blur(28px) saturate(180%);
-  --chrome-blur: blur(34px) saturate(190%);
-
-  --panel-sheen: rgb(255 255 255 / 0.07);
-  --panel-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
-    0 22px 50px -30px rgb(0 0 0 / 0.9);
-  --row-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
-
   --halo-accent: rgb(255 176 103 / 0.34);
 
-  --r-panel: 14px;
-  --r-row: 10px;
-  --r-well: 8px;
-  --r-dialog: 16px;
-  --r-chip: 4px;
+  --r-panel: 0px;
+  --r-row: 0px;
+  --r-well: 0px;
+  --r-dialog: 0px;
+  --r-chip: 0px;
+
+  --rail: 2px;
 }
 
 @layer base {
@@ -437,200 +439,596 @@ body::after {
   to   { transform: translate3d(0, 130px, 0); }
 }
 
-/*
- * NEVER hand-write `-webkit-backdrop-filter` in this file.
+/* ==================================================================
+ * Skin — "Instrument"
+ * ==================================================================
+ * The console is opaque; the lattice is the surround.
  *
- * Tailwind's `--minify` runs Lightning CSS, which adds vendor prefixes
- * itself. If the pair is already present it collapses them and keeps
- * ONLY the `-webkit-` one — and Chrome does not implement that alias,
- * so the blur silently never applies. Writing just the standard
- * property makes Lightning emit both, which is what we want. (The
- * previous theme carried the manual prefix and had no working blur
- * anywhere as a result.)
+ * Everything below is UNLAYERED, so it outranks Tailwind's utilities
+ * without !important and without specificity escalation. That is what
+ * lets one stylesheet re-shape ~5,900 lines of JS-built DOM across all
+ * seven pages without touching a line of JS.
  *
- * Verify after any change here:
- *   docker compose exec app sh -c \
- *     'grep -o "backdrop-filter:[^;}]*" ./static/css/style.css | sort | uniq -c'
- * Each value must appear twice — once prefixed, once not.
- */
+ * There is no `backdrop-filter` anywhere in this file any more, and
+ * that is deliberate. Surfaces are opaque, so a blur would have nothing
+ * visible to blur — and blurring a *moving* background forced the
+ * browser to re-composite every panel every frame. (If glass ever comes
+ * back: write ONLY the standard property. Tailwind's --minify runs
+ * Lightning CSS, which collapses a hand-written
+ * `backdrop-filter`/`-webkit-backdrop-filter` pair down to the -webkit-
+ * one, which Chrome does not implement — so the blur silently never
+ * applies. That bug shipped in two previous themes.)
+ * ================================================================== */
 
-/* Frosted glass. Only `.bg-surface` blurs — `.bg-surface-raised` rows
-   already sit on top of a blurred panel, so blurring them again costs
-   compositing for no visible gain. With 124 raised elements in the app,
-   that matters on iOS. */
-.bg-surface {
-  backdrop-filter: var(--panel-blur);
+
+/* ------------------------------------------------------------------
+ * 1. Type
+ * ------------------------------------------------------------------
+ * Two roles, split by MEANING rather than by size: sans for language a
+ * person wrote, mono for data a machine produced. A homelab console is
+ * half prose and half machine output — timestamps, counts, URLs, log
+ * lines, a running clock — so the split is real information, not
+ * decoration, and it gives the page texture without loading a single
+ * font file (Critical Constraint 4: no Node, no CDN).
+ * ------------------------------------------------------------------ */
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.006em;
 }
 
-/* Chrome floats over content and over the densest crossings of the
-   lattice,
-   so it is glass at a higher alpha and a stronger blur than the panels
-   in the page. This is the one place a skin rule overrides a utility's
-   background-color, and it is deliberately scoped. */
+/* Machine output. `time` and `.tabular-nums` cover the clocks and every
+   count; `li p.truncate` is the URL line under a bookmark title. */
+time,
+.tabular-nums,
+code,
+pre,
+kbd,
+li p.text-xs.truncate {
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+li p.text-xs.truncate {
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
+
+/* The page title is the only type on the page with real scale. Sized
+   up from 20px so it anchors the layout instead of floating in it, and
+   the shadow is gone — it now sits on an opaque console, not on the
+   lattice, so it has nothing to fight. */
+.page-title {
+  font-size: 1.375rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--color-ink);
+  text-shadow: none;
+}
+
+@media (min-width: 768px) {
+  .page-title {
+    font-size: 1.625rem;
+    letter-spacing: -0.022em;
+  }
+}
+
+/* Title + rule = a page header band. `main` is `space-y-6`, so the rule
+   sits at the top of that gap and reads as the header's floor. */
+main > .page-title {
+  padding-bottom: 1.125rem;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+/* Panel headings. One step down from the title, ink rather than dim —
+   a heading that is dimmer than its own body text reads as disabled. */
+summary .text-sm.font-medium,
+h2.text-xs.font-medium,
+h2.text-sm.font-medium,
+.text-lg.font-semibold {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.002em;
+  color: var(--color-ink);
+}
+
+
+/* ------------------------------------------------------------------
+ * 2. Surfaces
+ * ------------------------------------------------------------------ */
+
+/* A panel is opaque, so it CUTS THE LATTICE OUT — the moving lines stop
+   dead at its edge. That occlusion is most of the boundary; the hairline
+   just makes it crisp. (Tried it with no border at all first: the
+   #0e0f11-on-#000 step is real but too quiet to register as a deliberate
+   plane, so the panels read as smudges rather than as instruments.) */
+.border.bg-surface {
+  border-color: var(--color-hairline);
+  background-image: none;
+  box-shadow: none;
+}
+
+/* Bookmarks, Logger and TaskMaster lay out a selector sidebar beside a
+   `section.flex-1` and leave that section BARE, while Journal gives the
+   same slot a panel — one layout, two different answers, and the bare
+   version is why those pages looked unfinished on the right. Panel it
+   everywhere. */
+#app > div > section.flex-1.min-w-0 {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+  padding: 0.875rem 1rem;
+}
+
+@media (min-width: 768px) {
+  #app > div > section.flex-1.min-w-0 {
+    padding: 1.25rem 1.5rem;
+  }
+}
+
+/* Codex renders every folder as its own full panel, so seven folders
+   read as seven stacked bars with fourteen competing edges. One panel,
+   folders as rows inside it. */
+#app > div.space-y-1 {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+}
+
+#app > div.space-y-1 > details.border.bg-surface {
+  background-color: transparent;
+  border-color: transparent;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+#app > div.space-y-1 > details.border.bg-surface + details.border.bg-surface {
+  margin-top: 0;
+}
+
+#app > div.space-y-1 > details.border.bg-surface:last-child {
+  border-bottom-color: transparent;
+}
+
+/* Now that the content column IS a panel, the panels the JS puts inside
+   it would be boxes inside a box. Strip them back to plain sections and
+   separate them with a rule instead. */
+#app > div > section.flex-1.min-w-0 > .border.bg-surface {
+  background-color: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#app > div > section.flex-1.min-w-0 > .border.bg-surface + .border.bg-surface {
+  border-top-color: var(--color-hairline);
+  padding-top: 1.25rem;
+}
+
+/* A destructive action in a table row stays invisible until the row is
+   live, then states itself plainly. */
+tbody tr button:hover {
+  color: var(--color-danger);
+}
+
+/* Journal pairs its two columns with `items-start`, so the detail pane
+   shrink-wraps its own text and stops dead while the entry list beside
+   it runs on for another 400px. Stretch it: a detail pane is a place,
+   and a place should hold its shape whether or not anything is in it. */
+#app > div.items-start {
+  align-items: stretch;
+}
+
+/* The dashboard's shortcut tiles carry a remove control that was lit on
+   every tile at rest — eleven live `×` marks competing with the links
+   they sit on. Same rule as list rows: present on hover and focus. */
+#shortcuts-grid > * button {
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+#shortcuts-grid > *:hover button,
+#shortcuts-grid > *:focus-within button,
+#shortcuts-grid > * button:focus-visible {
+  opacity: 1;
+}
+
+/* Codex folder rows are <details>, not <li>, so the list-row rule in
+   section 4 does not reach their kebabs. */
+#app > div.space-y-1 > details button.text-xs.leading-none {
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+#app > div.space-y-1 > details:hover button.text-xs.leading-none,
+#app > div.space-y-1 > details:focus-within button.text-xs.leading-none,
+#app > div.space-y-1 > details button.text-xs.leading-none[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* Panels get room — but only where there is room. A FIXED padding here
+   would silently defeat the mobile density block at the bottom of this
+   file, which shrinks Tailwind's whole spacing scale on phones so that
+   content shows instead of truncating behind oversized touch padding.
+   Phone value first, desktop value behind the breakpoint. */
+.bg-surface.p-5 { padding: 1rem; }
+.bg-surface.p-4 { padding: 0.875rem; }
+
+@media (min-width: 768px) {
+  .bg-surface.p-5 { padding: 1.5rem; }
+  .bg-surface.p-4 { padding: 1.25rem; }
+}
+
+/* A raised block is a flat filled block — no bevel, no lift. It keeps a
+   hairline because outside a list it has to stand as a card on its own
+   (the dashboard's shortcut grid). Inside a list, section 4 strips this
+   back to a single divider. */
+.border.bg-surface-raised {
+  border-color: var(--color-hairline);
+  box-shadow: none;
+}
+
+
+/* ------------------------------------------------------------------
+ * 3. Chrome
+ * ------------------------------------------------------------------ */
+
 header.bg-surface,
 aside.bg-surface,
 [role="dialog"].bg-surface {
   background-color: var(--color-surface-chrome);
-  backdrop-filter: var(--chrome-blur);
 }
 
-/* The kebab dropdown stays effectively opaque: it is small, it pops
-   over dense list rows, and translucency buys it nothing. Specificity
-   0,2,0 beats the 0,1,1 chrome selectors above regardless of order. */
+header.bg-surface {
+  box-shadow: none;
+}
+
+/* The segmented nav sheds its box and becomes plain text buttons; the
+   current page is marked by the rail (section 6), not by a container. */
+header nav.bg-surface {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+header nav.bg-surface > * {
+  border-color: transparent;
+}
+
+aside.bg-surface {
+  box-shadow: -30px 0 70px -40px rgb(0 0 0 / 0.9);
+}
+
+/* A dialog is the one thing that genuinely floats, so it is the one
+   thing that still gets an edge and a cast. */
+[role="dialog"].bg-surface {
+  border-color: var(--color-hairline);
+  box-shadow: 0 40px 90px -40px rgb(0 0 0 / 0.95);
+}
+
+/* The kebab dropdown pops over dense rows — opaque, edged, lifted. */
 .absolute.bg-surface {
   background-color: var(--color-surface-solid);
-  backdrop-filter: none;
+  border-color: var(--color-hairline);
+  box-shadow: 0 18px 40px -22px rgb(0 0 0 / 0.9);
 }
 
-/* The segmented nav rides on already-blurred chrome, so it has nothing
-   left to blur — but it keeps its translucency, which reads as a raised
-   control against the chrome behind it. */
-header nav.bg-surface {
-  backdrop-filter: none;
-}
-
-/* Ghost buttons — bordered, with no fill of their own — frequently sit
-   directly on the lattice rather than on a panel: TaskMaster's
-   "Add Task" / "Clear Completed" toolbar, a form's Cancel. Give them
-   the panel glass so their label has something to sit on.
- *
- * This does set background-color on a shared utility, which the rest of
- * this file avoids — but only additively: the :not() chain excludes
- * every fill utility in the system, so a button that already owns a
- * background keeps it. Add any new bg-* token to that chain. */
-button.border:not(.bg-accent):not(.bg-surface):not(.bg-surface-raised):not(.bg-canvas):not(.bg-ok):not(.bg-danger) {
-  background-color: var(--color-surface);
-  backdrop-filter: var(--panel-blur);
-}
-
-/* `.border` (all four sides) marks a panel or card; the header and the
-   drawer use `border-b` / `border-l` and are skinned separately below.
-   The sheen is a background-IMAGE, so the `bg-surface` utility keeps
-   owning the background-color underneath it — the panel reads as lit
-   from its own top edge. */
-.border.bg-surface {
-  box-shadow: var(--panel-shadow);
-  background-image: linear-gradient(180deg, var(--panel-sheen), transparent 140px);
-}
-
-.border.bg-surface-raised {
-  box-shadow: var(--row-shadow);
-}
-
-/* Sticky header: the panel it floats over is the whole page, so it
-   gets the blur but a downward-only shadow. `position: sticky` already
-   establishes a containing block for the rail below. */
-header.bg-surface {
-  box-shadow: 0 10px 30px -26px rgb(0 0 0 / 0.8);
-}
-
-aside.bg-surface {
-  box-shadow: -24px 0 60px -40px rgb(0 0 0 / 0.9);
-}
-
-/* A dialog floats over the scrim rather than over the page, so it needs
-   a harder edge and a deeper cast than an in-page panel to separate. */
-[role="dialog"].bg-surface {
-  box-shadow:
-    var(--panel-shadow),
-    0 0 0 1px var(--color-hairline),
-    0 44px 90px -44px rgb(0 0 0 / 0.95);
-}
 
 /* ------------------------------------------------------------------
- * Corners
+ * 4. Lists
  * ------------------------------------------------------------------
- * Ordered generic → specific on purpose. Every rule below is unlayered
- * and most are specificity 0,2,0, so ties are broken by source order,
- * not by weight. Moving a rule up or down changes the result.
+ * A list is rows divided by hairlines, not a stack of cards. The old
+ * treatment gave every row its own border AND its own gap, which on a
+ * page of six rows produced twelve competing edges.
  * ------------------------------------------------------------------ */
 
-/* Base: anything with a full border is a box — buttons, inputs, code
-   blocks, tables, chips. */
-.border {
-  border-radius: var(--r-well);
+ul > li.border.bg-surface-raised,
+ol > li.border.bg-surface-raised {
+  background-color: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--color-hairline);
+  transition: background-color 120ms ease;
 }
 
-/* A table with border-collapse cannot round its own corners; the cells
-   square them off again and you get a visible mismatch. */
+/* Collapse the gap the `space-y-*` utility puts between rows. Unlayered
+   beats @layer utilities regardless of specificity, so no !important. */
+ul > li.border.bg-surface-raised + li.border.bg-surface-raised,
+ol > li.border.bg-surface-raised + li.border.bg-surface-raised {
+  margin-top: 0;
+}
+
+ul > li.border.bg-surface-raised:last-child,
+ol > li.border.bg-surface-raised:last-child {
+  border-bottom-color: transparent;
+}
+
+ul > li.border.bg-surface-raised:hover,
+ol > li.border.bg-surface-raised:hover {
+  background-color: var(--color-surface-raised);
+  box-shadow: none;
+}
+
+/* Row actions stay out of the way until the row is under the pointer or
+   the keyboard. A `⋯` on every row at rest is visual noise; on hover it
+   is an affordance. */
+li .relative > button,
+li > button.text-xs {
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+li:hover .relative > button,
+li:focus-within .relative > button,
+li:hover > button.text-xs,
+li:focus-within > button.text-xs,
+/* ...and whenever its own menu is open, or the trigger disappears out
+   from under the menu it just opened. */
+li .relative > button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+
+/* ------------------------------------------------------------------
+ * 5. Selector columns
+ * ------------------------------------------------------------------
+ * The category / list / folder columns down the left of Bookmarks,
+ * Logger, Journal and TaskMaster. They were a bordered panel full of
+ * bordered buttons — a box inside a box. Now they are a plain column of
+ * rows.
+ * ------------------------------------------------------------------ */
+
+/* Two shapes for the same thing: Bookmarks writes a plain <button> row,
+   while Logger / TaskMaster / Journal write an <li> that also carries a
+   kebab. Both are selector rows and both get the same treatment. */
+button.w-full.text-left.border,
+#app li.border.cursor-pointer {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-ink-dim);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+button.w-full.text-left.border:hover,
+#app li.border.cursor-pointer:hover {
+  background-color: var(--color-surface-raised);
+  color: var(--color-ink);
+}
+
+
+/* ------------------------------------------------------------------
+ * 6. The rail
+ * ------------------------------------------------------------------
+ * The signature. 2px of accent on the leading edge of whatever is
+ * current. The background is built entirely from straight lines, so the
+ * interface marks state with a line rather than a fill — and a fill was
+ * the actual problem: a solid apricot block was the loudest thing on
+ * every page, louder than the primary action it sat next to.
+ *
+ * `inset` box-shadow rather than a border so the row does not shift by
+ * 2px when it becomes current.
+ * ------------------------------------------------------------------ */
+
+button.w-full.text-left.bg-accent,
+#app li.border.bg-accent {
+  background-color: var(--color-surface-raised);
+  border-color: transparent;
+  color: var(--color-ink);
+  font-weight: 500;
+  box-shadow: inset var(--rail) 0 0 var(--color-accent);
+}
+
+button.w-full.text-left.bg-accent:hover,
+#app li.border.bg-accent:hover {
+  background-color: var(--color-surface-raised);
+  color: var(--color-ink);
+}
+
+/* The kebab inside a current row is written `text-canvas/70`, which was
+   legible only while the row was a solid apricot block. */
+#app li.border.bg-accent button {
+  color: var(--color-ink-dim);
+}
+
+#app li.border.bg-accent button:hover {
+  color: var(--color-ink);
+}
+
+/* Same idea, turned through 90°, for the current page in the header. */
+header nav [aria-current="page"] {
+  color: var(--color-ink);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+
+/* ------------------------------------------------------------------
+ * 7. Controls
+ * ------------------------------------------------------------------ */
+
+/* Primary. The markup writes the page's main action as an accent
+   OUTLINE that fills on hover; at rest that left every page without a
+   single filled control, so nothing read as "do this one". Filled at
+   rest, one per page. */
+button.border.border-accent,
+a.border.border-accent {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-canvas);
+  font-weight: 500;
+}
+
+button.border.border-accent:hover,
+a.border.border-accent:hover {
+  background-color: #ffc088;
+  border-color: #ffc088;
+  color: var(--color-canvas);
+}
+
+/* Secondary. A drawn outline, not a fill: filled-but-dim on a panel
+   only two steps lighter than itself reads as DISABLED, which is
+   exactly wrong for "Clear Completed" and "Subtasks". */
+button.border.border-hairline,
+a.border.border-hairline {
+  background-color: transparent;
+  border-color: var(--color-hairline);
+  color: var(--color-ink-dim);
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+button.border.border-hairline:hover,
+a.border.border-hairline:hover {
+  background-color: var(--color-surface-raised);
+  border-color: rgb(255 255 255 / 0.18);
+  color: var(--color-ink);
+}
+
+/* Destructive stays quiet until you mean it. An outlined red box on
+   every row of a table reads as an error state, not an action. */
+button.border.border-danger,
+button.text-danger.border {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-ink-dim);
+}
+
+button.border.border-danger:hover,
+button.text-danger.border:hover {
+  background-color: rgb(255 123 114 / 0.12);
+  border-color: transparent;
+  color: var(--color-danger);
+}
+
+/* The `⋯` menu button. Icon-only, no box. */
+button.text-xs.leading-none {
+  color: var(--color-ink-dim);
+}
+
+button.text-xs.leading-none:hover {
+  color: var(--color-ink);
+}
+
+
+/* ------------------------------------------------------------------
+ * 8. Fields
+ * ------------------------------------------------------------------ */
+
+input,
+select,
+textarea {
+  background-color: var(--color-canvas);
+  border: 1px solid var(--color-hairline);
+  color: var(--color-ink);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: rgb(255 255 255 / 0.16);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background-color: var(--color-canvas);
+}
+
+::placeholder {
+  color: var(--color-ink-dim);
+  opacity: 0.65;
+}
+
+/* The date/time picker's own glyph is near-black on near-black. */
+::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+
+
+/* ------------------------------------------------------------------
+ * 9. Tables
+ * ------------------------------------------------------------------ */
+
 table.border {
-  border-radius: 0;
+  border-color: transparent;
 }
 
-.border.bg-surface-raised {
-  border-radius: var(--r-row);
+thead th {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-dim);
+  border-bottom: 1px solid var(--color-hairline);
 }
 
-.border.bg-surface {
-  border-radius: var(--r-panel);
+tbody tr + tr > td {
+  border-top: 1px solid var(--color-hairline);
 }
 
-/* Inline code chips are ~16px tall; the well radius swallows them. */
-.bg-canvas.px-1 {
-  border-radius: var(--r-chip);
+tbody tr {
+  transition: background-color 120ms ease;
 }
 
-[role="dialog"].bg-surface {
-  border-radius: var(--r-dialog);
+tbody tr:hover {
+  background-color: var(--color-surface-raised);
 }
 
-/* The drawer slides in from the right, so only its left corners are
-   ever visible. */
-aside.bg-surface {
-  border-radius: var(--r-dialog) 0 0 var(--r-dialog);
-}
 
-/* The segmented nav becomes a pill. `overflow: hidden` is required, not
-   decorative: the segments' hover fills (hover:bg-surface-raised) paint
-   past a rounded parent's corners without it. */
-header nav.bg-surface {
-  border-radius: 999px;
-  overflow: hidden;
-}
+/* ------------------------------------------------------------------
+ * 10. Corners
+ * ------------------------------------------------------------------
+ * The scale is all 0 (see the token block) — kept rather than deleted
+ * so a rounded variant is one edit away. Ordered generic -> specific:
+ * these are unlayered and mostly 0,2,0, so ties break on source order.
+ * ------------------------------------------------------------------ */
 
-/* Same reason — the dropdown's hovered rows would square its corners. */
-.absolute.bg-surface {
-  border-radius: var(--r-row);
-  overflow: hidden;
-}
+.border { border-radius: var(--r-well); }
+table.border { border-radius: 0; }
+.border.bg-surface-raised { border-radius: var(--r-row); }
+.border.bg-surface { border-radius: var(--r-panel); }
+.bg-canvas.px-1 { border-radius: var(--r-chip); }
+[role="dialog"].bg-surface { border-radius: var(--r-dialog); }
+aside.bg-surface { border-radius: var(--r-dialog) 0 0 var(--r-dialog); }
+header nav.bg-surface { border-radius: 0; overflow: hidden; }
+.absolute.bg-surface { border-radius: var(--r-row); overflow: hidden; }
+.bg-accent:not(.rounded-full) { border-radius: var(--r-well); }
 
-/* Filled accent buttons that carry no `.border`. */
-.bg-accent:not(.rounded-full) {
-  border-radius: var(--r-well);
-}
+/* Re-assert circles LAST, and note this is NOT part of the radius scale
+   above: all 22 uses of `rounded-full` are 6-8px accent dots. Squared,
+   a dot that size reads as a rendering bug. The rule must also be last
+   regardless — `rounded-full` is a utility in @layer utilities, and
+   every unlayered rule above outranks it whatever the specificity. */
+.rounded-full { border-radius: 9999px; }
 
-/* Re-assert pills LAST. `rounded-full` is a Tailwind utility, so it
-   lives in @layer utilities — and every unlayered rule above outranks
-   it regardless of specificity. Without this line the 22 status dots
-   and pills in the app quietly become squares. */
-.rounded-full {
-  border-radius: 9999px;
-}
 
-/* The accent is flat. No gradient fill, no emitted glow — apricot is
-   the one warm thing on a black-and-white field, and it does not need
-   to also glow.
-   `.bg-accent` deliberately sets no background-image, so the utility
-   keeps sole ownership of the fill. */
+/* ------------------------------------------------------------------
+ * 11. Accent, focus, hover
+ * ------------------------------------------------------------------ */
+
+/* The accent is flat: no gradient fill, no emitted glow. */
 .hover\:bg-accent:hover {
   color: var(--color-canvas);
 }
 
-/* Rows lift on hover instead of igniting. */
-.hover\:border-accent:hover,
-.border.bg-surface-raised:hover {
-  box-shadow:
-    var(--row-shadow),
-    0 6px 18px -12px rgb(0 0 0 / 0.4);
+/* Rows no longer lift — the fill change is the whole hover. */
+.hover\:border-accent:hover {
+  box-shadow: none;
 }
 
-/*
- * Page titles are the one piece of text with no panel behind it — the
- * <h1> sits directly on the lattice. Solid ink plus a soft shadow to
- * hold it against whatever line happens to drift under it.
- */
-.page-title {
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.45);
+/* The header beacon. Steady, not throbbing. */
+.led-pulse {
+  box-shadow: 0 0 0 3px var(--halo-accent);
 }
 
 /*
@@ -733,19 +1131,10 @@ main > *:nth-child(3) { animation-delay: 180ms; }
 main > *:nth-child(4) { animation-delay: 250ms; }
 main > *:nth-child(n + 5) { animation-delay: 320ms; }
 
-/* The header beacon. Steady, not throbbing — a lit indicator rather
-   than a blinking link-activity LED. */
-.led-pulse {
-  box-shadow:
-    0 0 0 3px var(--halo-accent),
-    0 0 12px 0 var(--halo-accent);
-}
-
 /* The footer is the only chrome with no fill of its own — it would
    otherwise put text-ink-dim directly on the lattice. */
 footer {
   background-color: var(--color-surface-chrome);
-  backdrop-filter: var(--chrome-blur);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -767,11 +1156,24 @@ footer {
  * body is forced open — sections are always open on desktop.
  */
 @media (min-width: 768px) {
+  /* The original rule hid the whole <summary> above 768px — and the
+     <summary> is where the panel's NAME lives, so Focus, Shortcuts,
+     Categories and Lists all rendered as unlabelled boxes on every
+     desktop view. Only the chevron should go, and the markup already
+     hides that with `md:hidden`. Keep the label and promote it to the
+     panel's header. The summary is also already `md:pointer-events-none`
+     in the markup, so it cannot be clicked shut. */
   .collapsible-mobile > summary.collapsible-toggle {
-    display: none;
+    display: flex;
+    cursor: default;
+    padding-top: 0;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--color-hairline);
   }
   .collapsible-mobile > .collapsible-body {
     display: block !important;
+    padding-top: 0;
   }
 }
 .collapsible-mobile > summary.collapsible-toggle {
