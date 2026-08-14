@@ -232,7 +232,7 @@ html {
  * down the right edge is gone.
  *
  * Scoped to the document scroller on purpose. Scroll containers inside
- * the page — the wide code blocks and tables in Codex notes, the nav
+ * the page — wide code blocks and tables, the nav
  * strip, the drawer — keep their bars, because there the scrollbar is
  * the only hint that content continues past the edge.
  */
@@ -572,28 +572,6 @@ h2.text-sm.font-medium,
   }
 }
 
-/* Codex renders every folder as its own full panel, so seven folders
-   read as seven stacked bars with fourteen competing edges. One panel,
-   folders as rows inside it. */
-#app > div.space-y-1 {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-}
-
-#app > div.space-y-1 > details.border.bg-surface {
-  background-color: transparent;
-  border-color: transparent;
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-#app > div.space-y-1 > details.border.bg-surface + details.border.bg-surface {
-  margin-top: 0;
-}
-
-#app > div.space-y-1 > details.border.bg-surface:last-child {
-  border-bottom-color: transparent;
-}
-
 /* Now that the content column IS a panel, the panels the JS puts inside
    it would be boxes inside a box. Strip them back to plain sections and
    separate them with a rule instead. */
@@ -634,19 +612,6 @@ tbody tr button:hover {
 #shortcuts-grid > *:hover button,
 #shortcuts-grid > *:focus-within button,
 #shortcuts-grid > * button:focus-visible {
-  opacity: 1;
-}
-
-/* Codex folder rows are <details>, not <li>, so the list-row rule in
-   section 4 does not reach their kebabs. */
-#app > div.space-y-1 > details button.text-xs.leading-none {
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease;
-}
-
-#app > div.space-y-1 > details:hover button.text-xs.leading-none,
-#app > div.space-y-1 > details:focus-within button.text-xs.leading-none,
-#app > div.space-y-1 > details button.text-xs.leading-none[aria-expanded="true"] {
   opacity: 1;
 }
 

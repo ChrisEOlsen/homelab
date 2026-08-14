@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:e7b25441000e9850d2ebc8d0e5e1fd10161ba03ba5416820140a632f38603b25",
-  "generated_at": "2026-07-24T00:00:00Z",
+  "hash": "sha256:8f99fcfe30e008bbda2ad908b5a5a7b684c5307038f0c63884b66ac1166c43b7",
+  "generated_at": "2026-08-14T14:58:58Z",
   "models": [
     {
       "name": "Bookmark",
@@ -50,47 +50,6 @@
         },
         {
           "name": "title",
-          "type": "string",
-          "nullable": false
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "CodexEntry",
-      "table": "codex_entries",
-      "fields": [
-        {
-          "name": "id",
-          "type": "int",
-          "nullable": false
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "nullable": false
-        },
-        {
-          "name": "language",
-          "type": "string",
-          "nullable": true
-        },
-        {
-          "name": "code",
-          "type": "string",
-          "nullable": false
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "nullable": true
-        },
-        {
-          "name": "folder",
           "type": "string",
           "nullable": false
         },
@@ -562,97 +521,6 @@
       "auth": false,
       "model": "Bookmark",
       "kind": "update"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/codex_entries",
-      "handler": "CodexEntryListGET",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "list"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/codex_entries",
-      "handler": "CodexEntryCreatePOST",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "create"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/v1/codex_entries/{id}",
-      "handler": "CodexEntryDeleteDELETE",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "delete"
-    },
-    {
-      "method": "GET",
-      "path": "/api/v1/codex_entries/{id}",
-      "handler": "CodexEntryDetailGET",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "detail"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/v1/codex_entries/{id}",
-      "handler": "CodexEntryUpdatePUT",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "update"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/codex_folders/delete",
-      "handler": "CodexFolderDeletePOST",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "custom"
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/codex_folders/rename",
-      "handler": "CodexFolderRenamePOST",
-      "deps": [
-        "read",
-        "write",
-        "cache"
-      ],
-      "auth": false,
-      "model": "CodexEntry",
-      "kind": "custom"
     },
     {
       "method": "GET",

@@ -1,7 +1,7 @@
 // Centered dialog: dark scrim backdrop, bg-surface panel, Escape/backdrop
 // click to close, minimal Tab focus trap, focus returns to the trigger on
 // close. Shared by any page that needs an add/edit modal instead of an
-// inline form (Bookmarks, Logger, Codex, ...).
+// inline form (Bookmarks, Logger, ...).
 export function createModal(titleId) {
   const backdrop = document.createElement('div');
   backdrop.className = 'fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4';
