@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:8f99fcfe30e008bbda2ad908b5a5a7b684c5307038f0c63884b66ac1166c43b7",
-  "generated_at": "2026-08-14T14:58:58Z",
+  "hash": "sha256:3626cde5c5d7f9d16af35e7308586ac42ea3e0501769ca224662a086a330ad2c",
+  "generated_at": "2026-08-16T01:19:26Z",
   "models": [
     {
       "name": "Bookmark",
@@ -389,6 +389,62 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "client",
+      "table": "clients",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "match_name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "rate_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
     }
   ],
   "endpoints": [
@@ -520,6 +576,71 @@
       ],
       "auth": false,
       "model": "Bookmark",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clients",
+      "handler": "ClientListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/clients",
+      "handler": "ClientCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
       "kind": "update"
     },
     {
