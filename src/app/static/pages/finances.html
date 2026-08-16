@@ -3,26 +3,136 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Finances</title>
+  <title>Finances · Homelab</title>
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
-  <nav class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-    <a href="/static/pages/home.html" class="font-semibold text-sm tracking-tight">GOVA</a>
-    <div class="flex gap-6 text-sm text-gray-500">
-      <a href="/static/pages/home.html" class="hover:text-gray-900 transition-colors">Home</a>
+<body class="bg-canvas text-ink min-h-screen flex flex-col font-sans antialiased">
+
+  <header class="sticky top-0 z-20 border-b border-hairline bg-surface">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+      <a href="/static/pages/home.html" class="flex items-center gap-2 text-sm font-medium shrink-0">
+        <span class="h-2 w-2 rounded-full bg-accent led-pulse" aria-hidden="true"></span>
+        Homelab
+      </a>
+
+      <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline bg-surface text-xs overflow-x-auto">
+        <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Dashboard</a>
+        <a href="/static/pages/reminders.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Reminders</a>
+        <a href="/static/pages/todos.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Tasks</a>
+        <a href="/static/pages/journal.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Journal</a>
+        <a href="/static/pages/bookmarks.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Bookmarks</a>
+        <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Logger</a>
+        <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
+          <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+          Finances
+        </span>
+      </nav>
+
+      <div class="hidden md:flex items-center gap-3 shrink-0 text-xs text-ink-dim tabular-nums">
+        <span class="flex items-center gap-1.5">
+          <time id="clock">--:--:--</time>
+        </span>
+        <button type="button" data-theme-toggle aria-pressed="false" aria-label="Toggle dark mode" class="inline-flex items-center justify-center h-7 w-7 text-ink-dim hover:text-ink transition-colors">
+          <svg class="theme-icon-sun w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M10 15a5 5 0 100-10 5 5 0 000 10zM10 0a1 1 0 011 1v1a1 1 0 11-2 0V1a1 1 0 011-1zm0 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM3.05 3.05a1 1 0 011.414 0l.707.707a1 1 0 11-1.414 1.414l-.707-.707a1 1 0 010-1.414zm11.78 11.78a1 1 0 011.415 0l.707.707a1 1 0 01-1.415 1.415l-.707-.707a1 1 0 010-1.415zM0 10a1 1 0 011-1h1a1 1 0 110 2H1a1 1 0 01-1-1zm16 0a1 1 0 011-1h1a1 1 0 110 2h-1a1 1 0 01-1-1zM3.05 16.95a1 1 0 010-1.414l.707-.707a1 1 0 111.414 1.414l-.707.707a1 1 0 01-1.414 0zm11.78-11.78a1 1 0 010-1.414l.707-.707a1 1 0 111.415 1.414l-.707.707a1 1 0 01-1.415 0z"/>
+          </svg>
+          <svg class="theme-icon-moon w-4 h-4 hidden" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+        </button>
+      </div>
+
+      <button id="nav-toggle" type="button" class="md:hidden flex flex-col justify-center gap-1.5 h-9 w-9 shrink-0" aria-expanded="false" aria-controls="mobile-drawer">
+        <span class="sr-only">Toggle navigation</span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+        <span class="block h-px w-5 bg-ink" aria-hidden="true"></span>
+      </button>
     </div>
-  </nav>
-  <main class="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
-    <div class="space-y-6">
-      <h1 class="text-2xl font-semibold tracking-tight">Finances</h1>
-      <div id="app">Loading...</div>
-      <div id="forms-container" class="space-y-4"></div>
+  </header>
+
+  <div id="mobile-drawer-backdrop" class="md:hidden fixed inset-0 bg-black/60 z-30 hidden"></div>
+
+  <aside id="mobile-drawer" class="md:hidden fixed top-0 right-0 h-full w-72 max-w-[80vw] bg-surface border-l border-hairline z-40 translate-x-full transition-transform duration-200 ease-out flex flex-col">
+    <div class="h-14 flex items-center justify-between px-4 border-b border-hairline shrink-0">
+      <span class="text-xs text-ink-dim">Menu</span>
+      <button id="nav-close" type="button" class="text-ink-dim hover:text-ink text-lg leading-none px-2 py-1">
+        <span aria-hidden="true">&times;</span>
+        <span class="sr-only">Close menu</span>
+      </button>
     </div>
+    <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 text-sm overflow-y-auto">
+      <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Dashboard</a>
+      <a href="/static/pages/reminders.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Reminders</a>
+      <a href="/static/pages/todos.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Tasks</a>
+      <a href="/static/pages/journal.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Journal</a>
+      <a href="/static/pages/bookmarks.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Bookmarks</a>
+      <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Logger</a>
+      <span class="px-3 py-3 flex items-center gap-2 text-ink">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+        Finances
+      </span>
+    </nav>
+    <div class="mt-auto px-4 py-3 border-t border-hairline text-xs text-ink-dim flex items-center justify-between gap-1.5 tabular-nums shrink-0">
+      <span class="flex items-center gap-1.5">
+        <time id="clock-mobile">--:--:--</time>
+      </span>
+      <button type="button" data-theme-toggle aria-pressed="false" aria-label="Toggle dark mode" class="inline-flex items-center justify-center h-7 w-7 text-ink-dim hover:text-ink transition-colors">
+        <svg class="theme-icon-sun w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M10 15a5 5 0 100-10 5 5 0 000 10zM10 0a1 1 0 011 1v1a1 1 0 11-2 0V1a1 1 0 011-1zm0 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM3.05 3.05a1 1 0 011.414 0l.707.707a1 1 0 11-1.414 1.414l-.707-.707a1 1 0 010-1.414zm11.78 11.78a1 1 0 011.415 0l.707.707a1 1 0 01-1.415 1.415l-.707-.707a1 1 0 010-1.415zM0 10a1 1 0 011-1h1a1 1 0 110 2H1a1 1 0 01-1-1zm16 0a1 1 0 011-1h1a1 1 0 110 2h-1a1 1 0 01-1-1zM3.05 16.95a1 1 0 010-1.414l.707-.707a1 1 0 111.414 1.414l-.707.707a1 1 0 01-1.414 0zm11.78-11.78a1 1 0 010-1.414l.707-.707a1 1 0 111.415 1.414l-.707.707a1 1 0 01-1.415 0z"/>
+        </svg>
+        <svg class="theme-icon-moon w-4 h-4 hidden" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-xl font-semibold tracking-tight text-ink page-title">Finances</h1>
+      <div class="flex items-center gap-2">
+        <button id="month-prev" type="button" aria-label="Previous month"
+                class="px-2 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">&lsaquo;</button>
+        <span id="month-label" class="text-sm text-ink tabular-nums min-w-32 text-center">&hellip;</span>
+        <button id="month-next" type="button" aria-label="Next month"
+                class="px-2 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">&rsaquo;</button>
+      </div>
+    </div>
+
+    <section id="ledger" class="grid grid-cols-2 md:grid-cols-5 gap-px bg-hairline border border-hairline" aria-label="Month ledger"></section>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p id="sync-status" class="text-xs text-ink-dim">Never synced.</p>
+      <button id="sync-btn" type="button"
+              class="px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">Sync now</button>
+    </div>
+
+    <section id="sessions-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Sessions"></section>
+    <section id="shopping-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Shopping list"></section>
+    <section id="subscriptions-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Subscriptions"></section>
+    <section id="clients-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Clients"></section>
+    <section id="rates-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Duration rates"></section>
+    <section id="all-time" class="border border-hairline bg-surface px-5 py-4 text-xs text-ink-dim tabular-nums" aria-label="All-time totals"></section>
+
+    <div id="forms-container"></div>
   </main>
-  <footer class="border-t border-gray-100 px-6 py-4 text-xs text-gray-400">
-    Built with GOVA
+
+  <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim">
+    Homelab
   </footer>
+
+  <script type="module" src="/static/js/lib/theme.js"></script>
   <script type="module" src="/static/js/finances.js"></script>
 </body>
 </html>
