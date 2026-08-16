@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 )
@@ -55,6 +56,29 @@ func monthPrefix(date string) (string, bool) {
 	return date[:7], true
 }
 
+// deref flattens a nullable date column to a plain string, so callers can hand
+// it straight to monthPrefix without repeating a nil check at every site.
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// previousMonth steps a YYYY-MM back one, rolling the year at January.
+func previousMonth(month string) string {
+	y, m, ok := splitMonth(month)
+	if !ok {
+		return month
+	}
+	m--
+	if m == 0 {
+		m = 12
+		y--
+	}
+	return fmt.Sprintf("%04d-%02d", y, m)
+}
+
 type subRow struct {
 	cadence   string
 	amount    int
@@ -97,7 +121,12 @@ func (m *SubscriptionModel) MonthlyEquivalentFor(month string) (int, error) {
 		if startPrefix > month {
 			continue
 		}
-		if r.endedOn != nil && len(*r.endedOn) >= 7 && (*r.endedOn)[:7] < month {
+		// Stopping a subscription drops it from the month you stop it in, not
+		// just from the next one. The question this page answers is "if I stop
+		// paying this, what do I have?", so a stop has to move the number you
+		// are looking at. A subscription therefore counts for a month only if
+		// it was still live at the end of it.
+		if endedPrefix, ok := monthPrefix(deref(r.endedOn)); ok && endedPrefix <= month {
 			continue
 		}
 		total += monthlyEquivalent(r.cadence, r.amount)
@@ -119,9 +148,12 @@ func (m *SubscriptionModel) TotalThrough(month string) (int, error) {
 		if !ok {
 			continue
 		}
+		// Mirrors MonthlyEquivalentFor: the last month a stopped subscription
+		// counts for is the one BEFORE the month it was stopped in, because a
+		// stop takes effect immediately rather than at the month boundary.
 		end := month
-		if r.endedOn != nil && len(*r.endedOn) >= 7 && (*r.endedOn)[:7] < month {
-			end = (*r.endedOn)[:7]
+		if endedPrefix, ok := monthPrefix(deref(r.endedOn)); ok && endedPrefix <= month {
+			end = previousMonth(endedPrefix)
 		}
 		total += monthlyEquivalent(r.cadence, r.amount) * monthsBetween(start, end)
 	}

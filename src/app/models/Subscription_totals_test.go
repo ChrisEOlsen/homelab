@@ -53,13 +53,72 @@ INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on, e
 		t.Fatalf("want only the live subscription (1199), got %d", got)
 	}
 
-	// The ended one is still counted in the month it was live.
+	// Stopping is immediate: 'Old gym' was stopped on 2026-07-15, so it does
+	// NOT count for July -- the month you stop in is the first month you do
+	// not pay for. Only Spotify remains.
 	got, err = m.MonthlyEquivalentFor("2026-07")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got != 1199 {
+		t.Fatalf("july (stop month, gym excluded): want 1199, got %d", got)
+	}
+
+	// The month before the stop is the last one it counts for.
+	got, err = m.MonthlyEquivalentFor("2026-06")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != 9199 {
-		t.Fatalf("july: want 9199, got %d", got)
+		t.Fatalf("june (last paid month): want 9199, got %d", got)
+	}
+}
+
+// Stopping a subscription has to move the number the user is looking at --
+// "if I stop paying this, what do I have?" is the question the page answers.
+func TestStoppingRemovesItFromTheCurrentMonth(t *testing.T) {
+	d := db.OpenTest(t, subscriptionSchema)
+	m := NewSubscriptionModel(d.Read, d.Write, cache.New())
+
+	if _, err := d.Write.Exec(`
+INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on, ended_on)
+VALUES ('Rent', 310000, 'monthly', 1, '2026-06-01', NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := m.MonthlyEquivalentFor("2026-08")
+	if got != 310000 {
+		t.Fatalf("while live, august should carry it: got %d", got)
+	}
+
+	// Stop it mid-August, exactly as the Stop button does.
+	if _, err := d.Write.Exec(
+		"UPDATE subscriptions SET is_active = 0, ended_on = '2026-08-16'"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ = m.MonthlyEquivalentFor("2026-08")
+	if got != 0 {
+		t.Fatalf("after stopping, august must drop it: got %d", got)
+	}
+	got, _ = m.MonthlyEquivalentFor("2026-07")
+	if got != 310000 {
+		t.Fatalf("july was already paid and must be unchanged: got %d", got)
+	}
+
+	// All-time stops accruing at the stop month too: June and July only.
+	total, _ := m.TotalThrough("2026-08")
+	if total != 620000 {
+		t.Fatalf("all-time through august: want 620000 (jun+jul), got %d", total)
+	}
+}
+
+func TestPreviousMonthRollsTheYear(t *testing.T) {
+	if got := previousMonth("2026-01"); got != "2025-12" {
+		t.Fatalf("january should roll back a year, got %q", got)
+	}
+	if got := previousMonth("2026-08"); got != "2026-07" {
+		t.Fatalf("want 2026-07, got %q", got)
 	}
 }
 

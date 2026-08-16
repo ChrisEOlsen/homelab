@@ -1374,17 +1374,14 @@ function subscriptionRow(item) {
   cadence.textContent = item.cadence;
   li.appendChild(cadence);
 
-  // A stopped subscription still counts for every month it was live during
-  // part of -- so stopping one mid-month leaves this month's total untouched
-  // and only takes effect next month. Without saying so, the click looks like
-  // it did nothing: the figure above does not move and a strikethrough is easy
-  // to miss.
+  // Stopping takes effect immediately, including the month it happens in, so
+  // the total above moves the moment you click. The date is still worth
+  // showing: it is what decides which past months the subscription counted
+  // for, and the last month it was paid is the one before it.
   if (!item.is_active && item.ended_on) {
     const stopped = document.createElement('span');
     stopped.className = 'text-xs text-ink-dim';
-    stopped.textContent = item.ended_on.slice(0, 7) === state.month
-      ? `stopped ${item.ended_on} · still counts this month`
-      : `stopped ${item.ended_on}`;
+    stopped.textContent = `stopped ${item.ended_on}`;
     li.appendChild(stopped);
   }
 

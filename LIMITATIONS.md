@@ -114,8 +114,18 @@ work.
   balance".
 - **Planned shopping never reduces Net.** It is reported as a separate committed
   figure, with a derived "net after committed" line.
-- **Subscriptions recur automatically** in every month between `started_on` and
-  `ended_on`, normalized to a monthly figure (yearly ÷ 12, weekly × 52 ÷ 12).
+- **Subscriptions recur automatically** each month, normalized to a monthly
+  figure (yearly ÷ 12, weekly × 52 ÷ 12).
+- **Stopping a subscription takes effect immediately**, including the month you
+  stop it in — the page answers "if I stop paying this, what do I have?", so a
+  stop has to move the number you are looking at. A subscription counts for a
+  month only if it was still live at the end of that month, which means the last
+  month it counts for is the one *before* the month it was stopped. Months it
+  ran through in full are unaffected.
+
+  The trade: stopping on the 28th still removes the whole month, even though you
+  most likely paid it. If that matters, edit `ended_on` to a date in the
+  following month via `PUT /api/v1/subscriptions/{id}`.
 
 ## App-wide
 

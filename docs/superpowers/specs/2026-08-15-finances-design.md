@@ -193,7 +193,14 @@ re-syncs — is skipped. One CRUD table, no special-case code.
   date differs.
 - **Deactivating a subscription sets `ended_on` to today** if it is null. Month
   membership is then purely a date-range question: a subscription counts in month
-  *M* if `started_on <= end(M)` and (`ended_on IS NULL` or `ended_on >= start(M)`).
+  *M* if `started_on <= end(M)` and (`ended_on IS NULL` or `ended_on > end(M)`).
+
+  > **Revised 2026-08-16.** This originally read `ended_on >= start(M)`, which
+  > kept a subscription in the month it was stopped and only dropped it the
+  > month after. In use that made the Stop button look broken: the figure the
+  > user was staring at did not move. The page answers "if I stop paying this,
+  > what do I have?", so a stop now takes effect in the month it happens and the
+  > last month a subscription counts for is the one before it.
   `is_active` is a UI affordance, never a term in the month query.
 
 ## Rate resolution
