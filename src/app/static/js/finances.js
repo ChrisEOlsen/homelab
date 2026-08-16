@@ -120,16 +120,69 @@ function timeLabel(stamp) {
 // ---- Shared DOM builders ----
 // panel() gives every section the same heading row, so the page reads as one
 // instrument rather than six stacked widgets.
-export function panel(container, title, subtitle, action) {
+// Which panels are folded shut, by title. Persisted because every panel is
+// rebuilt from scratch on each repaint (loadSummary -> renderAll -> panel()),
+// so state held only in the DOM would spring back open on the next sync tick
+// or month change. Wrapped in try/catch: storage throws in private mode, and
+// a page that cannot remember a fold is far better than one that cannot draw.
+const COLLAPSE_KEY = 'finances:collapsed';
+
+function readCollapsed() {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsed(set) {
+  try {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set]));
+  } catch {
+    /* storage unavailable — folds just won't persist this session */
+  }
+}
+
+function chevron() {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'collapsible-chevron w-3.5 h-3.5 text-ink-dim shrink-0');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('clip-rule', 'evenodd');
+  path.setAttribute(
+    'd',
+    'M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z'
+  );
+  svg.appendChild(path);
+  return svg;
+}
+
+export function panel(container, title, subtitle, action, onOpen) {
   container.replaceChildren();
 
-  const head = document.createElement('div');
-  head.className = 'flex items-baseline justify-between gap-3';
+  const collapsed = readCollapsed();
+  const details = document.createElement('details');
+  details.className = 'collapsible';
+  details.open = !collapsed.has(title);
+
+  const head = document.createElement('summary');
+  head.className =
+    'collapsible-toggle flex items-baseline justify-between gap-3 cursor-pointer select-none';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'flex items-center gap-2 min-w-0';
+  titleWrap.appendChild(chevron());
 
   const h = document.createElement('h2');
   h.className = 'text-sm font-medium text-ink';
   h.textContent = title;
-  head.appendChild(h);
+  titleWrap.appendChild(h);
+  head.appendChild(titleWrap);
 
   // subtitle and an optional header action (e.g. "+ Add item") share the
   // right-hand slot so the two-item justify-between split (title vs.
@@ -143,14 +196,35 @@ export function panel(container, title, subtitle, action) {
     s.textContent = subtitle;
     right.appendChild(s);
   }
-  if (action) right.appendChild(action);
+  if (action) {
+    // The action button now lives inside the <summary>, so a click on it
+    // would toggle the fold as well as run its own handler. Swallowing the
+    // event here keeps every caller from having to remember that; listeners
+    // already bound to the button itself still fire.
+    action.addEventListener('click', (e) => e.stopPropagation());
+    right.appendChild(action);
+  }
 
   if (right.childNodes.length > 0) head.appendChild(right);
-  container.appendChild(head);
+  details.appendChild(head);
 
   const body = document.createElement('div');
-  body.className = 'space-y-2';
-  container.appendChild(body);
+  body.className = 'collapsible-body space-y-2 pt-3';
+  details.appendChild(body);
+
+  details.addEventListener('toggle', () => {
+    const set = readCollapsed();
+    if (details.open) set.delete(title);
+    else set.add(title);
+    writeCollapsed(set);
+
+    // A folded panel has no width, so anything that sizes itself from the
+    // DOM measures its fallback and would stay stuck at that size when the
+    // panel reopens. Give such a panel a chance to redraw at its real width.
+    if (details.open && typeof onOpen === 'function') onOpen();
+  });
+
+  container.appendChild(details);
   return body;
 }
 
@@ -691,7 +765,7 @@ function chartLegendEntry(colorVar, label) {
 
 function renderChart() {
   const subtitle = state.summaryError ? 'unavailable' : monthLabel(state.month);
-  const body = panel(chartEl, 'Cash Flow', subtitle);
+  const body = panel(chartEl, 'Cash Flow', subtitle, null, renderChart);
 
   if (state.summaryError) {
     errorLine(body, `Could not load the chart for ${monthLabel(state.month)}: ${state.summaryError}`);

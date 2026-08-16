@@ -1155,6 +1155,32 @@ footer {
 }
 
 /*
+ * .collapsible — folds at every width.
+ *
+ * Distinct from .collapsible-mobile above, which is forced open at 768px+
+ * because those panels are a page's only content. The finances page stacks
+ * six panels, so folding the ones you are not reading is useful on a desktop
+ * too. Kept as a separate class so the other five pages keep their behaviour.
+ */
+.collapsible > summary.collapsible-toggle {
+  list-style: none;
+}
+.collapsible > summary.collapsible-toggle::-webkit-details-marker {
+  display: none;
+}
+.collapsible-chevron {
+  transition: transform 150ms ease;
+}
+.collapsible:not([open]) > summary.collapsible-toggle .collapsible-chevron {
+  transform: rotate(-90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-chevron {
+    transition: none;
+  }
+}
+
+/*
  * Mobile density
  * --------------
  * Tailwind's whole spacing scale (p-4, gap-2, space-y-3, …) is
