@@ -19,3 +19,16 @@ INSERT INTO clients (name, match_name, email, phone, rate_cents, kind) VALUES
   ('Puneet Riverside',   'Puneet Riverside',   'puneet@assigned.com',          NULL,         10000, 'independent'),
   ('John Kublacki',      'John Kublacki',      'john@assigned.com',            NULL,         10000, 'independent'),
   ('Ofer Rubin',         'Ofer Rubin',         NULL,                           NULL,         10000, 'independent');
+
+CREATE TABLE rate_rules (
+    id INTEGER PRIMARY KEY,
+    duration_min INTEGER NOT NULL UNIQUE,
+    amount_cents INTEGER NOT NULL,
+    label TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO rate_rules (duration_min, amount_cents, label) VALUES
+  (30, 4500, '30 minutes'),
+  (45, 5000, '45 minutes'),
+  (60, 6000, '60 minutes');

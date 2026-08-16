@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:3626cde5c5d7f9d16af35e7308586ac42ea3e0501769ca224662a086a330ad2c",
-  "generated_at": "2026-08-16T01:19:26Z",
+  "hash": "sha256:0d401b08089760636e78247889e582608fd615afb43c9d2ef2efb6acf0145839",
+  "generated_at": "2026-08-16T01:24:21Z",
   "models": [
     {
       "name": "Bookmark",
@@ -445,6 +445,37 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "rate_rule",
+      "table": "rate_rules",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "duration_min",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
     }
   ],
   "endpoints": [
@@ -876,6 +907,71 @@
       "auth": false,
       "model": "LogEntry",
       "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rate_rules",
+      "handler": "RateRuleListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rate_rules",
+      "handler": "RateRuleCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "update"
     },
     {
       "method": "GET",
