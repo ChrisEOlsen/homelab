@@ -101,6 +101,12 @@ func FinancesGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFun
 		// net_after_committed shows what the month would look like if every
 		// planned item were bought today.
 		net := income.EarnedCents - subsCents - bought
+
+		// The same two figures against projected rather than earned income:
+		// "how does the month end up if every session already booked happens?"
+		// Earned-based net is the headline because it is money that actually
+		// exists; these answer the forward-looking question behind a purchase.
+		projectedNet := income.ProjectedCents - subsCents - bought
 		allTimeSpend := allTimeBought + allTimeSubs
 
 		jsonOK(w, map[string]any{
@@ -116,8 +122,10 @@ func FinancesGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFun
 				"shopping_bought_cents":    bought,
 				"shopping_committed_cents": committed,
 			},
-			"net_cents":                 net,
-			"net_after_committed_cents": net - committed,
+			"net_cents":                           net,
+			"net_after_committed_cents":           net - committed,
+			"projected_net_cents":                 projectedNet,
+			"projected_net_after_committed_cents": projectedNet - committed,
 			"all_time": map[string]any{
 				"income_cents": allTimeIncome,
 				"spend_cents":  allTimeSpend,

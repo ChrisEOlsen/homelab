@@ -53,6 +53,16 @@ export const state = {
   // the month label and the panels backed by their own endpoints, instead of
   // leaving the previous month's data on screen mislabelled as the new one.
   summaryError: null,
+  // Whether the Net tile's projected breakdown is open. Persisted for the same
+  // reason the panel folds are: the ledger is rebuilt on every repaint, so
+  // state held in the DOM would snap shut on the next sync tick.
+  netExpanded: (() => {
+    try {
+      return localStorage.getItem('finances:netExpanded') === '1';
+    } catch {
+      return false;
+    }
+  })(),
   clients: [],
   rateRules: [],
   subscriptions: [],
@@ -327,6 +337,50 @@ function renderLedger() {
   after.className = 'text-xs text-ink-dim tabular-nums';
   after.textContent = `${fmtMoney(s.net_after_committed_cents)} after planned`;
   net.appendChild(after);
+
+  // The headline Net is earned-based: money that actually exists. These two
+  // answer the forward question instead -- "if every session already booked
+  // happens, where does the month land?" -- which is what you actually want
+  // before committing to a purchase. Kept behind a disclosure so the tile
+  // stays a single number at a glance.
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className =
+    'mt-1 text-xs text-ink-dim hover:text-ink transition-colors text-left';
+
+  const extra = document.createElement('div');
+  extra.className = 'mt-1 space-y-0.5 border-t border-hairline pt-1';
+
+  const projLine = document.createElement('div');
+  projLine.className = 'text-xs text-ink tabular-nums';
+  projLine.textContent = `${fmtMoney(s.projected_net_cents)} if projected`;
+  extra.appendChild(projLine);
+
+  const projAfterLine = document.createElement('div');
+  projAfterLine.className = 'text-xs text-ink-dim tabular-nums';
+  projAfterLine.textContent =
+    `${fmtMoney(s.projected_net_after_committed_cents)} if projected, after planned`;
+  extra.appendChild(projAfterLine);
+
+  function applyNetExpanded() {
+    const open = state.netExpanded;
+    extra.classList.toggle('hidden', !open);
+    moreBtn.textContent = open ? '− less' : '+ if projected';
+    moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  moreBtn.addEventListener('click', () => {
+    state.netExpanded = !state.netExpanded;
+    try {
+      localStorage.setItem('finances:netExpanded', state.netExpanded ? '1' : '0');
+    } catch {
+      /* storage unavailable — the fold just won't persist */
+    }
+    applyNetExpanded();
+  });
+
+  net.append(moreBtn, extra);
+  applyNetExpanded();
   ledgerEl.appendChild(net);
 }
 

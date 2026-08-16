@@ -36,9 +36,11 @@ type summaryEnvelope struct {
 			ShoppingBoughtCents    int `json:"shopping_bought_cents"`
 			ShoppingCommittedCents int `json:"shopping_committed_cents"`
 		} `json:"spending"`
-		NetCents               int `json:"net_cents"`
-		NetAfterCommittedCents int `json:"net_after_committed_cents"`
-		AllTime                struct {
+		NetCents                        int `json:"net_cents"`
+		NetAfterCommittedCents          int `json:"net_after_committed_cents"`
+		ProjectedNetCents               int `json:"projected_net_cents"`
+		ProjectedNetAfterCommittedCents int `json:"projected_net_after_committed_cents"`
+		AllTime                         struct {
 			IncomeCents int `json:"income_cents"`
 			SpendCents  int `json:"spend_cents"`
 			NetCents    int `json:"net_cents"`
@@ -103,6 +105,24 @@ INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on) V
 	}
 	if want := 15000 - 1200 - 20000 - 3000; env.Data.NetAfterCommittedCents != want {
 		t.Fatalf("net after committed: want %d, got %d", want, env.Data.NetAfterCommittedCents)
+	}
+
+	// The forward-looking pair: the same arithmetic against projected income
+	// rather than earned, which is what the Net tile's disclosure shows.
+	if want := 21000 - 1200 - 20000; env.Data.ProjectedNetCents != want {
+		t.Fatalf("projected net: want %d, got %d", want, env.Data.ProjectedNetCents)
+	}
+	if want := 21000 - 1200 - 20000 - 3000; env.Data.ProjectedNetAfterCommittedCents != want {
+		t.Fatalf("projected net after committed: want %d, got %d",
+			want, env.Data.ProjectedNetAfterCommittedCents)
+	}
+
+	// Projected income is never below earned, so the projected variants can
+	// never be worse than their earned counterparts. If that inverts, the
+	// earned/projected filters have drifted apart.
+	if env.Data.ProjectedNetCents < env.Data.NetCents {
+		t.Fatalf("projected net (%d) must not be below earned net (%d)",
+			env.Data.ProjectedNetCents, env.Data.NetCents)
 	}
 }
 
