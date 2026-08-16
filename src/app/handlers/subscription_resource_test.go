@@ -5,10 +5,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/db"
 	"gova/app/models"
 )
@@ -150,7 +150,7 @@ func TestSubscriptionUpdateDeactivateStampsEndedOn(t *testing.T) {
 		return rec
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := calendar.Now().Format("2006-01-02")
 
 	id, err := model.Create("Old gym", 8000, "monthly", nil, true, "2025-01-01", nil, nil)
 	if err != nil {
@@ -163,6 +163,42 @@ func TestSubscriptionUpdateDeactivateStampsEndedOn(t *testing.T) {
 	}
 
 	item, err := model.Find(id)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item.EndedOn == nil || *item.EndedOn != today {
+		t.Errorf("ended_on: got %v, want %q", item.EndedOn, today)
+	}
+}
+
+// TestSubscriptionCreateInactiveStampsEndedOn covers the hand-customized
+// normalization in SubscriptionCreatePOST (FIX B): POSTing is_active:false
+// with no ended_on must stamp today's date immediately, the same
+// normalization SubscriptionUpdatePUT already applied. Without it, month
+// membership -- read purely from started_on/ended_on -- would count the
+// subscription as live in every month from started_on onward forever, even
+// though the UI shows it struck through from creation.
+func TestSubscriptionCreateInactiveStampsEndedOn(t *testing.T) {
+	testDB := db.OpenTest(t, subscriptionResourceSchema())
+	appCache := cache.New()
+	router := subscriptionRouter(testDB, appCache)
+	model := models.NewSubscriptionModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	today := calendar.Now().Format("2006-01-02")
+
+	rec := do(http.MethodPost, "/api/v1/subscriptions", `{"name": "Cancelled gym", "amount_cents": 8000, "cadence": "monthly", "is_active": false, "started_on": "2025-01-01"}`)
+	if rec.Code != 200 {
+		t.Fatalf("create: got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	item, err := model.Find(1)
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}

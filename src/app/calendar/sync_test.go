@@ -33,6 +33,7 @@ CREATE TABLE calendar_syncs (
     id INTEGER PRIMARY KEY, finished_at TEXT, ok INTEGER NOT NULL DEFAULT 0,
     events_seen INTEGER NOT NULL DEFAULT 0, created_count INTEGER NOT NULL DEFAULT 0,
     updated_count INTEGER NOT NULL DEFAULT 0, cancelled_count INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
     error TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 INSERT INTO clients (name, match_name, rate_cents, kind) VALUES ('Ofer Rubin', 'Ofer Rubin', 10000, 'independent');
 INSERT INTO rate_rules (duration_min, amount_cents) VALUES (45, 5000), (60, 6000);
@@ -64,6 +65,7 @@ CREATE TABLE calendar_syncs (
     id INTEGER PRIMARY KEY, finished_at TEXT, ok INTEGER NOT NULL DEFAULT 0,
     events_seen INTEGER NOT NULL DEFAULT 0, created_count INTEGER NOT NULL DEFAULT 0,
     updated_count INTEGER NOT NULL DEFAULT 0, cancelled_count INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
     error TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 INSERT INTO clients (name, match_name, rate_cents, kind) VALUES ('Ofer Rubin', 'Ofer Rubin', 10000, 'independent');
 INSERT INTO rate_rules (duration_min, amount_cents) VALUES (45, 5000), (60, 6000);

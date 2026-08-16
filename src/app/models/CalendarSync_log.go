@@ -1,6 +1,9 @@
 package models
 
-import "database/sql"
+import (
+	"database/sql"
+	"errors"
+)
 
 // CalendarSyncRecord is one completed sync run.
 type CalendarSyncRecord struct {
@@ -10,6 +13,7 @@ type CalendarSyncRecord struct {
 	Created    int
 	Updated    int
 	Cancelled  int
+	Failed     int
 	Error      string
 }
 
@@ -26,9 +30,9 @@ func (m *CalendarSyncModel) Record(r CalendarSyncRecord) error {
 	}
 	_, err := m.writeDB.Exec(`
 INSERT INTO calendar_syncs
-    (finished_at, ok, events_seen, created_count, updated_count, cancelled_count, error)
-VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		r.FinishedAt, ok, r.EventsSeen, r.Created, r.Updated, r.Cancelled, errVal)
+    (finished_at, ok, events_seen, created_count, updated_count, cancelled_count, failed, error)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.FinishedAt, ok, r.EventsSeen, r.Created, r.Updated, r.Cancelled, r.Failed, errVal)
 	if err == nil {
 		m.cache.Bust("calendar_syncs:")
 	}
@@ -39,13 +43,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 func (m *CalendarSyncModel) Latest() (*CalendarSync, error) {
 	row := m.readDB.QueryRow(`
 SELECT id, finished_at, ok, events_seen, created_count, updated_count,
-       cancelled_count, error, created_at
+       cancelled_count, failed, error, created_at
 FROM calendar_syncs ORDER BY id DESC LIMIT 1`)
 
 	var it CalendarSync
 	err := row.Scan(&it.ID, &it.FinishedAt, &it.Ok, &it.EventsSeen, &it.CreatedCount,
-		&it.UpdatedCount, &it.CancelledCount, &it.Error, &it.CreatedAt)
-	if err == sql.ErrNoRows {
+		&it.UpdatedCount, &it.CancelledCount, &it.Failed, &it.Error, &it.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

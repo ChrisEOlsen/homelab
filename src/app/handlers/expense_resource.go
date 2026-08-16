@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/models"
 )
 
@@ -84,7 +84,13 @@ func ExpenseCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Hand
 			return
 		}
 		if req.IncurredOn == "" {
-			req.IncurredOn = time.Now().Format("2006-01-02")
+			// America/New_York wall clock, not the container's UTC clock — see
+			// calendar.Now for why: every other date in this feature (session
+			// dates, month boundaries) is stamped in the feed's zone, so
+			// defaulting here to time.Now() (UTC) would file a late-evening
+			// purchase into tomorrow's month for hours before ET actually
+			// rolls over.
+			req.IncurredOn = calendar.Now().Format("2006-01-02")
 		}
 		if req.Status == "" {
 			req.Status = "planned"
@@ -124,7 +130,7 @@ func ExpenseUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Handl
 		// supplied a date explicitly — net-per-month should follow when money
 		// actually left, not when the item was first wished for.
 		if req.Status == "bought" && req.IncurredOn == "" {
-			req.IncurredOn = time.Now().Format("2006-01-02")
+			req.IncurredOn = calendar.Now().Format("2006-01-02")
 		}
 		if req.IncurredOn == "" {
 			jsonError(w, "incurred_on is required", 422)

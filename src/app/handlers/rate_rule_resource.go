@@ -82,6 +82,10 @@ func RateRuleCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Han
 		model := models.NewRateRuleModel(readDB, writeDB, appCache)
 		id, err := model.Create(req.DurationMin, req.AmountCents, req.Label)
 		if err != nil {
+			if isUniqueConstraintErr(err) {
+				jsonError(w, "a rate rule for that duration already exists", 409)
+				return
+			}
 			jsonError(w, "failed to create", 500)
 			return
 		}
@@ -106,6 +110,10 @@ func RateRuleUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Hand
 		if err := model.Update(id, req.DurationMin, req.AmountCents, req.Label); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				jsonError(w, "not found", 404)
+				return
+			}
+			if isUniqueConstraintErr(err) {
+				jsonError(w, "a rate rule for that duration already exists", 409)
 				return
 			}
 			jsonError(w, "failed to update", 500)

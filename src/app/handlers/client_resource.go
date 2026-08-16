@@ -87,6 +87,10 @@ func ClientCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Handl
 		model := models.NewClientModel(readDB, writeDB, appCache)
 		id, err := model.Create(req.Name, req.MatchName, req.Email, req.Phone, req.RateCents, req.Kind, req.IsActive, req.Notes)
 		if err != nil {
+			if isUniqueConstraintErr(err) {
+				jsonError(w, "a client with that calendar name already exists", 409)
+				return
+			}
 			jsonError(w, "failed to create", 500)
 			return
 		}
@@ -111,6 +115,10 @@ func ClientUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Handle
 		if err := model.Update(id, req.Name, req.MatchName, req.Email, req.Phone, req.RateCents, req.Kind, req.IsActive, req.Notes); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				jsonError(w, "not found", 404)
+				return
+			}
+			if isUniqueConstraintErr(err) {
+				jsonError(w, "a client with that calendar name already exists", 409)
 				return
 			}
 			jsonError(w, "failed to update", 500)

@@ -100,7 +100,15 @@ func (s *Service) Run(ctx context.Context) Result {
 	}
 	defer runMu.Unlock()
 
-	res := Result{FinishedAt: Now().Format("2006-01-02 15:04:05")}
+	// started stamps last_seen_at on every row this run touches -- it
+	// legitimately marks when the run began touching them. res.FinishedAt is
+	// a different moment: it is set in record(), right before persisting,
+	// so a run that spends time in the HTTP fetch or the reconcile loop
+	// reports the wall-clock time it actually finished, not the time it
+	// started. Reusing one stamp for both used to make a slow or timed-out
+	// run's "Last sync HH:MM:SS" predate the outcome it describes.
+	started := Now().Format("2006-01-02 15:04:05")
+	res := Result{}
 
 	events, err := s.fetch(ctx)
 	if err != nil {
@@ -133,7 +141,7 @@ func (s *Service) Run(ctx context.Context) Result {
 		priceRules = append(priceRules, RateRule{DurationMin: r.DurationMin, AmountCents: r.AmountCents})
 	}
 
-	now := res.FinishedAt
+	now := started
 	seen := make([]string, 0, len(events))
 	minDate, maxDate := events[0].Date(), events[0].Date()
 
@@ -242,6 +250,9 @@ func (s *Service) fetch(ctx context.Context) ([]Event, error) {
 }
 
 func (s *Service) record(res Result, err error) Result {
+	// Stamp FinishedAt here, at the moment the run is actually done, not at
+	// Run's entry -- see the comment on `started` above.
+	res.FinishedAt = Now().Format("2006-01-02 15:04:05")
 	if err != nil {
 		res.OK = false
 		res.Error = err.Error()
@@ -251,6 +262,7 @@ func (s *Service) record(res Result, err error) Result {
 			FinishedAt: res.FinishedAt,
 			OK:         res.OK,
 			EventsSeen: res.EventsSeen,
+			Failed:     res.Failed,
 			Created:    res.Created,
 			Updated:    res.Updated,
 			Cancelled:  res.Cancelled,

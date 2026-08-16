@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -101,4 +103,80 @@ func TestClientResourceCRUD(t *testing.T) {
 		t.Errorf("delete: got %d", rec.Code)
 	}
 	_ = id
+}
+
+// clientResourceSchemaWithUniqueMatchName mirrors the real migration's
+// idx_clients_match_name UNIQUE index, which clientResourceSchema omits so
+// the CRUD test above can reuse the same match_name across seed and create.
+func clientResourceSchemaWithUniqueMatchName() string {
+	return clientResourceSchema() + `;
+		CREATE UNIQUE INDEX idx_clients_match_name ON clients(match_name COLLATE NOCASE)`
+}
+
+// TestClientCreateDuplicateMatchNameReturns409 covers the hand-customized
+// conflict handling in ClientCreatePOST: a duplicate match_name (a routine
+// outcome of the review-queue flow, not an exceptional one) must answer 409
+// via the shared isUniqueConstraintErr helper, not a generic 500.
+func TestClientCreateDuplicateMatchNameReturns409(t *testing.T) {
+	testDB := db.OpenTest(t, clientResourceSchemaWithUniqueMatchName())
+	appCache := cache.New()
+	router := clientRouter(testDB, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	body := `{"name": "Ofer Rubin", "match_name": "Ofer Rubin", "rate_cents": 10000, "kind": "independent", "is_active": true}`
+	if rec := do(http.MethodPost, "/api/v1/clients", body); rec.Code != 200 {
+		t.Fatalf("first create: got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	rec := do(http.MethodPost, "/api/v1/clients", body)
+	if rec.Code != 409 {
+		t.Fatalf("duplicate match_name: got %d, want 409, body %s", rec.Code, rec.Body.String())
+	}
+
+	var env struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Code != "conflict" {
+		t.Errorf("code: got %q, want %q", env.Code, "conflict")
+	}
+}
+
+// TestClientUpdateDuplicateMatchNameReturns409 covers the same normalization
+// on the update path: renaming one client's match_name onto another's is a
+// UNIQUE violation and must also answer 409, not 500.
+func TestClientUpdateDuplicateMatchNameReturns409(t *testing.T) {
+	testDB := db.OpenTest(t, clientResourceSchemaWithUniqueMatchName())
+	appCache := cache.New()
+	router := clientRouter(testDB, appCache)
+	model := models.NewClientModel(testDB.Read, testDB.Write, appCache)
+
+	if _, err := model.Create("Ofer Rubin", "Ofer Rubin", nil, nil, 10000, "independent", true, nil); err != nil {
+		t.Fatalf("seed first client: %v", err)
+	}
+	id2, err := model.Create("Ran Rubin", "Ran Rubin", nil, nil, 6000, "independent", true, nil)
+	if err != nil {
+		t.Fatalf("seed second client: %v", err)
+	}
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	body := `{"name": "Ran Rubin", "match_name": "Ofer Rubin", "rate_cents": 6000, "kind": "independent", "is_active": true}`
+	rec := do(http.MethodPut, "/api/v1/clients/"+strconv.FormatInt(id2, 10), body)
+	if rec.Code != 409 {
+		t.Fatalf("update onto duplicate match_name: got %d, want 409, body %s", rec.Code, rec.Body.String())
+	}
 }

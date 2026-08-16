@@ -190,6 +190,14 @@ type ClientMatch struct {
 
 // AllForMatching returns every active client for name resolution. The set is
 // small (a handful of rows) and read once per sync, so it is not paginated.
+//
+// Deliberate consequence: filtering on is_active means deactivating a client
+// makes their future sessions fall through to the duration-rule/unknown
+// pricing ladder and get flagged for review on the very next sync, rather
+// than archiving the client while leaving their historical pricing alone.
+// There is no UI toggle for is_active today, so this is latent, not a live
+// bug. Whether "inactive" should mean "stop re-pricing new sessions this
+// way" or something else is a product decision, not fixed here.
 func (m *ClientModel) AllForMatching() ([]ClientMatch, error) {
 	rows, err := m.readDB.Query(
 		"SELECT id, match_name, rate_cents, kind FROM clients WHERE is_active = 1",

@@ -5,10 +5,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/db"
 	"gova/app/models"
 )
@@ -117,7 +117,7 @@ func TestExpenseCreateDefaultsStatusAndDate(t *testing.T) {
 		return rec
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := calendar.Now().Format("2006-01-02")
 
 	rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "gizmo", "amount_cents": 500}`)
 	if rec.Code != 200 {
@@ -152,7 +152,7 @@ func TestExpenseUpdateBoughtRestampsDate(t *testing.T) {
 		return rec
 	}
 
-	today := time.Now().Format("2006-01-02")
+	today := calendar.Now().Format("2006-01-02")
 
 	// Case 1: bought with no incurred_on -> re-stamped to today.
 	id1, err := model.Create("widget", 1000, nil, "planned", "2020-01-01", nil)

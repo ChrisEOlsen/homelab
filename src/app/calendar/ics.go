@@ -109,7 +109,9 @@ func unfold(r io.Reader) ([]string, error) {
 
 	lines := []string{}
 	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), "\r")
+		// bufio.ScanLines already strips a trailing \r, so the CRLF the feed
+		// uses per RFC 5545 needs no further trimming here.
+		line := sc.Text()
 		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
 			if len(lines) > 0 {
 				lines[len(lines)-1] += line[1:]
@@ -150,6 +152,13 @@ func unescape(v string) string {
 
 // parseStamp reads a local date-time stamp. A trailing Z is tolerated even
 // though calsync never writes one.
+//
+// Only the YYYYMMDDTHHMMSS form is accepted. An all-day event written as
+// DTSTART;VALUE=DATE:20260810 (no "T", no time) fails to parse and is
+// dropped silently by the BEGIN:VEVENT/END:VEVENT check in Parse (Start
+// stays zero). This is intentional, not an oversight: the upstream calsync
+// feed never emits all-day events, so there is nothing today to add support
+// for.
 func parseStamp(v string) (time.Time, error) {
 	return time.Parse("20060102T150405", strings.TrimSuffix(v, "Z"))
 }

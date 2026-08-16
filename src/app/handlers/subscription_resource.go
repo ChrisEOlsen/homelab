@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/models"
 )
 
@@ -86,7 +86,12 @@ func SubscriptionCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http
 			return
 		}
 		if req.StartedOn == "" {
-			req.StartedOn = time.Now().Format("2006-01-02")
+			// America/New_York wall clock, not the container's UTC clock — see
+			// calendar.Now: month membership is a date-range question read
+			// straight off started_on/ended_on, so defaulting here to UTC
+			// would shift a late-evening ET subscription into tomorrow's
+			// month bucket.
+			req.StartedOn = calendar.Now().Format("2006-01-02")
 		}
 		if req.Cadence == "" {
 			req.Cadence = "monthly"
@@ -102,6 +107,16 @@ func SubscriptionCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http
 		if req.EndedOn != nil && *req.EndedOn != "" && !validDate(*req.EndedOn) {
 			jsonError(w, "ended_on must be a valid YYYY-MM-DD date", 422)
 			return
+		}
+		// Month membership is a pure date-range question (see the spec), so
+		// is_active must never be a term in it — the same normalization
+		// SubscriptionUpdatePUT applies below. Without this, a subscription
+		// POSTed with is_active:false and no ended_on would count as live in
+		// every month from started_on onward forever, even though the UI
+		// shows it struck through.
+		if !req.IsActive && (req.EndedOn == nil || *req.EndedOn == "") {
+			today := calendar.Now().Format("2006-01-02")
+			req.EndedOn = &today
 		}
 		model := models.NewSubscriptionModel(readDB, writeDB, appCache)
 		id, err := model.Create(req.Name, req.AmountCents, req.Cadence, req.BillingDay, req.IsActive, req.StartedOn, req.EndedOn, req.Notes)
@@ -129,7 +144,7 @@ func SubscriptionUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.
 		// Month membership is a pure date-range question (see the spec), so
 		// is_active must never be a term in it. Switching a subscription off
 		// therefore has to write the end date the range query reads.
-		today := time.Now().Format("2006-01-02")
+		today := calendar.Now().Format("2006-01-02")
 		if !req.IsActive && (req.EndedOn == nil || *req.EndedOn == "") {
 			req.EndedOn = &today
 		}

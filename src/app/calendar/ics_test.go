@@ -77,6 +77,47 @@ func TestParseFeed(t *testing.T) {
 	}
 }
 
+// TestMalformedEventMidFileLeavesNeighborsIntact proves a malformed VEVENT
+// in the middle of the document (not just a trailing one, as in the main
+// fixture) does not take out the valid events around it — Parse must keep
+// scanning past END:VEVENT and pick the next BEGIN:VEVENT back up cleanly.
+func TestMalformedEventMidFileLeavesNeighborsIntact(t *testing.T) {
+	doc := "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:wl-before@calsync\r\n" +
+		"SUMMARY:Before Person\r\n" +
+		"DTSTART;TZID=America/New_York:20260810T070000\r\n" +
+		"DTEND;TZID=America/New_York:20260810T074500\r\n" +
+		"X-CALSYNC-SOURCE:wl\r\n" +
+		"END:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"SUMMARY:No UID here\r\n" +
+		"DTSTART;TZID=America/New_York:20260811T080000\r\n" +
+		"END:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:wl-after@calsync\r\n" +
+		"SUMMARY:After Person\r\n" +
+		"DTSTART;TZID=America/New_York:20260812T090000\r\n" +
+		"DTEND;TZID=America/New_York:20260812T093000\r\n" +
+		"X-CALSYNC-SOURCE:wl\r\n" +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+
+	events, err := Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("want 2 usable events (the mid-file UID-less one skipped), got %d: %+v", len(events), events)
+	}
+	if events[0].UID != "wl-before@calsync" {
+		t.Errorf("first event: want wl-before@calsync, got %q", events[0].UID)
+	}
+	if events[1].UID != "wl-after@calsync" {
+		t.Errorf("second event: want wl-after@calsync, got %q", events[1].UID)
+	}
+}
+
 func TestUnfoldRejoinsContinuationLines(t *testing.T) {
 	lines, err := unfold(strings.NewReader("DESCRIPTION:one\r\n two\r\nUID:x\r\n"))
 	if err != nil {

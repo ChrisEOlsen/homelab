@@ -16,6 +16,7 @@ type CalendarSync struct {
 	CreatedCount int64 `json:"created_count"`
 	UpdatedCount int64 `json:"updated_count"`
 	CancelledCount int64 `json:"cancelled_count"`
+	Failed int64 `json:"failed"`
 	Error *string `json:"error"`
 	CreatedAt Time `json:"created_at"`
 }

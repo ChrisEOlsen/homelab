@@ -29,6 +29,12 @@ type RateRule struct {
 type Pricing struct {
 	ClientID    *int64
 	AmountCents int
+	// RateSource is "client" for two different cases that callers must not
+	// conflate: a real match against the clients table, and the unmatched-cc
+	// default (a new independent client priced at IndependentDefaultCents
+	// and flagged for review). Only ClientID tells them apart — nil for the
+	// default, set for a real match. Do not treat RateSource == "client"
+	// alone as proof the session is tied to a known client row.
 	RateSource  string // override | client | rule | unknown
 	Status      string // scheduled | ignored
 	NeedsReview bool

@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -94,4 +95,74 @@ func TestRateRuleResourceCRUD(t *testing.T) {
 		t.Errorf("delete: got %d", rec.Code)
 	}
 	_ = id
+}
+
+// rate_ruleResourceSchemaWithUniqueDuration mirrors the real migration's
+// `duration_min INTEGER NOT NULL UNIQUE`, which rate_ruleResourceSchema omits
+// so the CRUD test above can reuse duration_min: 1 across seed and create.
+func rate_ruleResourceSchemaWithUniqueDuration() string {
+	return `CREATE TABLE rate_rules (
+		id INTEGER PRIMARY KEY,
+		duration_min INTEGER NOT NULL UNIQUE,
+		amount_cents INTEGER NOT NULL,
+		label TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`
+}
+
+// TestRateRuleCreateDuplicateDurationReturns409 covers the hand-customized
+// conflict handling in RateRuleCreatePOST: a duplicate duration_min must
+// answer 409 via the shared isUniqueConstraintErr helper, not a generic 500.
+func TestRateRuleCreateDuplicateDurationReturns409(t *testing.T) {
+	testDB := db.OpenTest(t, rate_ruleResourceSchemaWithUniqueDuration())
+	appCache := cache.New()
+	router := rate_ruleRouter(testDB, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	body := `{"duration_min": 45, "amount_cents": 5000, "label": "45 minutes"}`
+	if rec := do(http.MethodPost, "/api/v1/rate_rules", body); rec.Code != 200 {
+		t.Fatalf("first create: got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	rec := do(http.MethodPost, "/api/v1/rate_rules", body)
+	if rec.Code != 409 {
+		t.Fatalf("duplicate duration_min: got %d, want 409, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRateRuleUpdateDuplicateDurationReturns409 covers the same handling on
+// the update path: changing one rule's duration onto another's is a UNIQUE
+// violation and must also answer 409, not 500.
+func TestRateRuleUpdateDuplicateDurationReturns409(t *testing.T) {
+	testDB := db.OpenTest(t, rate_ruleResourceSchemaWithUniqueDuration())
+	appCache := cache.New()
+	router := rate_ruleRouter(testDB, appCache)
+	model := models.NewRateRuleModel(testDB.Read, testDB.Write, appCache)
+
+	if _, err := model.Create(45, 5000, nil); err != nil {
+		t.Fatalf("seed first rule: %v", err)
+	}
+	id2, err := model.Create(60, 6000, nil)
+	if err != nil {
+		t.Fatalf("seed second rule: %v", err)
+	}
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	body := `{"duration_min": 45, "amount_cents": 6000}`
+	rec := do(http.MethodPut, "/api/v1/rate_rules/"+strconv.FormatInt(id2, 10), body)
+	if rec.Code != 409 {
+		t.Fatalf("update onto duplicate duration_min: got %d, want 409, body %s", rec.Code, rec.Body.String())
+	}
 }
