@@ -69,3 +69,16 @@ CREATE TABLE expenses (
 );
 
 CREATE INDEX idx_expenses_incurred_on ON expenses(incurred_on);
+
+CREATE TABLE subscriptions (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    cadence TEXT NOT NULL DEFAULT 'monthly',
+    billing_day INTEGER,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    started_on TEXT NOT NULL,
+    ended_on TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

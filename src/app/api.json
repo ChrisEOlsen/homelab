@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:272f499df8939144e320580fa1a8dd5f336e4cba61e9c563f0dc93ef890da537",
-  "generated_at": "2026-08-16T01:37:49Z",
+  "hash": "sha256:f258d83844c820d88f72836f9f94e0da9121c1aebcea5da94326414b2861b330",
+  "generated_at": "2026-08-16T01:46:17Z",
   "models": [
     {
       "name": "Bookmark",
@@ -513,6 +513,62 @@
         },
         {
           "name": "label",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "subscription",
+      "table": "subscriptions",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "cadence",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "billing_day",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "started_on",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "ended_on",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "notes",
           "type": "string",
           "nullable": true
         },
@@ -1312,6 +1368,71 @@
       "auth": false,
       "model": "Shortcut",
       "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subscriptions",
+      "handler": "SubscriptionListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subscriptions",
+      "handler": "SubscriptionCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "update"
     },
     {
       "method": "GET",
