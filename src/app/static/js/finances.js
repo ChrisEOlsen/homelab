@@ -47,10 +47,30 @@ export const state = {
   // last day of a month it would open the page on the next month.
   month: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`,
   summary: null,
+  // Set when the summary fetch itself fails, so renderAll can still update
+  // the month label and the panels backed by their own endpoints, instead of
+  // leaving the previous month's data on screen mislabelled as the new one.
+  summaryError: null,
   clients: [],
   rateRules: [],
   subscriptions: [],
 };
+
+// Last failure message per panel, keyed the same as the panel element names
+// below. panel() rebuilds each section's DOM from scratch on every repaint,
+// so a mutating action can't just append an error node to the live tree --
+// it has to survive here and get re-shown by the panel's own render function.
+const actionErrors = {
+  sessions: null,
+  shopping: null,
+  subscriptions: null,
+  clients: null,
+  rates: null,
+};
+
+function clearActionErrors() {
+  Object.keys(actionErrors).forEach((k) => { actionErrors[k] = null; });
+}
 
 // ---- Money and date helpers ----
 // Everything on the wire is integer cents; only this formatter turns them into
@@ -146,6 +166,26 @@ export function iconButton(label, onClick, danger = false) {
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
+}
+
+// Runs a single mutating call (put/post/del), records the outcome in
+// actionErrors[panelKey] -- cleared on success, set to the server's message
+// on failure or a network error -- then reloads so the panel repaints either
+// way. Every row-level button below (override, ignore, bought, delete, rate
+// changes, ...) goes through this so a 422/409/500 is never silently
+// invisible.
+async function mutate(panelKey, action, reload) {
+  let res;
+  try {
+    res = await action();
+  } catch (err) {
+    actionErrors[panelKey] = 'Request failed -- check your connection and try again.';
+    await reload();
+    return { ok: false, error: actionErrors[panelKey] };
+  }
+  actionErrors[panelKey] = res.ok ? null : (res.error ?? 'Request failed.');
+  await reload();
+  return res;
 }
 
 // ---- Ledger strip ----
@@ -251,27 +291,31 @@ function sessionRow(item) {
     if (entered === null) return;
     const cents = parseMoney(entered);
     if (cents === null) { window.alert('Enter a number, e.g. 75 or 75.50'); return; }
-    await put(`/api/v1/training_sessions/${item.id}`, {
+    await mutate('sessions', () => put(`/api/v1/training_sessions/${item.id}`, {
       ...item, override_cents: cents, amount_cents: cents, rate_source: 'override', needs_review: false,
-    });
-    await loadSummary();
+    }), loadSummary);
   }));
 
   li.appendChild(iconButton(item.status === 'ignored' ? 'Unignore' : 'Ignore', async () => {
-    await put(`/api/v1/training_sessions/${item.id}`, {
+    await mutate('sessions', () => put(`/api/v1/training_sessions/${item.id}`, {
       ...item, status: item.status === 'ignored' ? 'scheduled' : 'ignored',
-    });
-    await loadSummary();
+    }), loadSummary);
   }));
 
   return li;
 }
 
 function renderSessions() {
-  const s = state.summary;
-  const sessions = s?.sessions ?? [];
-  const body = panel(sessionsEl, 'Sessions',
-    `${sessions.length} in ${monthLabel(state.month)}`);
+  const sessions = state.summary?.sessions ?? [];
+  const subtitle = state.summaryError ? 'unavailable' : `${sessions.length} in ${monthLabel(state.month)}`;
+  const body = panel(sessionsEl, 'Sessions', subtitle);
+
+  if (state.summaryError) {
+    errorLine(body, `Could not load sessions for ${monthLabel(state.month)}: ${state.summaryError}`);
+    return;
+  }
+
+  if (actionErrors.sessions) errorLine(body, actionErrors.sessions);
 
   if (sessions.length === 0) {
     emptyLine(body, 'No sessions recorded for this month yet. Sync the calendar, or add one manually.');
@@ -372,19 +416,29 @@ function renderSyncStatus() {
 syncBtn.addEventListener('click', async () => {
   syncBtn.disabled = true;
   syncBtn.textContent = 'Syncing…';
-  const res = await post('/api/v1/calendar/sync', {});
-  syncBtn.textContent = 'Sync now';
-  syncBtn.disabled = false;
-  await loadSummary();
-  if (res.ok) {
-    // The button's own response is strictly more detailed than the refetched
-    // summary's last_sync (it alone carries `failed`), so it gets the final
-    // say on the status line — applied after loadSummary's repaint above,
-    // not instead of it, so the ledger/sessions still refresh either way.
-    applySyncStatus(res.data);
-  } else {
+  try {
+    const res = await post('/api/v1/calendar/sync', {});
+    await loadSummary();
+    if (res.ok) {
+      // The button's own response is strictly more detailed than the refetched
+      // summary's last_sync (it alone carries `failed`), so it gets the final
+      // say on the status line — applied after loadSummary's repaint above,
+      // not instead of it, so the ledger/sessions still refresh either way.
+      applySyncStatus(res.data);
+    } else {
+      syncStatusEl.className = 'text-xs text-danger';
+      syncStatusEl.textContent = res.error ?? 'Sync request failed.';
+    }
+  } catch (err) {
+    // post() calls res.json() unguarded -- a network drop or a non-JSON
+    // proxy response throws here rather than resolving to {ok:false}.
     syncStatusEl.className = 'text-xs text-danger';
-    syncStatusEl.textContent = res.error ?? 'Sync request failed.';
+    syncStatusEl.textContent = 'Sync request failed — check your connection and try again.';
+  } finally {
+    // Always restore the button, even if the request above threw, so it
+    // never gets stuck disabled at "Syncing…".
+    syncBtn.textContent = 'Sync now';
+    syncBtn.disabled = false;
   }
 });
 
@@ -393,20 +447,34 @@ export async function loadSummary() {
   const res = await get(`/api/v1/finances/summary?month=${state.month}`);
   if (!res.ok) {
     state.summary = null;
-    ledgerEl.replaceChildren();
-    errorLine(ledgerEl, res.error ?? 'Failed to load finances.');
-    return;
+    state.summaryError = res.error ?? 'Failed to load finances.';
+  } else {
+    state.summary = res.data;
+    state.summaryError = null;
   }
-  state.summary = res.data;
   renderAll();
 }
 
 // renderAll is the single repaint entry point. Tasks 14 and 15 add their panel
 // renderers to this list; nothing else calls them.
+//
+// The month label and every panel backed by its own endpoint (Subscriptions,
+// Clients, Rates) always repaint here, even when the summary fetch failed --
+// only the ledger, Sessions and Shopping (all sourced from the summary
+// payload) fall back to an error state. Without this, a failed summary on
+// month navigation would leave the previous month's rows on screen under the
+// new month's label.
 export function renderAll() {
   monthLabelEl.textContent = monthLabel(state.month);
-  renderLedger();
-  renderSyncStatus();
+
+  if (state.summaryError) {
+    ledgerEl.replaceChildren();
+    errorLine(ledgerEl, state.summaryError);
+  } else {
+    renderLedger();
+    renderSyncStatus();
+  }
+
   renderSessions();
   renderShopping();
   renderSubscriptions();
@@ -417,10 +485,12 @@ export function renderAll() {
 
 document.getElementById('month-prev').addEventListener('click', async () => {
   state.month = shiftMonth(state.month, -1);
+  clearActionErrors();
   await loadSummary();
 });
 document.getElementById('month-next').addEventListener('click', async () => {
   state.month = shiftMonth(state.month, 1);
+  clearActionErrors();
   await loadSummary();
 });
 
@@ -473,23 +543,28 @@ function setupExpensesForm(container) {
     }
 
     submitBtn.disabled = true;
-    const res = await post('/api/v1/expenses', {
-      name: nameInput.value.trim(),
-      amount_cents: cents,
-      category: categoryInput.value.trim() || null,
-      status: 'planned',
-      incurred_on: `${state.month}-01`,
-      notes: null,
-    });
-    submitBtn.disabled = false;
-
-    if (!res.ok) {
-      errEl.textContent = res.error ?? 'Could not add the item.';
+    try {
+      const res = await post('/api/v1/expenses', {
+        name: nameInput.value.trim(),
+        amount_cents: cents,
+        category: categoryInput.value.trim() || null,
+        status: 'planned',
+        incurred_on: `${state.month}-01`,
+        notes: null,
+      });
+      if (!res.ok) {
+        errEl.textContent = res.error ?? 'Could not add the item.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      form.reset();
+      await loadSummary();
+    } catch (err) {
+      errEl.textContent = 'Request failed — check your connection and try again.';
       errEl.classList.remove('hidden');
-      return;
+    } finally {
+      submitBtn.disabled = false;
     }
-    form.reset();
-    await loadSummary();
   });
 
   container.appendChild(form);
@@ -526,37 +601,42 @@ function expenseRow(item) {
   li.appendChild(amount);
 
   li.appendChild(iconButton(item.status === 'bought' ? 'Un-buy' : 'Bought', async () => {
-    await put(`/api/v1/expenses/${item.id}`, {
+    await mutate('shopping', () => put(`/api/v1/expenses/${item.id}`, {
       ...item,
       status: item.status === 'bought' ? 'planned' : 'bought',
       // Blank so the handler re-stamps it to today when marking bought.
       incurred_on: item.status === 'bought' ? item.incurred_on : '',
-    });
-    await loadSummary();
+    }), loadSummary);
   }));
 
   li.appendChild(iconButton('Delete', async () => {
-    await del(`/api/v1/expenses/${item.id}`);
-    await loadSummary();
+    await mutate('shopping', () => del(`/api/v1/expenses/${item.id}`), loadSummary);
   }, true));
 
   return li;
 }
 
 function renderShopping() {
-  const items = state.summary?.expenses ?? [];
   const bought = state.summary?.spending.shopping_bought_cents ?? 0;
   const committed = state.summary?.spending.shopping_committed_cents ?? 0;
-  const body = panel(shoppingEl, 'Shopping',
-    `${fmtMoney(bought)} spent · ${fmtMoney(committed)} planned`);
+  const subtitle = state.summaryError ? 'unavailable' : `${fmtMoney(bought)} spent · ${fmtMoney(committed)} planned`;
+  const body = panel(shoppingEl, 'Shopping', subtitle);
 
-  if (items.length === 0) {
-    emptyLine(body, 'Nothing on the list this month.');
+  if (state.summaryError) {
+    errorLine(body, `Could not load shopping for ${monthLabel(state.month)}: ${state.summaryError}`);
   } else {
-    const list = document.createElement('ul');
-    items.forEach((item) => list.appendChild(expenseRow(item)));
-    body.appendChild(list);
+    if (actionErrors.shopping) errorLine(body, actionErrors.shopping);
+    const items = state.summary?.expenses ?? [];
+    if (items.length === 0) {
+      emptyLine(body, 'Nothing on the list this month.');
+    } else {
+      const list = document.createElement('ul');
+      items.forEach((item) => list.appendChild(expenseRow(item)));
+      body.appendChild(list);
+    }
   }
+  // The manual-add form doesn't depend on the summary fetch, so keep it
+  // available even when the month's rows above couldn't load.
   setupExpensesForm(body);
 }
 
@@ -585,13 +665,11 @@ function subscriptionRow(item) {
   li.appendChild(amount);
 
   li.appendChild(iconButton(item.is_active ? 'Stop' : 'Resume', async () => {
-    await put(`/api/v1/subscriptions/${item.id}`, { ...item, is_active: !item.is_active });
-    await loadAll();
+    await mutate('subscriptions', () => put(`/api/v1/subscriptions/${item.id}`, { ...item, is_active: !item.is_active }), loadAll);
   }));
 
   li.appendChild(iconButton('Delete', async () => {
-    await del(`/api/v1/subscriptions/${item.id}`);
-    await loadAll();
+    await mutate('subscriptions', () => del(`/api/v1/subscriptions/${item.id}`), loadAll);
   }, true));
 
   return li;
@@ -646,25 +724,30 @@ function subscriptionForm(container) {
     }
 
     submitBtn.disabled = true;
-    const res = await post('/api/v1/subscriptions', {
-      name: nameInput.value.trim(),
-      amount_cents: cents,
-      cadence: cadenceSelect.value,
-      billing_day: null,
-      is_active: true,
-      started_on: '',
-      ended_on: null,
-      notes: null,
-    });
-    submitBtn.disabled = false;
-
-    if (!res.ok) {
-      errEl.textContent = res.error ?? 'Could not add the subscription.';
+    try {
+      const res = await post('/api/v1/subscriptions', {
+        name: nameInput.value.trim(),
+        amount_cents: cents,
+        cadence: cadenceSelect.value,
+        billing_day: null,
+        is_active: true,
+        started_on: '',
+        ended_on: null,
+        notes: null,
+      });
+      if (!res.ok) {
+        errEl.textContent = res.error ?? 'Could not add the subscription.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      form.reset();
+      await loadAll();
+    } catch (err) {
+      errEl.textContent = 'Request failed — check your connection and try again.';
       errEl.classList.remove('hidden');
-      return;
+    } finally {
+      submitBtn.disabled = false;
     }
-    form.reset();
-    await loadAll();
   });
 
   container.appendChild(form);
@@ -676,8 +759,14 @@ async function loadSubscriptions() {
 }
 
 function renderSubscriptions() {
-  const monthly = state.summary?.spending.subscriptions_cents ?? 0;
-  const body = panel(subscriptionsEl, 'Subscriptions', `${fmtMoney(monthly)} this month`);
+  // subscriptions_cents lives on the summary payload; when it failed to load,
+  // fall back to the independently-loaded list rather than showing a false
+  // $0.00 for "this month".
+  const subtitle = state.summaryError
+    ? `${state.subscriptions.length} recurring`
+    : `${fmtMoney(state.summary?.spending.subscriptions_cents ?? 0)} this month`;
+  const body = panel(subscriptionsEl, 'Subscriptions', subtitle);
+  if (actionErrors.subscriptions) errorLine(body, actionErrors.subscriptions);
 
   if (state.subscriptions.length === 0) {
     emptyLine(body, 'No recurring payments recorded.');
@@ -744,39 +833,54 @@ function clientRow(item) {
     if (entered === null) return;
     const cents = parseMoney(entered);
     if (cents === null) { window.alert('Enter a number, e.g. 100'); return; }
-    await put(`/api/v1/clients/${item.id}`, { ...item, rate_cents: cents });
-    await loadAll();
+    await mutate('clients', () => put(`/api/v1/clients/${item.id}`, { ...item, rate_cents: cents }), loadAll);
   }));
 
   li.appendChild(iconButton(item.kind === 'ignored' ? 'Un-ignore' : 'Ignore', async () => {
-    await put(`/api/v1/clients/${item.id}`, {
+    await mutate('clients', () => put(`/api/v1/clients/${item.id}`, {
       ...item, kind: item.kind === 'ignored' ? 'independent' : 'ignored',
-    });
-    await loadAll();
+    }), loadAll);
   }));
 
   li.appendChild(iconButton('Delete', async () => {
-    await del(`/api/v1/clients/${item.id}`);
-    await loadAll();
+    await mutate('clients', () => del(`/api/v1/clients/${item.id}`), loadAll);
   }, true));
 
   return li;
 }
 
-// The unmatched strip is the whole review workflow: a name the feed priced
-// without a client row behind it, and two one-click ways to resolve it.
+// The unmatched strip is the whole review workflow: a session the feed
+// flagged for review because its name matched no client row, and two
+// one-click ways to resolve it.
+//
+// That "matched no client row" set also includes a gym session whose
+// duration matched no rate rule (needs_review=1, client_id IS NULL either
+// way) — it isn't only missing independents. "Add at $100" is only correct
+// for the latter; for a duration problem it creates a bogus $100 client
+// instead of fixing the real cause, a missing rate rule.
 function unmatchedStrip(container) {
   const names = state.summary?.unmatched_names ?? [];
   if (names.length === 0) return;
+
+  const total = state.summary.needs_review_count ?? names.length;
 
   const box = document.createElement('div');
   box.className = 'border border-hairline bg-canvas p-3 space-y-2';
 
   const heading = document.createElement('p');
   heading.className = 'text-xs text-danger';
-  heading.textContent =
-    `${state.summary.needs_review_count} session(s) flagged — these calendar names have no client row:`;
+  heading.textContent = total > names.length
+    ? `${names.length} of ${total} flagged sessions shown — names matching no client:`
+    : `${names.length} flagged session(s) — names matching no client:`;
   box.appendChild(heading);
+
+  const note = document.createElement('p');
+  note.className = 'text-xs text-ink-dim';
+  note.textContent =
+    'A name lands here whenever its session matched no client row — including a gym ' +
+    'session whose duration matched no rate rule. "Add at $100" is only correct if this ' +
+    'really is an independent client; for a duration problem, fix Gym rates instead.';
+  box.appendChild(note);
 
   names.forEach((name) => {
     const row = document.createElement('div');
@@ -787,20 +891,60 @@ function unmatchedStrip(container) {
     label.textContent = name; // textContent — this string came from the calendar
     row.appendChild(label);
 
-    row.appendChild(iconButton('Add at $100', async () => {
-      await createClient(name, 10000, 'independent');
-      await loadAll();
-    }));
+    const addBtn = iconButton('Add at $100', async (e) => {
+      await resolveUnmatched(e.currentTarget, () => createClient(name, 10000, 'independent'));
+    });
+    row.appendChild(addBtn);
 
-    row.appendChild(iconButton('Always ignore', async () => {
-      await createClient(name, 0, 'ignored');
-      await loadAll();
-    }));
+    const ignoreBtn = iconButton('Always ignore', async (e) => {
+      await resolveUnmatched(e.currentTarget, () => createClient(name, 0, 'ignored'));
+    });
+    row.appendChild(ignoreBtn);
 
     box.appendChild(row);
   });
 
   container.appendChild(box);
+}
+
+// Creating (or ignoring) a client from the review queue doesn't retroactively
+// reprice existing sessions -- pricing only happens during a calendar sync.
+// Without a sync here, loadAll() would repaint byte-identical data: the name
+// stays in this strip, its sessions still show "review", and an ignored name
+// keeps counting toward income until the background ticker's next run (up to
+// 30 minutes). So: create the client, sync, then reload -- with an
+// in-progress label on the button since the sync alone takes a few seconds.
+async function resolveUnmatched(button, createClientFn) {
+  button.disabled = true;
+  button.textContent = 'Working…';
+  try {
+    const createRes = await createClientFn();
+    if (!createRes.ok) {
+      // e.g. 409 conflict on a duplicate match_name -- the client was not
+      // created, so there is nothing to sync/reprice.
+      actionErrors.clients = createRes.error ?? 'Could not save the client.';
+      return;
+    }
+
+    button.textContent = 'Syncing…';
+    const syncRes = await post('/api/v1/calendar/sync', {});
+    if (!syncRes.ok) {
+      actionErrors.clients = syncRes.error ?? 'Sync request failed; sessions may not be repriced yet.';
+    } else if (syncRes.data?.ok === false) {
+      // The client row was created regardless -- say so isn't needed since
+      // reload below will already reflect the new client; just surface why
+      // the sessions may still look unpriced.
+      actionErrors.clients = syncRes.data.error ?? 'Sync did not complete cleanly; sessions may not be repriced yet.';
+    } else {
+      actionErrors.clients = null;
+    }
+  } catch (err) {
+    actionErrors.clients = 'Request failed — check your connection and try again.';
+  } finally {
+    // loadAll() repaints the whole panel (and replaces this button), so
+    // there's no separate re-enable step needed here.
+    await loadAll();
+  }
 }
 
 function clientForm(container) {
@@ -843,16 +987,21 @@ function clientForm(container) {
     }
 
     submitBtn.disabled = true;
-    const res = await createClient(name, cents, 'independent');
-    submitBtn.disabled = false;
-
-    if (!res.ok) {
-      errEl.textContent = res.error ?? 'Could not add the client.';
+    try {
+      const res = await createClient(name, cents, 'independent');
+      if (!res.ok) {
+        errEl.textContent = res.error ?? 'Could not add the client.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      form.reset();
+      await loadAll();
+    } catch (err) {
+      errEl.textContent = 'Request failed — check your connection and try again.';
       errEl.classList.remove('hidden');
-      return;
+    } finally {
+      submitBtn.disabled = false;
     }
-    form.reset();
-    await loadAll();
   });
 
   container.appendChild(form);
@@ -861,8 +1010,13 @@ function clientForm(container) {
 function renderClients() {
   const independents = state.clients.filter((c) => c.kind !== 'ignored').length;
   const body = panel(clientsEl, 'Clients', `${independents} independent`);
+  if (actionErrors.clients) errorLine(body, actionErrors.clients);
 
-  unmatchedStrip(body);
+  if (state.summaryError) {
+    emptyLine(body, 'Flagged-session review is unavailable until this month’s data reloads.');
+  } else {
+    unmatchedStrip(body);
+  }
 
   if (state.clients.length === 0) {
     emptyLine(body, 'No clients yet.');
@@ -902,8 +1056,7 @@ function rateRow(item) {
     if (entered === null) return;
     const cents = parseMoney(entered);
     if (cents === null) { window.alert('Enter a number, e.g. 50'); return; }
-    await put(`/api/v1/rate_rules/${item.id}`, { ...item, amount_cents: cents });
-    await loadAll();
+    await mutate('rates', () => put(`/api/v1/rate_rules/${item.id}`, { ...item, amount_cents: cents }), loadAll);
   }));
 
   return li;
@@ -911,6 +1064,7 @@ function rateRow(item) {
 
 function renderRates() {
   const body = panel(ratesEl, 'Gym rates', 'by session length');
+  if (actionErrors.rates) errorLine(body, actionErrors.rates);
 
   if (state.rateRules.length === 0) {
     emptyLine(body, 'No duration rules — gym sessions will be flagged for review.');
