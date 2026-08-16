@@ -1,4 +1,5 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
+import { createModal, confirmAction } from '/static/js/lib/modal.js';
 
 // ---- Clock + mobile drawer (same wiring every page carries) ----
 function tickClock() {
@@ -118,7 +119,7 @@ function timeLabel(stamp) {
 // ---- Shared DOM builders ----
 // panel() gives every section the same heading row, so the page reads as one
 // instrument rather than six stacked widgets.
-export function panel(container, title, subtitle) {
+export function panel(container, title, subtitle, action) {
   container.replaceChildren();
 
   const head = document.createElement('div');
@@ -129,12 +130,21 @@ export function panel(container, title, subtitle) {
   h.textContent = title;
   head.appendChild(h);
 
+  // subtitle and an optional header action (e.g. "+ Add item") share the
+  // right-hand slot so the two-item justify-between split (title vs.
+  // everything else) still holds with either, both, or neither present.
+  const right = document.createElement('div');
+  right.className = 'flex items-center gap-3';
+
   if (subtitle) {
     const s = document.createElement('span');
     s.className = 'text-xs text-ink-dim tabular-nums';
     s.textContent = subtitle;
-    head.appendChild(s);
+    right.appendChild(s);
   }
+  if (action) right.appendChild(action);
+
+  if (right.childNodes.length > 0) head.appendChild(right);
   container.appendChild(head);
 
   const body = document.createElement('div');
@@ -155,6 +165,18 @@ export function emptyLine(container, message) {
   p.className = 'text-sm text-ink-dim';
   p.textContent = message;
   container.appendChild(p);
+}
+
+// Small accent-outlined button for a panel's header row (e.g. "+ Add item"),
+// styled to match bookmarks.js's "+ Add Bookmark" button.
+export function headerActionButton(label, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className =
+    'px-3 py-1.5 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
 }
 
 export function iconButton(label, onClick, danger = false) {
@@ -285,16 +307,7 @@ function sessionRow(item) {
   amount.textContent = fmtMoney(item.amount_cents);
   li.appendChild(amount);
 
-  li.appendChild(iconButton('Override', async () => {
-    const entered = window.prompt(`Amount for ${item.client_name} on ${item.session_date}:`,
-      (item.amount_cents / 100).toFixed(2));
-    if (entered === null) return;
-    const cents = parseMoney(entered);
-    if (cents === null) { window.alert('Enter a number, e.g. 75 or 75.50'); return; }
-    await mutate('sessions', () => put(`/api/v1/training_sessions/${item.id}`, {
-      ...item, override_cents: cents, amount_cents: cents, rate_source: 'override', needs_review: false,
-    }), loadSummary);
-  }));
+  li.appendChild(iconButton('Override', (e) => openOverrideModal(item, e.currentTarget)));
 
   li.appendChild(iconButton(item.status === 'ignored' ? 'Unignore' : 'Ignore', async () => {
     await mutate('sessions', () => put(`/api/v1/training_sessions/${item.id}`, {
@@ -336,6 +349,104 @@ function renderSessions() {
     }
     list.appendChild(sessionRow(item));
   }
+}
+
+// ---- Session override modal ----
+let overrideItem = null;
+const overrideModal = createModal('override-modal-title');
+let overrideContextEl, overrideAmountInput, overrideSubmitBtn, overrideErrEl;
+
+function buildOverrideModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'override-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Override Amount';
+  overrideModal.panel.appendChild(heading);
+
+  const context = document.createElement('p');
+  context.className = 'text-xs text-ink-dim';
+  overrideModal.panel.appendChild(context);
+  overrideContextEl = context;
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  amountLabel.textContent = 'Amount';
+  overrideAmountInput = document.createElement('input');
+  overrideAmountInput.type = 'text';
+  overrideAmountInput.name = 'amount';
+  overrideAmountInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  overrideAmountInput.required = true;
+  form.appendChild(amountLabel);
+  form.appendChild(overrideAmountInput);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => overrideModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  overrideSubmitBtn = document.createElement('button');
+  overrideSubmitBtn.type = 'submit';
+  overrideSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  overrideSubmitBtn.textContent = 'Save';
+  btnRow.appendChild(overrideSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  overrideErrEl = document.createElement('p');
+  overrideErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(overrideErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    overrideErrEl.classList.add('hidden');
+
+    const cents = parseMoney(overrideAmountInput.value);
+    if (cents === null) {
+      overrideErrEl.textContent = 'Enter a number, e.g. 75 or 75.50';
+      overrideErrEl.classList.remove('hidden');
+      return;
+    }
+
+    overrideSubmitBtn.disabled = true;
+    try {
+      const res = await put(`/api/v1/training_sessions/${overrideItem.id}`, {
+        ...overrideItem, override_cents: cents, amount_cents: cents, rate_source: 'override', needs_review: false,
+      });
+      if (res.ok) {
+        overrideModal.close();
+        await loadSummary();
+      } else {
+        overrideErrEl.textContent = res.error ?? 'Could not save the override.';
+        overrideErrEl.classList.remove('hidden');
+      }
+    } catch (err) {
+      overrideErrEl.textContent = 'Request failed — check your connection and try again.';
+      overrideErrEl.classList.remove('hidden');
+    } finally {
+      overrideSubmitBtn.disabled = false;
+    }
+  });
+
+  overrideModal.panel.appendChild(form);
+}
+
+function openOverrideModal(item, trigger) {
+  overrideItem = item;
+  overrideContextEl.textContent = `${item.client_name} — ${item.session_date}`;
+  overrideAmountInput.value = (item.amount_cents / 100).toFixed(2);
+  overrideErrEl.classList.add('hidden');
+  overrideModal.open(trigger);
 }
 
 // ---- Sync ----
@@ -494,80 +605,130 @@ document.getElementById('month-next').addEventListener('click', async () => {
   await loadSummary();
 });
 
-// Injected by add_js_form, then rethemed to the Instrument palette and given
-// real money parsing — the generated version posts every field as a string,
-// which the Go handler's int decode rejects.
-function setupExpensesForm(container) {
+// ---- Expense (Shopping) modal ----
+const expenseModal = createModal('expense-modal-title');
+let expNameInput, expAmountInput, expCategoryInput, expSubmitBtn, expErrEl;
+
+function buildExpenseModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'expense-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Add Item';
+  expenseModal.panel.appendChild(heading);
+
   const form = document.createElement('form');
-  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+  form.className = 'space-y-3';
 
-  const mk = (placeholder, width) => {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = placeholder;
-    input.className =
-      `${width} bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent`;
-    return input;
-  };
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  nameLabel.textContent = 'Item';
+  expNameInput = document.createElement('input');
+  expNameInput.type = 'text';
+  expNameInput.name = 'name';
+  expNameInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  expNameInput.required = true;
+  form.appendChild(nameLabel);
+  form.appendChild(expNameInput);
 
-  const nameInput = mk('Item', 'flex-1 min-w-40');
-  const amountInput = mk('$0.00', 'w-24');
-  const categoryInput = mk('Category (optional)', 'w-40');
-  form.append(nameInput, amountInput, categoryInput);
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  amountLabel.textContent = 'Amount';
+  expAmountInput = document.createElement('input');
+  expAmountInput.type = 'text';
+  expAmountInput.name = 'amount';
+  expAmountInput.placeholder = '$0.00';
+  expAmountInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  expAmountInput.required = true;
+  form.appendChild(amountLabel);
+  form.appendChild(expAmountInput);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className =
-    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  submitBtn.textContent = 'Add';
-  form.appendChild(submitBtn);
+  const categoryLabel = document.createElement('label');
+  categoryLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  categoryLabel.textContent = 'Category (optional)';
+  expCategoryInput = document.createElement('input');
+  expCategoryInput.type = 'text';
+  expCategoryInput.name = 'category';
+  expCategoryInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  form.appendChild(categoryLabel);
+  form.appendChild(expCategoryInput);
 
-  const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-danger w-full hidden';
-  form.appendChild(errEl);
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => expenseModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  expSubmitBtn = document.createElement('button');
+  expSubmitBtn.type = 'submit';
+  expSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  expSubmitBtn.textContent = 'Add Item';
+  btnRow.appendChild(expSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  expErrEl = document.createElement('p');
+  expErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(expErrEl);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    errEl.classList.add('hidden');
+    expErrEl.classList.add('hidden');
 
-    const cents = parseMoney(amountInput.value);
-    if (!nameInput.value.trim()) {
-      errEl.textContent = 'Name is required.';
-      errEl.classList.remove('hidden');
+    const cents = parseMoney(expAmountInput.value);
+    if (!expNameInput.value.trim()) {
+      expErrEl.textContent = 'Name is required.';
+      expErrEl.classList.remove('hidden');
       return;
     }
     if (cents === null) {
-      errEl.textContent = 'Enter an amount, e.g. 45 or 45.50';
-      errEl.classList.remove('hidden');
+      expErrEl.textContent = 'Enter an amount, e.g. 45 or 45.50';
+      expErrEl.classList.remove('hidden');
       return;
     }
 
-    submitBtn.disabled = true;
+    expSubmitBtn.disabled = true;
     try {
       const res = await post('/api/v1/expenses', {
-        name: nameInput.value.trim(),
+        name: expNameInput.value.trim(),
         amount_cents: cents,
-        category: categoryInput.value.trim() || null,
+        category: expCategoryInput.value.trim() || null,
         status: 'planned',
         incurred_on: `${state.month}-01`,
         notes: null,
       });
-      if (!res.ok) {
-        errEl.textContent = res.error ?? 'Could not add the item.';
-        errEl.classList.remove('hidden');
-        return;
+      if (res.ok) {
+        expenseModal.close();
+        await loadSummary();
+      } else {
+        expErrEl.textContent = res.error ?? 'Could not add the item.';
+        expErrEl.classList.remove('hidden');
       }
-      form.reset();
-      await loadSummary();
     } catch (err) {
-      errEl.textContent = 'Request failed — check your connection and try again.';
-      errEl.classList.remove('hidden');
+      expErrEl.textContent = 'Request failed — check your connection and try again.';
+      expErrEl.classList.remove('hidden');
     } finally {
-      submitBtn.disabled = false;
+      expSubmitBtn.disabled = false;
     }
   });
 
-  container.appendChild(form);
+  expenseModal.panel.appendChild(form);
+}
+
+function openExpenseModalForCreate(trigger) {
+  expNameInput.value = '';
+  expAmountInput.value = '';
+  expCategoryInput.value = '';
+  expErrEl.classList.add('hidden');
+  expenseModal.open(trigger);
 }
 
 // ---- Shopping panel ----
@@ -609,7 +770,15 @@ function expenseRow(item) {
     }), loadSummary);
   }));
 
-  li.appendChild(iconButton('Delete', async () => {
+  li.appendChild(iconButton('Delete', async (e) => {
+    const ok = await confirmAction({
+      title: `Delete "${item.name}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+      trigger: e.currentTarget,
+    });
+    if (!ok) return;
     await mutate('shopping', () => del(`/api/v1/expenses/${item.id}`), loadSummary);
   }, true));
 
@@ -620,7 +789,10 @@ function renderShopping() {
   const bought = state.summary?.spending.shopping_bought_cents ?? 0;
   const committed = state.summary?.spending.shopping_committed_cents ?? 0;
   const subtitle = state.summaryError ? 'unavailable' : `${fmtMoney(bought)} spent · ${fmtMoney(committed)} planned`;
-  const body = panel(shoppingEl, 'Shopping', subtitle);
+  // The add-item modal doesn't depend on the summary fetch, so keep it
+  // available even when the month's rows above couldn't load.
+  const addBtn = headerActionButton('+ Add item', (e) => openExpenseModalForCreate(e.currentTarget));
+  const body = panel(shoppingEl, 'Shopping', subtitle, addBtn);
 
   if (state.summaryError) {
     errorLine(body, `Could not load shopping for ${monthLabel(state.month)}: ${state.summaryError}`);
@@ -635,9 +807,6 @@ function renderShopping() {
       body.appendChild(list);
     }
   }
-  // The manual-add form doesn't depend on the summary fetch, so keep it
-  // available even when the month's rows above couldn't load.
-  setupExpensesForm(body);
 }
 
 // ---- Subscriptions panel ----
@@ -668,89 +837,147 @@ function subscriptionRow(item) {
     await mutate('subscriptions', () => put(`/api/v1/subscriptions/${item.id}`, { ...item, is_active: !item.is_active }), loadAll);
   }));
 
-  li.appendChild(iconButton('Delete', async () => {
+  li.appendChild(iconButton('Delete', async (e) => {
+    const ok = await confirmAction({
+      title: `Delete "${item.name}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+      trigger: e.currentTarget,
+    });
+    if (!ok) return;
     await mutate('subscriptions', () => del(`/api/v1/subscriptions/${item.id}`), loadAll);
   }, true));
 
   return li;
 }
 
-function subscriptionForm(container) {
+// ---- Subscription (add) modal ----
+const subscriptionModal = createModal('subscription-modal-title');
+let subNameInput, subAmountInput, subCadenceSelect, subSubmitBtn, subErrEl;
+
+function buildSubscriptionModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'subscription-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Add Subscription';
+  subscriptionModal.panel.appendChild(heading);
+
   const form = document.createElement('form');
-  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+  form.className = 'space-y-3';
 
-  const nameInput = document.createElement('input');
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Subscription';
-  nameInput.className =
-    'flex-1 min-w-40 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  nameLabel.textContent = 'Name';
+  subNameInput = document.createElement('input');
+  subNameInput.type = 'text';
+  subNameInput.name = 'name';
+  subNameInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  subNameInput.required = true;
+  form.appendChild(nameLabel);
+  form.appendChild(subNameInput);
 
-  const amountInput = document.createElement('input');
-  amountInput.type = 'text';
-  amountInput.placeholder = '$0.00';
-  amountInput.className =
-    'w-24 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  amountLabel.textContent = 'Amount';
+  subAmountInput = document.createElement('input');
+  subAmountInput.type = 'text';
+  subAmountInput.name = 'amount';
+  subAmountInput.placeholder = '$0.00';
+  subAmountInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  subAmountInput.required = true;
+  form.appendChild(amountLabel);
+  form.appendChild(subAmountInput);
 
-  const cadenceSelect = document.createElement('select');
-  cadenceSelect.className =
-    'bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink focus:outline-none focus:border-accent';
+  const cadenceLabel = document.createElement('label');
+  cadenceLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  cadenceLabel.textContent = 'Cadence';
+  subCadenceSelect = document.createElement('select');
+  subCadenceSelect.name = 'cadence';
+  subCadenceSelect.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
   CADENCES.forEach((c) => {
     const opt = document.createElement('option');
     opt.value = c;
     opt.textContent = c;
-    cadenceSelect.appendChild(opt);
+    subCadenceSelect.appendChild(opt);
   });
+  form.appendChild(cadenceLabel);
+  form.appendChild(subCadenceSelect);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className =
-    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  submitBtn.textContent = 'Add';
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
 
-  const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-danger w-full hidden';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => subscriptionModal.close());
+  btnRow.appendChild(cancelBtn);
 
-  form.append(nameInput, amountInput, cadenceSelect, submitBtn, errEl);
+  subSubmitBtn = document.createElement('button');
+  subSubmitBtn.type = 'submit';
+  subSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  subSubmitBtn.textContent = 'Add Subscription';
+  btnRow.appendChild(subSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  subErrEl = document.createElement('p');
+  subErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(subErrEl);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    errEl.classList.add('hidden');
+    subErrEl.classList.add('hidden');
 
-    const cents = parseMoney(amountInput.value);
-    if (!nameInput.value.trim() || cents === null) {
-      errEl.textContent = 'Name and a numeric amount are both required.';
-      errEl.classList.remove('hidden');
+    const cents = parseMoney(subAmountInput.value);
+    if (!subNameInput.value.trim() || cents === null) {
+      subErrEl.textContent = 'Name and a numeric amount are both required.';
+      subErrEl.classList.remove('hidden');
       return;
     }
 
-    submitBtn.disabled = true;
+    subSubmitBtn.disabled = true;
     try {
       const res = await post('/api/v1/subscriptions', {
-        name: nameInput.value.trim(),
+        name: subNameInput.value.trim(),
         amount_cents: cents,
-        cadence: cadenceSelect.value,
+        cadence: subCadenceSelect.value,
         billing_day: null,
         is_active: true,
         started_on: '',
         ended_on: null,
         notes: null,
       });
-      if (!res.ok) {
-        errEl.textContent = res.error ?? 'Could not add the subscription.';
-        errEl.classList.remove('hidden');
-        return;
+      if (res.ok) {
+        subscriptionModal.close();
+        await loadAll();
+      } else {
+        subErrEl.textContent = res.error ?? 'Could not add the subscription.';
+        subErrEl.classList.remove('hidden');
       }
-      form.reset();
-      await loadAll();
     } catch (err) {
-      errEl.textContent = 'Request failed — check your connection and try again.';
-      errEl.classList.remove('hidden');
+      subErrEl.textContent = 'Request failed — check your connection and try again.';
+      subErrEl.classList.remove('hidden');
     } finally {
-      submitBtn.disabled = false;
+      subSubmitBtn.disabled = false;
     }
   });
 
-  container.appendChild(form);
+  subscriptionModal.panel.appendChild(form);
+}
+
+function openSubscriptionModalForCreate(trigger) {
+  subNameInput.value = '';
+  subAmountInput.value = '';
+  subCadenceSelect.value = CADENCES[0];
+  subErrEl.classList.add('hidden');
+  subscriptionModal.open(trigger);
 }
 
 async function loadSubscriptions() {
@@ -765,7 +992,8 @@ function renderSubscriptions() {
   const subtitle = state.summaryError
     ? `${state.subscriptions.length} recurring`
     : `${fmtMoney(state.summary?.spending.subscriptions_cents ?? 0)} this month`;
-  const body = panel(subscriptionsEl, 'Subscriptions', subtitle);
+  const addBtn = headerActionButton('+ Add subscription', (e) => openSubscriptionModalForCreate(e.currentTarget));
+  const body = panel(subscriptionsEl, 'Subscriptions', subtitle, addBtn);
   if (actionErrors.subscriptions) errorLine(body, actionErrors.subscriptions);
 
   if (state.subscriptions.length === 0) {
@@ -775,7 +1003,6 @@ function renderSubscriptions() {
     state.subscriptions.forEach((item) => list.appendChild(subscriptionRow(item)));
     body.appendChild(list);
   }
-  subscriptionForm(body);
 }
 
 // ---- Clients panel ----
@@ -828,13 +1055,7 @@ function clientRow(item) {
   rate.textContent = item.kind === 'ignored' ? '—' : fmtMoney(item.rate_cents);
   li.appendChild(rate);
 
-  li.appendChild(iconButton('Rate', async () => {
-    const entered = window.prompt(`Session rate for ${item.name}:`, (item.rate_cents / 100).toFixed(2));
-    if (entered === null) return;
-    const cents = parseMoney(entered);
-    if (cents === null) { window.alert('Enter a number, e.g. 100'); return; }
-    await mutate('clients', () => put(`/api/v1/clients/${item.id}`, { ...item, rate_cents: cents }), loadAll);
-  }));
+  li.appendChild(iconButton('Rate', (e) => openClientRateModal(item, e.currentTarget)));
 
   li.appendChild(iconButton(item.kind === 'ignored' ? 'Un-ignore' : 'Ignore', async () => {
     await mutate('clients', () => put(`/api/v1/clients/${item.id}`, {
@@ -842,11 +1063,113 @@ function clientRow(item) {
     }), loadAll);
   }));
 
-  li.appendChild(iconButton('Delete', async () => {
+  li.appendChild(iconButton('Delete', async (e) => {
+    const ok = await confirmAction({
+      title: `Delete "${item.name}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+      trigger: e.currentTarget,
+    });
+    if (!ok) return;
     await mutate('clients', () => del(`/api/v1/clients/${item.id}`), loadAll);
   }, true));
 
   return li;
+}
+
+// ---- Client rate (edit) modal ----
+let rateEditItem = null;
+const clientRateModal = createModal('client-rate-modal-title');
+let clientRateHeadingEl, clientRateAmountInput, clientRateSubmitBtn, clientRateErrEl;
+
+function buildClientRateModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'client-rate-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Session Rate';
+  clientRateModal.panel.appendChild(heading);
+  clientRateHeadingEl = heading;
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  amountLabel.textContent = 'Rate';
+  clientRateAmountInput = document.createElement('input');
+  clientRateAmountInput.type = 'text';
+  clientRateAmountInput.name = 'rate';
+  clientRateAmountInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  clientRateAmountInput.required = true;
+  form.appendChild(amountLabel);
+  form.appendChild(clientRateAmountInput);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => clientRateModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  clientRateSubmitBtn = document.createElement('button');
+  clientRateSubmitBtn.type = 'submit';
+  clientRateSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  clientRateSubmitBtn.textContent = 'Save';
+  btnRow.appendChild(clientRateSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  clientRateErrEl = document.createElement('p');
+  clientRateErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(clientRateErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clientRateErrEl.classList.add('hidden');
+
+    const cents = parseMoney(clientRateAmountInput.value);
+    if (cents === null) {
+      clientRateErrEl.textContent = 'Enter a number, e.g. 100';
+      clientRateErrEl.classList.remove('hidden');
+      return;
+    }
+
+    clientRateSubmitBtn.disabled = true;
+    try {
+      // Only rate_cents changes here — every other field, including
+      // match_name, is carried through unaltered from the row's own data.
+      const res = await put(`/api/v1/clients/${rateEditItem.id}`, { ...rateEditItem, rate_cents: cents });
+      if (res.ok) {
+        clientRateModal.close();
+        await loadAll();
+      } else {
+        clientRateErrEl.textContent = res.error ?? 'Could not save the rate.';
+        clientRateErrEl.classList.remove('hidden');
+      }
+    } catch (err) {
+      clientRateErrEl.textContent = 'Request failed — check your connection and try again.';
+      clientRateErrEl.classList.remove('hidden');
+    } finally {
+      clientRateSubmitBtn.disabled = false;
+    }
+  });
+
+  clientRateModal.panel.appendChild(form);
+}
+
+function openClientRateModal(item, trigger) {
+  rateEditItem = item;
+  clientRateHeadingEl.textContent = `Session Rate — ${item.name}`;
+  clientRateAmountInput.value = (item.rate_cents / 100).toFixed(2);
+  clientRateErrEl.classList.add('hidden');
+  clientRateModal.open(trigger);
 }
 
 // The unmatched strip is the whole review workflow: a session the feed
@@ -947,69 +1270,114 @@ async function resolveUnmatched(button, createClientFn) {
   }
 }
 
-function clientForm(container) {
+// ---- Client (add) modal ----
+const clientAddModal = createModal('client-add-modal-title');
+let clientAddNameInput, clientAddRateInput, clientAddSubmitBtn, clientAddErrEl;
+
+function buildClientAddModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'client-add-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Add Client';
+  clientAddModal.panel.appendChild(heading);
+
   const form = document.createElement('form');
-  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+  form.className = 'space-y-3';
 
-  const nameInput = document.createElement('input');
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Name exactly as it appears in the calendar';
-  nameInput.className =
-    'flex-1 min-w-56 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  nameLabel.textContent = 'Name exactly as it appears in the calendar';
+  clientAddNameInput = document.createElement('input');
+  clientAddNameInput.type = 'text';
+  clientAddNameInput.name = 'name';
+  clientAddNameInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  clientAddNameInput.required = true;
+  form.appendChild(nameLabel);
+  form.appendChild(clientAddNameInput);
 
-  const rateInput = document.createElement('input');
-  rateInput.type = 'text';
-  rateInput.placeholder = '$100.00';
-  rateInput.className =
-    'w-24 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  const rateLabel = document.createElement('label');
+  rateLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  rateLabel.textContent = 'Rate';
+  clientAddRateInput = document.createElement('input');
+  clientAddRateInput.type = 'text';
+  clientAddRateInput.name = 'rate';
+  clientAddRateInput.placeholder = '$100.00';
+  clientAddRateInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  form.appendChild(rateLabel);
+  form.appendChild(clientAddRateInput);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className =
-    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
-  submitBtn.textContent = 'Add client';
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
 
-  const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-danger w-full hidden';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => clientAddModal.close());
+  btnRow.appendChild(cancelBtn);
 
-  form.append(nameInput, rateInput, submitBtn, errEl);
+  clientAddSubmitBtn = document.createElement('button');
+  clientAddSubmitBtn.type = 'submit';
+  clientAddSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  clientAddSubmitBtn.textContent = 'Add Client';
+  btnRow.appendChild(clientAddSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  clientAddErrEl = document.createElement('p');
+  clientAddErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(clientAddErrEl);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    errEl.classList.add('hidden');
+    clientAddErrEl.classList.add('hidden');
 
-    const name = nameInput.value.trim();
-    const cents = rateInput.value.trim() === '' ? 10000 : parseMoney(rateInput.value);
+    const name = clientAddNameInput.value.trim();
+    const cents = clientAddRateInput.value.trim() === '' ? 10000 : parseMoney(clientAddRateInput.value);
     if (!name || cents === null) {
-      errEl.textContent = 'A name is required, and the rate must be a number.';
-      errEl.classList.remove('hidden');
+      clientAddErrEl.textContent = 'A name is required, and the rate must be a number.';
+      clientAddErrEl.classList.remove('hidden');
       return;
     }
 
-    submitBtn.disabled = true;
+    clientAddSubmitBtn.disabled = true;
     try {
+      // createClient sets match_name to this exact spelling -- the calendar
+      // matcher is exact, so it must never be trimmed or altered further.
       const res = await createClient(name, cents, 'independent');
-      if (!res.ok) {
-        errEl.textContent = res.error ?? 'Could not add the client.';
-        errEl.classList.remove('hidden');
-        return;
+      if (res.ok) {
+        clientAddModal.close();
+        await loadAll();
+      } else {
+        clientAddErrEl.textContent = res.error ?? 'Could not add the client.';
+        clientAddErrEl.classList.remove('hidden');
       }
-      form.reset();
-      await loadAll();
     } catch (err) {
-      errEl.textContent = 'Request failed — check your connection and try again.';
-      errEl.classList.remove('hidden');
+      clientAddErrEl.textContent = 'Request failed — check your connection and try again.';
+      clientAddErrEl.classList.remove('hidden');
     } finally {
-      submitBtn.disabled = false;
+      clientAddSubmitBtn.disabled = false;
     }
   });
 
-  container.appendChild(form);
+  clientAddModal.panel.appendChild(form);
+}
+
+function openClientAddModalForCreate(trigger) {
+  clientAddNameInput.value = '';
+  clientAddRateInput.value = '';
+  clientAddErrEl.classList.add('hidden');
+  clientAddModal.open(trigger);
 }
 
 function renderClients() {
   const independents = state.clients.filter((c) => c.kind !== 'ignored').length;
-  const body = panel(clientsEl, 'Clients', `${independents} independent`);
+  const addBtn = headerActionButton('+ Add client', (e) => openClientAddModalForCreate(e.currentTarget));
+  const body = panel(clientsEl, 'Clients', `${independents} independent`, addBtn);
   if (actionErrors.clients) errorLine(body, actionErrors.clients);
 
   if (state.summaryError) {
@@ -1025,7 +1393,6 @@ function renderClients() {
     state.clients.forEach((item) => list.appendChild(clientRow(item)));
     body.appendChild(list);
   }
-  clientForm(body);
 }
 
 // ---- Rate rules panel ----
@@ -1050,16 +1417,101 @@ function rateRow(item) {
   amount.textContent = fmtMoney(item.amount_cents);
   li.appendChild(amount);
 
-  li.appendChild(iconButton('Edit', async () => {
-    const entered = window.prompt(`Rate for a ${item.duration_min}-minute session:`,
-      (item.amount_cents / 100).toFixed(2));
-    if (entered === null) return;
-    const cents = parseMoney(entered);
-    if (cents === null) { window.alert('Enter a number, e.g. 50'); return; }
-    await mutate('rates', () => put(`/api/v1/rate_rules/${item.id}`, { ...item, amount_cents: cents }), loadAll);
-  }));
+  li.appendChild(iconButton('Edit', (e) => openRateRuleModal(item, e.currentTarget)));
 
   return li;
+}
+
+// ---- Rate rule (edit) modal ----
+let rateRuleEditItem = null;
+const rateRuleModal = createModal('rate-rule-modal-title');
+let rateRuleHeadingEl, rateRuleAmountInput, rateRuleSubmitBtn, rateRuleErrEl;
+
+function buildRateRuleModal() {
+  const heading = document.createElement('h3');
+  heading.id = 'rate-rule-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'Edit Rate';
+  rateRuleModal.panel.appendChild(heading);
+  rateRuleHeadingEl = heading;
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'block text-xs font-medium text-ink-dim mb-1';
+  amountLabel.textContent = 'Amount';
+  rateRuleAmountInput = document.createElement('input');
+  rateRuleAmountInput.type = 'text';
+  rateRuleAmountInput.name = 'amount';
+  rateRuleAmountInput.className =
+    'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  rateRuleAmountInput.required = true;
+  form.appendChild(amountLabel);
+  form.appendChild(rateRuleAmountInput);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => rateRuleModal.close());
+  btnRow.appendChild(cancelBtn);
+
+  rateRuleSubmitBtn = document.createElement('button');
+  rateRuleSubmitBtn.type = 'submit';
+  rateRuleSubmitBtn.className =
+    'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  rateRuleSubmitBtn.textContent = 'Save';
+  btnRow.appendChild(rateRuleSubmitBtn);
+
+  form.appendChild(btnRow);
+
+  rateRuleErrEl = document.createElement('p');
+  rateRuleErrEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(rateRuleErrEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    rateRuleErrEl.classList.add('hidden');
+
+    const cents = parseMoney(rateRuleAmountInput.value);
+    if (cents === null) {
+      rateRuleErrEl.textContent = 'Enter a number, e.g. 50';
+      rateRuleErrEl.classList.remove('hidden');
+      return;
+    }
+
+    rateRuleSubmitBtn.disabled = true;
+    try {
+      const res = await put(`/api/v1/rate_rules/${rateRuleEditItem.id}`, { ...rateRuleEditItem, amount_cents: cents });
+      if (res.ok) {
+        rateRuleModal.close();
+        await loadAll();
+      } else {
+        rateRuleErrEl.textContent = res.error ?? 'Could not save the rate.';
+        rateRuleErrEl.classList.remove('hidden');
+      }
+    } catch (err) {
+      rateRuleErrEl.textContent = 'Request failed — check your connection and try again.';
+      rateRuleErrEl.classList.remove('hidden');
+    } finally {
+      rateRuleSubmitBtn.disabled = false;
+    }
+  });
+
+  rateRuleModal.panel.appendChild(form);
+}
+
+function openRateRuleModal(item, trigger) {
+  rateRuleEditItem = item;
+  rateRuleHeadingEl.textContent = `Edit Rate — ${item.label || item.duration_min + ' minutes'}`;
+  rateRuleAmountInput.value = (item.amount_cents / 100).toFixed(2);
+  rateRuleErrEl.classList.add('hidden');
+  rateRuleModal.open(trigger);
 }
 
 function renderRates() {
@@ -1082,6 +1534,13 @@ function renderRates() {
 }
 
 // @inject-forms
+
+buildOverrideModal();
+buildExpenseModal();
+buildSubscriptionModal();
+buildClientAddModal();
+buildClientRateModal();
+buildRateRuleModal();
 
 // loadAll refetches everything the page owns. The summary carries the month's
 // sessions and shopping rows; subscriptions come from their own list endpoint
