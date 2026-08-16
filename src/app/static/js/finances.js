@@ -809,7 +809,7 @@ function drawChart(host, data, month) {
     fill: 'transparent',
   });
 
-  overlay.addEventListener('pointermove', (e) => {
+  function onHoverMove(e) {
     const box = svg.getBoundingClientRect();
     // The viewBox matches the pixel size 1:1 today, so this ratio is 1 -- it
     // is here so the mapping survives anything that scales the svg in CSS.
@@ -825,11 +825,24 @@ function drawChart(host, data, month) {
       hoverDay = d;
       showTooltip(d);
     }
-  });
-  overlay.addEventListener('pointerleave', () => {
+  }
+
+  function onHoverLeave() {
     hoverDay = 0;
     hideTooltip();
-  });
+  }
+
+  // Both event families, deliberately. Pointer events are the modern unified
+  // API, but they are not always synthesized for programmatically dispatched
+  // input -- headless Chromium delivers mousemove without pointermove, which
+  // makes a pointer-only chart impossible to verify in a browser test and
+  // leaves it at the mercy of whatever the runtime chooses to emit. The
+  // hoverDay guard above makes the duplicate delivery free: whichever event
+  // arrives first does the work, and the other returns immediately.
+  overlay.addEventListener('pointermove', onHoverMove);
+  overlay.addEventListener('mousemove', onHoverMove);
+  overlay.addEventListener('pointerleave', onHoverLeave);
+  overlay.addEventListener('mouseleave', onHoverLeave);
   svg.appendChild(overlay);
 
   const wrap = document.createElement('div');
