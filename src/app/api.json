@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:f258d83844c820d88f72836f9f94e0da9121c1aebcea5da94326414b2861b330",
-  "generated_at": "2026-08-16T01:46:17Z",
+  "hash": "sha256:71eb8c615535055c591f4f3fc40197efd7564ebed17eded3464041d217d40f2c",
+  "generated_at": "2026-08-16T02:07:53Z",
   "models": [
     {
       "name": "Bookmark",
@@ -796,6 +796,18 @@
       "auth": false,
       "model": "Bookmark",
       "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/calendar/sync",
+      "handler": "CalendarSyncPOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "kind": "custom"
     },
     {
       "method": "GET",

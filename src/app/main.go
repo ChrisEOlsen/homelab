@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/db"
 	"gova/app/handlers"
 	"gova/app/middleware"
@@ -55,10 +59,44 @@ func main() {
 	// Never hand-edit routes here; scaffold tools regenerate RegisterGenerated.
 	handlers.RegisterGenerated(r, database, appCache)
 
+	// Background calendar sync. Runs once at boot and then on an interval;
+	// CALENDAR_SYNC_INTERVAL_MIN=0 disables it entirely and leaves the page's
+	// Sync button as the only trigger.
+	if mins := envInt("CALENDAR_SYNC_INTERVAL_MIN", 30); mins > 0 {
+		go func() {
+			svc := calendar.NewFromDB(database.Read, database.Write, appCache)
+			run := func() {
+				res := svc.Run(context.Background())
+				log.Printf("calendar sync: ok=%v seen=%d created=%d updated=%d cancelled=%d err=%q",
+					res.OK, res.EventsSeen, res.Created, res.Updated, res.Cancelled, res.Error)
+			}
+			run()
+			ticker := time.NewTicker(time.Duration(mins) * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				run()
+			}
+		}()
+	}
+
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = "8080"
 	}
 	log.Printf("GOVA app listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
+}
+
+// envInt reads an integer environment variable, falling back to def when unset
+// or unparseable.
+func envInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
 }

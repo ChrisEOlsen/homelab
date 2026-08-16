@@ -21,6 +21,7 @@ func RegisterGenerated(r chi.Router, database *db.DB, appCache *cache.Cache) {
 	r.Delete("/api/v1/bookmarks/{id}", BookmarkDeleteDELETE(database.Read, database.Write, appCache))
 	r.Get("/api/v1/bookmarks/{id}", BookmarkDetailGET(database.Read, database.Write, appCache))
 	r.Put("/api/v1/bookmarks/{id}", BookmarkUpdatePUT(database.Read, database.Write, appCache))
+	r.Post("/api/v1/calendar/sync", CalendarSyncPOST(database.Read, database.Write, appCache))
 	r.Get("/api/v1/clients", ClientListGET(database.Read, database.Write, appCache))
 	r.Post("/api/v1/clients", ClientCreatePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/v1/clients/{id}", ClientDeleteDELETE(database.Read, database.Write, appCache))
