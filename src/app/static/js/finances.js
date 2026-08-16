@@ -793,18 +793,44 @@ function drawChart(host, data, month) {
     tooltip.classList.add('hidden');
   }
 
+  // One overlay across the whole plot, not a rect per day.
+  //
+  // Per-day bands meant pointerleave fired every time the cursor crossed a
+  // boundary -- roughly every 25px -- immediately followed by pointerenter on
+  // the neighbour. That hide/show churn is a visible flicker, and it made the
+  // tooltip unusable. With a single surface the pointer never leaves until it
+  // leaves the plot, and the day is derived from the cursor's x instead.
   const bandWidth = plotW / data.daysCount;
-  data.days.forEach((d) => {
-    const band = svgEl('rect', {
-      x: String(margin.left + (d - 1) * bandWidth), y: String(margin.top),
-      width: String(bandWidth), height: String(plotH),
-      fill: 'transparent',
-    });
-    band.addEventListener('pointerenter', () => showTooltip(d));
-    band.addEventListener('pointermove', () => showTooltip(d));
-    band.addEventListener('pointerleave', hideTooltip);
-    svg.appendChild(band);
+  let hoverDay = 0;
+
+  const overlay = svgEl('rect', {
+    x: String(margin.left), y: String(margin.top),
+    width: String(plotW), height: String(plotH),
+    fill: 'transparent',
   });
+
+  overlay.addEventListener('pointermove', (e) => {
+    const box = svg.getBoundingClientRect();
+    // The viewBox matches the pixel size 1:1 today, so this ratio is 1 -- it
+    // is here so the mapping survives anything that scales the svg in CSS.
+    const scale = box.width ? width / box.width : 1;
+    const x = (e.clientX - box.left) * scale;
+    const d = Math.min(
+      Math.max(Math.floor((x - margin.left) / bandWidth) + 1, 1),
+      data.daysCount
+    );
+    // Only repaint when the day actually changes; pointermove fires far more
+    // often than the tooltip's contents change.
+    if (d !== hoverDay) {
+      hoverDay = d;
+      showTooltip(d);
+    }
+  });
+  overlay.addEventListener('pointerleave', () => {
+    hoverDay = 0;
+    hideTooltip();
+  });
+  svg.appendChild(overlay);
 
   const wrap = document.createElement('div');
   wrap.className = 'relative';
