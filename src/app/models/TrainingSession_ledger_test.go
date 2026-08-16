@@ -148,7 +148,167 @@ func TestMonthIncomeSplitsEarnedFromProjected(t *testing.T) {
 	if got.SessionCount != 2 {
 		t.Fatalf("count: want 2, got %d", got.SessionCount)
 	}
-	if got.BySource["cc"] != 10000 {
-		t.Fatalf("by_source cc: want 10000 earned, got %d", got.BySource["cc"])
+	if got.EarnedBySource["cc"] != 10000 {
+		t.Fatalf("earned_by_source cc: want 10000 earned, got %d", got.EarnedBySource["cc"])
+	}
+}
+
+func TestCancelMissingWithNoSeenUIDsCancelsNothing(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-1", "2026-08-12", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-2", "2026-08-13", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := m.CancelMissing("2026-08-10", "2026-09-14", nil)
+	if err != nil {
+		t.Fatalf("CancelMissing: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0 cancellations with no seen UIDs, got %d", n)
+	}
+
+	var s1, s2 string
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-1'").Scan(&s1); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-2'").Scan(&s2); err != nil {
+		t.Fatal(err)
+	}
+	if s1 != "scheduled" || s2 != "scheduled" {
+		t.Fatalf("no session should be cancelled when seenUIDs is empty: cc-1=%q cc-2=%q", s1, s2)
+	}
+}
+
+func TestCancelMissingSparesSeenSessions(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-seen", "2026-08-12", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-missing", "2026-08-13", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := m.CancelMissing("2026-08-10", "2026-09-14", []string{"cc-seen"})
+	if err != nil {
+		t.Fatalf("CancelMissing: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("want 1 cancellation, got %d", n)
+	}
+
+	var seen, missing string
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-seen'").Scan(&seen); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-missing'").Scan(&missing); err != nil {
+		t.Fatal(err)
+	}
+	if seen != "scheduled" {
+		t.Fatalf("seen session must be spared, got %q", seen)
+	}
+	if missing != "cancelled" {
+		t.Fatalf("missing session should be cancelled, got %q", missing)
+	}
+}
+
+func TestCancelMissingSparesManualRows(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	manual := newTestSession("manual-1", "2026-08-12", 10000)
+	manual.Source = "manual"
+	if _, err := m.UpsertFromCalendar(manual, "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := m.CancelMissing("2026-08-10", "2026-09-14", []string{"cc-unrelated"})
+	if err != nil {
+		t.Fatalf("CancelMissing: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0 cancellations, got %d", n)
+	}
+
+	var status string
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'manual-1'").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "scheduled" {
+		t.Fatalf("manual row must never be cancelled, got %q", status)
+	}
+}
+
+func TestUpsertReSeeingCancelledSessionRevivesIt(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-1", "2026-08-12", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := m.CancelMissing("2026-08-10", "2026-09-14", []string{"cc-other"})
+	if err != nil {
+		t.Fatalf("CancelMissing: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("want 1 cancellation, got %d", n)
+	}
+
+	var status string
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-1'").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "cancelled" {
+		t.Fatalf("setup: want cancelled before re-upsert, got %q", status)
+	}
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-1", "2026-08-12", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.Read.QueryRow("SELECT status FROM training_sessions WHERE uid = 'cc-1'").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "scheduled" {
+		t.Fatalf("re-seeing a cancelled session should revive it, got %q", status)
+	}
+}
+
+func TestUpsertIgnoredWithoutOverrideKeepsIgnoredAndTakesFeedAmount(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-1", "2026-08-12", 10000), "now"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec(
+		"UPDATE training_sessions SET status = 'ignored' WHERE uid = 'cc-1'",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.UpsertFromCalendar(newTestSession("cc-1", "2026-08-12", 12000), "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	var cents int
+	var status string
+	if err := d.Read.QueryRow(
+		"SELECT amount_cents, status FROM training_sessions WHERE uid = 'cc-1'",
+	).Scan(&cents, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "ignored" {
+		t.Fatalf("status should stay ignored, got %q", status)
+	}
+	if cents != 12000 {
+		t.Fatalf("amount should take the new feed value without an override, want 12000 got %d", cents)
 	}
 }
