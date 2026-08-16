@@ -410,6 +410,8 @@ export function renderAll() {
   renderSessions();
   renderShopping();
   renderSubscriptions();
+  renderClients();
+  renderRates();
   renderAllTime();
 }
 
@@ -687,13 +689,251 @@ function renderSubscriptions() {
   subscriptionForm(body);
 }
 
+// ---- Clients panel ----
+const clientsEl = document.getElementById('clients-panel');
+
+async function loadClients() {
+  const res = await get('/api/v1/clients?limit=200&sort=name');
+  state.clients = res.ok ? (res.data ?? []) : [];
+}
+
+async function createClient(name, rateCents, kind) {
+  return post('/api/v1/clients', {
+    name,
+    match_name: name, // the calendar spelling is the match key
+    email: null,
+    phone: null,
+    rate_cents: rateCents,
+    kind,
+    is_active: true,
+    notes: null,
+  });
+}
+
+function clientRow(item) {
+  const li = document.createElement('li');
+  li.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-b border-hairline last:border-0';
+
+  const name = document.createElement('span');
+  name.className = 'text-sm text-ink flex-1 min-w-32';
+  name.textContent = item.name;
+  if (!item.is_active) name.classList.add('text-ink-dim', 'line-through');
+  li.appendChild(name);
+
+  // match_name is shown whenever it differs from the display name — that gap is
+  // exactly where a mispriced session comes from.
+  if (item.match_name !== item.name) {
+    const match = document.createElement('span');
+    match.className = 'text-xs text-ink-dim';
+    match.textContent = `matches “${item.match_name}”`;
+    li.appendChild(match);
+  }
+
+  const kind = document.createElement('span');
+  kind.className = 'text-xs text-ink-dim';
+  kind.textContent = item.kind;
+  li.appendChild(kind);
+
+  const rate = document.createElement('span');
+  rate.className = 'text-sm tabular-nums text-ink w-20 text-right';
+  rate.textContent = item.kind === 'ignored' ? '—' : fmtMoney(item.rate_cents);
+  li.appendChild(rate);
+
+  li.appendChild(iconButton('Rate', async () => {
+    const entered = window.prompt(`Session rate for ${item.name}:`, (item.rate_cents / 100).toFixed(2));
+    if (entered === null) return;
+    const cents = parseMoney(entered);
+    if (cents === null) { window.alert('Enter a number, e.g. 100'); return; }
+    await put(`/api/v1/clients/${item.id}`, { ...item, rate_cents: cents });
+    await loadAll();
+  }));
+
+  li.appendChild(iconButton(item.kind === 'ignored' ? 'Un-ignore' : 'Ignore', async () => {
+    await put(`/api/v1/clients/${item.id}`, {
+      ...item, kind: item.kind === 'ignored' ? 'independent' : 'ignored',
+    });
+    await loadAll();
+  }));
+
+  li.appendChild(iconButton('Delete', async () => {
+    await del(`/api/v1/clients/${item.id}`);
+    await loadAll();
+  }, true));
+
+  return li;
+}
+
+// The unmatched strip is the whole review workflow: a name the feed priced
+// without a client row behind it, and two one-click ways to resolve it.
+function unmatchedStrip(container) {
+  const names = state.summary?.unmatched_names ?? [];
+  if (names.length === 0) return;
+
+  const box = document.createElement('div');
+  box.className = 'border border-hairline bg-canvas p-3 space-y-2';
+
+  const heading = document.createElement('p');
+  heading.className = 'text-xs text-danger';
+  heading.textContent =
+    `${state.summary.needs_review_count} session(s) flagged — these calendar names have no client row:`;
+  box.appendChild(heading);
+
+  names.forEach((name) => {
+    const row = document.createElement('div');
+    row.className = 'flex flex-wrap items-center gap-2';
+
+    const label = document.createElement('span');
+    label.className = 'text-sm text-ink flex-1 min-w-32';
+    label.textContent = name; // textContent — this string came from the calendar
+    row.appendChild(label);
+
+    row.appendChild(iconButton('Add at $100', async () => {
+      await createClient(name, 10000, 'independent');
+      await loadAll();
+    }));
+
+    row.appendChild(iconButton('Always ignore', async () => {
+      await createClient(name, 0, 'ignored');
+      await loadAll();
+    }));
+
+    box.appendChild(row);
+  });
+
+  container.appendChild(box);
+}
+
+function clientForm(container) {
+  const form = document.createElement('form');
+  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Name exactly as it appears in the calendar';
+  nameInput.className =
+    'flex-1 min-w-56 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+
+  const rateInput = document.createElement('input');
+  rateInput.type = 'text';
+  rateInput.placeholder = '$100.00';
+  rateInput.className =
+    'w-24 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.className =
+    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  submitBtn.textContent = 'Add client';
+
+  const errEl = document.createElement('p');
+  errEl.className = 'text-sm text-danger w-full hidden';
+
+  form.append(nameInput, rateInput, submitBtn, errEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.classList.add('hidden');
+
+    const name = nameInput.value.trim();
+    const cents = rateInput.value.trim() === '' ? 10000 : parseMoney(rateInput.value);
+    if (!name || cents === null) {
+      errEl.textContent = 'A name is required, and the rate must be a number.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    const res = await createClient(name, cents, 'independent');
+    submitBtn.disabled = false;
+
+    if (!res.ok) {
+      errEl.textContent = res.error ?? 'Could not add the client.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    form.reset();
+    await loadAll();
+  });
+
+  container.appendChild(form);
+}
+
+function renderClients() {
+  const independents = state.clients.filter((c) => c.kind !== 'ignored').length;
+  const body = panel(clientsEl, 'Clients', `${independents} independent`);
+
+  unmatchedStrip(body);
+
+  if (state.clients.length === 0) {
+    emptyLine(body, 'No clients yet.');
+  } else {
+    const list = document.createElement('ul');
+    state.clients.forEach((item) => list.appendChild(clientRow(item)));
+    body.appendChild(list);
+  }
+  clientForm(body);
+}
+
+// ---- Rate rules panel ----
+const ratesEl = document.getElementById('rates-panel');
+
+async function loadRateRules() {
+  const res = await get('/api/v1/rate_rules?limit=50&sort=duration_min');
+  state.rateRules = res.ok ? (res.data ?? []) : [];
+}
+
+function rateRow(item) {
+  const li = document.createElement('li');
+  li.className = 'flex items-center gap-3 py-2 border-b border-hairline last:border-0';
+
+  const label = document.createElement('span');
+  label.className = 'text-sm text-ink flex-1';
+  label.textContent = item.label || `${item.duration_min} minutes`;
+  li.appendChild(label);
+
+  const amount = document.createElement('span');
+  amount.className = 'text-sm tabular-nums text-ink w-20 text-right';
+  amount.textContent = fmtMoney(item.amount_cents);
+  li.appendChild(amount);
+
+  li.appendChild(iconButton('Edit', async () => {
+    const entered = window.prompt(`Rate for a ${item.duration_min}-minute session:`,
+      (item.amount_cents / 100).toFixed(2));
+    if (entered === null) return;
+    const cents = parseMoney(entered);
+    if (cents === null) { window.alert('Enter a number, e.g. 50'); return; }
+    await put(`/api/v1/rate_rules/${item.id}`, { ...item, amount_cents: cents });
+    await loadAll();
+  }));
+
+  return li;
+}
+
+function renderRates() {
+  const body = panel(ratesEl, 'Gym rates', 'by session length');
+
+  if (state.rateRules.length === 0) {
+    emptyLine(body, 'No duration rules — gym sessions will be flagged for review.');
+    return;
+  }
+  const list = document.createElement('ul');
+  state.rateRules.forEach((item) => list.appendChild(rateRow(item)));
+  body.appendChild(list);
+
+  const note = document.createElement('p');
+  note.className = 'text-xs text-ink-dim pt-1';
+  note.textContent =
+    'These apply to gym sessions only. Independent clients are priced from the Clients list above.';
+  body.appendChild(note);
+}
+
 // @inject-forms
 
 // loadAll refetches everything the page owns. The summary carries the month's
 // sessions and shopping rows; subscriptions come from their own list endpoint
 // because they are not month-scoped.
 export async function loadAll() {
-  await loadSubscriptions();
+  await Promise.all([loadSubscriptions(), loadClients(), loadRateRules()]);
   await loadSummary();
 }
 
