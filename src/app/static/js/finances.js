@@ -36,6 +36,7 @@ drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDra
 // ---- Elements ----
 const monthLabelEl = document.getElementById('month-label');
 const ledgerEl = document.getElementById('ledger');
+const chartEl = document.getElementById('chart-panel');
 const sessionsEl = document.getElementById('sessions-panel');
 const allTimeEl = document.getElementById('all-time');
 const syncBtn = document.getElementById('sync-btn');
@@ -264,6 +265,435 @@ function renderAllTime() {
     `spend ${fmtMoney(s.all_time.spend_cents)} · ` +
     `net ${fmtMoney(s.all_time.net_cents)}`;
 }
+
+// ---- Cash flow chart ----
+// Client-side only -- everything comes from state.summary, already loaded by
+// loadSummary(). Two cumulative month-to-date series: income (solid up to
+// today, dashed/projected after) and spend (subscriptions on day 1, then
+// bought shopping items on their own dates). Filtering matches the ledger
+// strip above exactly -- status === 'scheduled' sessions and status ===
+// 'bought' expenses only -- or the chart would disagree with it.
+let chartSvgHost = null; // the div drawChart() rebuilds into, kept across resizes
+let chartLastData = null; // { data, month } from the last computeChartData(), redrawn on resize
+let chartResizeTimer = null;
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function daysInMonth(month) {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+function computeChartData(state) {
+  const s = state.summary;
+  if (!s) return null;
+
+  const daysCount = daysInMonth(state.month);
+  const now = new Date();
+  // Local wall clock, formatted the same way the API formats session
+  // timestamps (YYYY-MM-DD HH:MM:SS) so it can be compared lexically against
+  // end_at -- never parse an API timestamp string into a Date, which
+  // reintroduces the UTC shift the backend was built to avoid.
+  const nowStr =
+    `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ` +
+    `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+  const curMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  const isCurrentMonth = state.month === curMonth;
+
+  const sessions = (s.sessions ?? []).filter((x) => x.status === 'scheduled');
+  const expenses = (s.expenses ?? []).filter((x) => x.status === 'bought');
+  const subsCents = s.spending?.subscriptions_cents ?? 0;
+
+  const days = [];
+  const cumEarned = [];
+  const cumAll = [];
+  const cumSpend = [];
+  let earnedRun = 0;
+  let allRun = 0;
+  let spendRun = 0;
+
+  for (let d = 1; d <= daysCount; d++) {
+    const dateStr = `${state.month}-${pad2(d)}`;
+    let dayAll = 0;
+    let dayEarned = 0;
+    for (const sess of sessions) {
+      if (sess.session_date !== dateStr) continue;
+      dayAll += sess.amount_cents;
+      if (sess.end_at <= nowStr) dayEarned += sess.amount_cents;
+    }
+    let daySpend = 0;
+    for (const exp of expenses) {
+      if (exp.incurred_on === dateStr) daySpend += exp.amount_cents;
+    }
+    if (d === 1) spendRun += subsCents; // the month's subscription total lands as a step on day 1
+    spendRun += daySpend;
+    earnedRun += dayEarned;
+    allRun += dayAll;
+
+    days.push(d);
+    cumEarned.push(earnedRun);
+    cumAll.push(allRun);
+    cumSpend.push(spendRun);
+  }
+
+  // todayIdx (1-based) is where the solid income line stops and the dashed
+  // (projected) line takes over. A month wholly in the past has no dashed
+  // segment (todayIdx lands past the end); one wholly in the future has no
+  // solid segment (todayIdx lands before the start) -- one formula covers
+  // browsing to any month, not just the current one.
+  let todayIdx;
+  if (isCurrentMonth) {
+    todayIdx = Math.min(Math.max(now.getDate(), 1), daysCount);
+  } else if (state.month < curMonth) {
+    todayIdx = daysCount + 1;
+  } else {
+    todayIdx = 0;
+  }
+
+  return {
+    daysCount,
+    days,
+    cumEarned,
+    cumAll,
+    cumSpend,
+    todayIdx,
+    isCurrentMonth,
+    hasData: allRun > 0 || spendRun > 0,
+  };
+}
+
+// Rounds a rough max (in dollars) up to a "nice" step so gridlines land on
+// clean values -- 0, step, 2*step, 3*step -- never a jagged number.
+function niceScale(maxDollars) {
+  const safeMax = Math.max(maxDollars, 1);
+  const rough = safeMax / 3;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const residual = rough / magnitude;
+  let step;
+  if (residual < 1.5) step = 1 * magnitude;
+  else if (residual < 3) step = 2 * magnitude;
+  else if (residual < 7) step = 5 * magnitude;
+  else step = 10 * magnitude;
+
+  let niceMax = step * 3;
+  while (niceMax < safeMax) niceMax += step;
+
+  const ticks = [];
+  for (let v = 0; v <= niceMax + 1e-9; v += step) ticks.push(Math.round(v));
+  return { ticks, niceMax };
+}
+
+// Short axis currency, e.g. "$1.4k" / "$350" -- the full fmtMoney precision
+// would crowd the axis; direct end-labels use fmtMoney instead.
+function fmtAxisDollar(dollars) {
+  if (Math.abs(dollars) >= 1000) {
+    const k = Math.round((dollars / 1000) * 10) / 10;
+    return `$${k}k`;
+  }
+  return `$${Math.round(dollars).toLocaleString()}`;
+}
+
+function buildChartAriaLabel(data, month) {
+  const incomeCents = data.cumAll[data.daysCount - 1] ?? 0;
+  const spendCents = data.cumSpend[data.daysCount - 1] ?? 0;
+  const netCents = incomeCents - spendCents;
+  return (
+    `Cumulative income and spend for ${month}: income ${fmtMoney(incomeCents)}, ` +
+    `spend ${fmtMoney(spendCents)}, net ${fmtMoney(netCents)}.`
+  );
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  }
+  return el;
+}
+
+// Draws the <svg> into `host`, replacing whatever was there. Called on first
+// render and again (with the same `data`) on debounced resize -- sized in
+// real pixels off the host's measured width, not a scaled viewBox, so type
+// never shrinks on a narrow panel.
+function drawChart(host, data, month) {
+  host.replaceChildren();
+
+  const width = Math.max(Math.round(host.getBoundingClientRect().width) || host.clientWidth || 320, 240);
+  const height = 220;
+  const margin = { top: 18, right: 80, bottom: 28, left: 54 };
+  const plotW = Math.max(width - margin.left - margin.right, 20);
+  const plotH = height - margin.top - margin.bottom;
+
+  const maxCents = Math.max(
+    data.cumAll[data.daysCount - 1] ?? 0,
+    data.cumSpend[data.daysCount - 1] ?? 0,
+    1,
+  );
+  const { ticks, niceMax } = niceScale(maxCents / 100);
+
+  const xAt = (day) => margin.left + ((day - 1) / Math.max(data.daysCount - 1, 1)) * plotW;
+  const yAt = (cents) => margin.top + plotH - (cents / 100 / niceMax) * plotH;
+
+  const svg = svgEl('svg', {
+    width: String(width),
+    height: String(height),
+    viewBox: `0 0 ${width} ${height}`,
+    role: 'img',
+    'aria-label': buildChartAriaLabel(data, month),
+  });
+
+  // Gridlines -- horizontal only, hairline weight, recessive.
+  ticks.forEach((t) => {
+    const y = yAt(t * 100);
+    svg.appendChild(svgEl('line', {
+      x1: String(margin.left), x2: String(margin.left + plotW), y1: String(y), y2: String(y),
+      stroke: 'var(--color-hairline)', 'stroke-width': '1',
+    }));
+    const label = svgEl('text', {
+      x: String(margin.left - 8), y: String(y),
+      'text-anchor': 'end', 'dominant-baseline': 'middle',
+      fill: 'var(--color-ink-dim)', 'font-size': '10',
+    });
+    label.textContent = fmtAxisDollar(t);
+    svg.appendChild(label);
+  });
+
+  // X-axis labels -- days 1, 8, 15, 22 and the last day, never every day.
+  const labelDays = Array.from(new Set([1, 8, 15, 22, data.daysCount])).filter((d) => d <= data.daysCount);
+  labelDays.forEach((d) => {
+    const label = svgEl('text', {
+      x: String(xAt(d)), y: String(height - 8),
+      'text-anchor': 'middle', fill: 'var(--color-ink-dim)', 'font-size': '10',
+    });
+    label.textContent = String(d);
+    svg.appendChild(label);
+  });
+
+  // Combined income point-list -- earned through today, then all-scheduled
+  // (projected) after -- used both as the area's upper edge and to locate
+  // the solid/dashed split below.
+  const incomeCombined = data.days.map((d) => (d <= data.todayIdx ? data.cumEarned[d - 1] : data.cumAll[d - 1]));
+
+  // Net-gap fill -- a quiet neutral wash (not either series' color), so the
+  // narrowing gap reads as "space between the lines", never a third series.
+  if (data.daysCount > 1) {
+    const top = data.days.map((d) => `${xAt(d)},${yAt(incomeCombined[d - 1])}`);
+    const bottomRev = [...data.days].reverse().map((d) => `${xAt(d)},${yAt(data.cumSpend[d - 1])}`);
+    svg.appendChild(svgEl('polygon', {
+      points: [...top, ...bottomRev].join(' '),
+      fill: 'var(--color-ink)', 'fill-opacity': '0.06', stroke: 'none',
+    }));
+  }
+
+  const pathFor = (fromIdx, toIdx, values) => {
+    let d = '';
+    for (let i = fromIdx; i <= toIdx; i++) {
+      const x = xAt(data.days[i - 1]);
+      const y = yAt(values[i - 1]);
+      d += (i === fromIdx ? 'M' : 'L') + `${x},${y} `;
+    }
+    return d.trim();
+  };
+
+  // Income -- solid up to today, dashed (projected) from today to month end.
+  const solidEnd = Math.min(data.todayIdx, data.daysCount);
+  if (solidEnd >= 1) {
+    svg.appendChild(svgEl('path', {
+      d: pathFor(1, solidEnd, data.cumEarned),
+      fill: 'none', stroke: 'var(--color-accent-dim)', 'stroke-width': '2',
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+    }));
+  }
+  const dashedStart = Math.max(data.todayIdx, 1);
+  if (dashedStart <= data.daysCount) {
+    svg.appendChild(svgEl('path', {
+      d: pathFor(dashedStart, data.daysCount, data.cumAll),
+      fill: 'none', stroke: 'var(--color-accent-dim)', 'stroke-width': '2',
+      'stroke-dasharray': '5 4', 'stroke-linecap': 'round',
+    }));
+  }
+
+  // Spend -- solid throughout.
+  svg.appendChild(svgEl('path', {
+    d: pathFor(1, data.daysCount, data.cumSpend),
+    fill: 'none', stroke: 'var(--color-chart-cool)', 'stroke-width': '2',
+    'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+  }));
+
+  // Today marker -- 1px hairline + label, current month only.
+  if (data.isCurrentMonth && data.todayIdx >= 1 && data.todayIdx <= data.daysCount) {
+    const x = xAt(data.todayIdx);
+    svg.appendChild(svgEl('line', {
+      x1: String(x), x2: String(x), y1: String(margin.top), y2: String(margin.top + plotH),
+      stroke: 'var(--color-hairline)', 'stroke-width': '1',
+    }));
+    const todayLabel = svgEl('text', {
+      x: String(x), y: String(margin.top - 6),
+      'text-anchor': 'middle', fill: 'var(--color-ink-dim)', 'font-size': '9',
+    });
+    todayLabel.textContent = 'today';
+    svg.appendChild(todayLabel);
+  }
+
+  // Direct end-labels -- the final value on each line; the story is the gap
+  // between them, so nothing else is labeled point-by-point.
+  const incomeEndCents = incomeCombined[data.daysCount - 1] ?? 0;
+  const spendEndCents = data.cumSpend[data.daysCount - 1] ?? 0;
+  const incomeLabel = svgEl('text', {
+    x: String(xAt(data.daysCount) + 6), y: String(yAt(incomeEndCents)),
+    'text-anchor': 'start', 'dominant-baseline': 'middle',
+    fill: 'var(--color-ink)', 'font-size': '11', 'font-weight': '600',
+  });
+  incomeLabel.textContent = fmtMoney(incomeEndCents);
+  svg.appendChild(incomeLabel);
+
+  const spendLabel = svgEl('text', {
+    x: String(xAt(data.daysCount) + 6), y: String(yAt(spendEndCents) + 13),
+    'text-anchor': 'start', 'dominant-baseline': 'middle',
+    fill: 'var(--color-ink)', 'font-size': '11', 'font-weight': '600',
+  });
+  spendLabel.textContent = fmtMoney(spendEndCents);
+  svg.appendChild(spendLabel);
+
+  // Hover layer -- one invisible full-height band per day (a generous hit
+  // target, never the 2px line itself), plus a shared crosshair and tooltip.
+  const crosshair = svgEl('line', {
+    x1: '0', x2: '0', y1: String(margin.top), y2: String(margin.top + plotH),
+    stroke: 'var(--color-ink-dim)', 'stroke-width': '1', opacity: '0',
+  });
+  svg.appendChild(crosshair);
+  const incomeDot = svgEl('circle', {
+    r: '4', fill: 'var(--color-accent-dim)', stroke: 'var(--color-surface)', 'stroke-width': '2', opacity: '0',
+  });
+  const spendDot = svgEl('circle', {
+    r: '4', fill: 'var(--color-chart-cool)', stroke: 'var(--color-surface)', 'stroke-width': '2', opacity: '0',
+  });
+  svg.appendChild(incomeDot);
+  svg.appendChild(spendDot);
+
+  const tooltip = document.createElement('div');
+  tooltip.className =
+    'pointer-events-none absolute z-10 hidden border border-hairline bg-surface-raised px-2.5 py-2 text-xs shadow-lg';
+  tooltip.style.minWidth = '9rem';
+  const tDay = document.createElement('p');
+  tDay.className = 'text-ink-dim mb-1';
+  const tIncome = document.createElement('p');
+  tIncome.className = 'text-ink';
+  const tSpend = document.createElement('p');
+  tSpend.className = 'text-ink';
+  const tNet = document.createElement('p');
+  tNet.className = 'text-ink font-medium pt-1 border-t border-hairline mt-1';
+  tooltip.append(tDay, tIncome, tSpend, tNet);
+
+  function showTooltip(d) {
+    const x = xAt(d);
+    crosshair.setAttribute('x1', String(x));
+    crosshair.setAttribute('x2', String(x));
+    crosshair.setAttribute('opacity', '1');
+
+    const incomeCents = incomeCombined[d - 1];
+    const spendCents = data.cumSpend[d - 1];
+    incomeDot.setAttribute('cx', String(x));
+    incomeDot.setAttribute('cy', String(yAt(incomeCents)));
+    incomeDot.setAttribute('opacity', '1');
+    spendDot.setAttribute('cx', String(x));
+    spendDot.setAttribute('cy', String(yAt(spendCents)));
+    spendDot.setAttribute('opacity', '1');
+
+    tDay.textContent = `${month}-${pad2(d)}`;
+    tIncome.textContent = `Income to date: ${fmtMoney(incomeCents)}`;
+    tSpend.textContent = `Spend to date: ${fmtMoney(spendCents)}`;
+    tNet.textContent = `Net: ${fmtMoney(incomeCents - spendCents)}`;
+
+    tooltip.classList.remove('hidden');
+    const left = Math.min(Math.max(x + 10, margin.left), width - 150);
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${margin.top}px`;
+  }
+  function hideTooltip() {
+    crosshair.setAttribute('opacity', '0');
+    incomeDot.setAttribute('opacity', '0');
+    spendDot.setAttribute('opacity', '0');
+    tooltip.classList.add('hidden');
+  }
+
+  const bandWidth = plotW / data.daysCount;
+  data.days.forEach((d) => {
+    const band = svgEl('rect', {
+      x: String(margin.left + (d - 1) * bandWidth), y: String(margin.top),
+      width: String(bandWidth), height: String(plotH),
+      fill: 'transparent',
+    });
+    band.addEventListener('pointerenter', () => showTooltip(d));
+    band.addEventListener('pointermove', () => showTooltip(d));
+    band.addEventListener('pointerleave', hideTooltip);
+    svg.appendChild(band);
+  });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'relative';
+  wrap.appendChild(svg);
+  wrap.appendChild(tooltip);
+  host.appendChild(wrap);
+}
+
+function chartLegendEntry(colorVar, label) {
+  const e = document.createElement('span');
+  e.className = 'flex items-center gap-1.5 text-xs text-ink-dim';
+  const swatch = document.createElement('span');
+  swatch.className = 'inline-block h-2 w-2 rounded-full';
+  swatch.style.backgroundColor = colorVar;
+  swatch.setAttribute('aria-hidden', 'true');
+  const text = document.createElement('span');
+  text.textContent = label; // text always wears a text token, never the series color
+  e.append(swatch, text);
+  return e;
+}
+
+function renderChart() {
+  const subtitle = state.summaryError ? 'unavailable' : monthLabel(state.month);
+  const body = panel(chartEl, 'Cash Flow', subtitle);
+
+  if (state.summaryError) {
+    errorLine(body, `Could not load the chart for ${monthLabel(state.month)}: ${state.summaryError}`);
+    chartSvgHost = null;
+    chartLastData = null;
+    return;
+  }
+
+  const data = computeChartData(state);
+  if (!data || !data.hasData) {
+    emptyLine(body, 'No scheduled sessions or spending yet this month.');
+    chartSvgHost = null;
+    chartLastData = null;
+    return;
+  }
+
+  const legend = document.createElement('div');
+  legend.className = 'flex flex-wrap items-center gap-4';
+  legend.appendChild(chartLegendEntry('var(--color-accent-dim)', 'Income'));
+  legend.appendChild(chartLegendEntry('var(--color-chart-cool)', 'Spend'));
+  body.appendChild(legend);
+
+  const host = document.createElement('div');
+  host.className = 'w-full';
+  body.appendChild(host);
+
+  chartSvgHost = host;
+  chartLastData = { data, month: state.month };
+  drawChart(host, data, state.month);
+}
+
+window.addEventListener('resize', () => {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    if (chartSvgHost && chartLastData) {
+      drawChart(chartSvgHost, chartLastData.data, chartLastData.month);
+    }
+  }, 150);
+});
 
 // ---- Sessions panel ----
 const SOURCE_LABELS = { cc: 'independent', wl: 'gym', manual: 'manual' };
@@ -586,6 +1016,7 @@ export function renderAll() {
     renderSyncStatus();
   }
 
+  renderChart();
   renderSessions();
   renderShopping();
   renderSubscriptions();

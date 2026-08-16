@@ -64,6 +64,11 @@
   --color-accent-dim: #c9762f;
   --color-ok: #5fd39a;
   --color-danger: #ff7b72;
+  /* Cool counterpart to --color-accent-dim for two-series dataviz (finances
+     chart: income vs. spend). Validated with the dataviz palette checker
+     against both light and dark surfaces — same value in both, like the
+     other status/accent tokens above, so it is not re-derived per theme. */
+  --color-chart-cool: #5b7fd4;
 }
 
 /*
@@ -149,6 +154,7 @@
   --color-accent-dim: #c9762f;
   --color-ok: #5fd39a;
   --color-danger: #ff7b72;
+  --color-chart-cool: #5b7fd4;
 
   --color-backdrop: #000000;
 
