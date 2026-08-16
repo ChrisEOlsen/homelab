@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gova/app/cache"
+	"gova/app/calendar"
 	"gova/app/db"
 )
 
@@ -37,7 +38,12 @@ type summaryEnvelope struct {
 		} `json:"spending"`
 		NetCents               int `json:"net_cents"`
 		NetAfterCommittedCents int `json:"net_after_committed_cents"`
-		Sessions               []struct {
+		AllTime                struct {
+			IncomeCents int `json:"income_cents"`
+			SpendCents  int `json:"spend_cents"`
+			NetCents    int `json:"net_cents"`
+		} `json:"all_time"`
+		Sessions []struct {
 			UID    string `json:"uid"`
 			Status string `json:"status"`
 		} `json:"sessions"`
@@ -165,5 +171,111 @@ INSERT INTO training_sessions (uid, source, client_name, session_date, start_at,
 	}
 	if seen["cancelled"] {
 		t.Fatal("sessions: cancelled session must not appear in the list")
+	}
+}
+
+// TestFinancesSummaryRejectsImpossibleMonth guards the calendar-parse fix:
+// monthPattern's old shape-only regex accepted a right-shaped but impossible
+// month like "2026-13" and let every downstream query silently match zero
+// rows, returning a fully zeroed 200 instead of an error.
+func TestFinancesSummaryRejectsImpossibleMonth(t *testing.T) {
+	for _, month := range []string{"2026-13", "2026-00", "2026-99"} {
+		t.Run(month, func(t *testing.T) {
+			d := db.OpenTest(t, financesSchema)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month="+month, nil)
+			rec := httptest.NewRecorder()
+			FinancesGET(d.Read, d.Write, cache.New())(rec, req)
+
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("want 422, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestFinancesSummaryAcceptsValidMonth checks the fix didn't overcorrect: a
+// real YYYY-MM still works, and an omitted month still defaults to the
+// current month.
+func TestFinancesSummaryAcceptsValidMonth(t *testing.T) {
+	d := db.OpenTest(t, financesSchema)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month=2026-08", nil)
+	rec := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var env summaryEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Data.Month != "2026-08" {
+		t.Fatalf("month: want 2026-08, got %s", env.Data.Month)
+	}
+
+	d2 := db.OpenTest(t, financesSchema)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary", nil)
+	rec2 := httptest.NewRecorder()
+	FinancesGET(d2.Read, d2.Write, cache.New())(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var env2 summaryEnvelope
+	if err := json.Unmarshal(rec2.Body.Bytes(), &env2); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	wantMonth := calendar.Now().Format("2006-01")
+	if env2.Data.Month != wantMonth {
+		t.Fatalf("month: want current month %s, got %s", wantMonth, env2.Data.Month)
+	}
+}
+
+// TestFinancesSummaryAllTimeSpendIsBrowseIndependent is the regression test
+// for the all_time.spend_cents fix: TotalThrough must always be anchored to
+// the current month, not the browsed month. Before the fix, browsing to an
+// old month passed that old month into TotalThrough and understated all-time
+// subscription spend by every month between then and now.
+func TestFinancesSummaryAllTimeSpendIsBrowseIndependent(t *testing.T) {
+	d := db.OpenTest(t, financesSchema)
+
+	now := calendar.Now()
+	oldMonth := now.AddDate(-3, 0, 0).Format("2006-01")
+	startedOn := now.AddDate(-5, 0, 0).Format("2006-01-02")
+
+	if _, err := d.Write.Exec(`
+INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on) VALUES
+ ('Spotify', 1200, 'monthly', 1, ?)`, startedOn); err != nil {
+		t.Fatal(err)
+	}
+
+	reqOld := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month="+oldMonth, nil)
+	recOld := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(recOld, reqOld)
+	if recOld.Code != http.StatusOK {
+		t.Fatalf("old month: want 200, got %d: %s", recOld.Code, recOld.Body.String())
+	}
+	var envOld summaryEnvelope
+	if err := json.Unmarshal(recOld.Body.Bytes(), &envOld); err != nil {
+		t.Fatalf("decode old: %v", err)
+	}
+
+	reqNow := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary", nil)
+	recNow := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(recNow, reqNow)
+	if recNow.Code != http.StatusOK {
+		t.Fatalf("current month: want 200, got %d: %s", recNow.Code, recNow.Body.String())
+	}
+	var envNow summaryEnvelope
+	if err := json.Unmarshal(recNow.Body.Bytes(), &envNow); err != nil {
+		t.Fatalf("decode now: %v", err)
+	}
+
+	if envOld.Data.AllTime.SpendCents != envNow.Data.AllTime.SpendCents {
+		t.Fatalf("all_time.spend_cents must not depend on the browsed month: old-month=%d current-month=%d",
+			envOld.Data.AllTime.SpendCents, envNow.Data.AllTime.SpendCents)
+	}
+	if envOld.Data.AllTime.SpendCents == 0 {
+		t.Fatal("all_time.spend_cents should be nonzero given the seeded subscription")
 	}
 }

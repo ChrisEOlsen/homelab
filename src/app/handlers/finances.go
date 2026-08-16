@@ -3,14 +3,12 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"regexp"
+	"time"
 
 	"gova/app/cache"
 	"gova/app/calendar"
 	"gova/app/models"
 )
-
-var monthPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
 
 // FinancesGET handles GET /api/v1/finances/summary?month=YYYY-MM
 //
@@ -25,7 +23,7 @@ func FinancesGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFun
 		if month == "" {
 			month = now.Format("2006-01")
 		}
-		if !monthPattern.MatchString(month) {
+		if _, err := time.Parse("2006-01", month); err != nil {
 			jsonError(w, "month must be YYYY-MM", 422)
 			return
 		}
@@ -62,7 +60,12 @@ func FinancesGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFun
 			jsonError(w, "failed to load totals", 500)
 			return
 		}
-		allTimeSubs, err := subs.TotalThrough(month)
+		// "All time" must not move when the user browses a past month, so this
+		// is anchored to the current month (like AllTimeEarned/AllTimeBought
+		// above), not the browsed `month` — passing `month` here understates
+		// all-time subscription spend for every past month browsed, which
+		// silently inflates all_time.net_cents.
+		allTimeSubs, err := subs.TotalThrough(now.Format("2006-01"))
 		if err != nil {
 			jsonError(w, "failed to load totals", 500)
 			return
