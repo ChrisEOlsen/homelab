@@ -1,7 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 
 const focusListEl = document.getElementById('focus-list');
-const remindersListEl = document.getElementById('reminders-list');
 const shortcutsGridEl = document.getElementById('shortcuts-grid');
 const focusFormMount = document.getElementById('focus-form-mount');
 const shortcutFormMount = document.getElementById('shortcut-form-mount');
@@ -16,50 +15,7 @@ const shortcutDeleteErrEl = document.createElement('p');
 shortcutDeleteErrEl.className = 'text-sm text-danger mt-2 hidden';
 shortcutsGridEl.insertAdjacentElement('afterend', shortcutDeleteErrEl);
 
-// ---- Clock (nav signature element) ----
-function tickClock() {
-  const text = new Date().toLocaleTimeString([], { hour12: false });
-  const clock = document.getElementById('clock');
-  const clockMobile = document.getElementById('clock-mobile');
-  if (clock) clock.textContent = text;
-  if (clockMobile) clockMobile.textContent = text;
-}
-tickClock();
-setInterval(tickClock, 1000);
-
-// ---- Mobile nav drawer ----
-const navToggle = document.getElementById('nav-toggle');
-const navClose = document.getElementById('nav-close');
-const drawer = document.getElementById('mobile-drawer');
-const backdrop = document.getElementById('mobile-drawer-backdrop');
-
-function openDrawer() {
-  drawer.classList.remove('translate-x-full');
-  backdrop.classList.remove('hidden');
-  navToggle.setAttribute('aria-expanded', 'true');
-}
-
-function closeDrawer() {
-  drawer.classList.add('translate-x-full');
-  backdrop.classList.add('hidden');
-  navToggle.setAttribute('aria-expanded', 'false');
-}
-
-navToggle.addEventListener('click', openDrawer);
-navClose.addEventListener('click', closeDrawer);
-backdrop.addEventListener('click', closeDrawer);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeDrawer();
-});
-drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
-
 // ---- Helpers ----
-function formatRemindAt(value) {
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
 function shortcutHost(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -128,56 +84,6 @@ function renderFocuses(items) {
     ol.appendChild(li);
   });
   focusListEl.replaceChildren(ol);
-}
-
-// ---- Upcoming reminders (read-only) ----
-// Mirrors the reminders page: a past-due reminder stays in the list but is
-// styled red.
-function isOverdue(item) {
-  const d = new Date(item.remind_at);
-  return !isNaN(d.getTime()) && d.getTime() < Date.now();
-}
-
-function renderReminders(items) {
-  if (items.length === 0) {
-    renderEmpty(remindersListEl, 'Nothing upcoming — add a reminder to see it here.');
-    return;
-  }
-  const ul = document.createElement('ul');
-  ul.className = 'space-y-2';
-  items.forEach((item) => {
-    const overdue = isOverdue(item);
-
-    const li = document.createElement('li');
-    li.className =
-      'flex items-center justify-between gap-3 border bg-surface-raised px-3 py-2' +
-      (overdue ? ' border-danger' : ' border-hairline');
-
-    const left = document.createElement('div');
-    left.className = 'flex flex-1 items-center gap-2 min-w-0';
-
-    const dot = document.createElement('span');
-    dot.className =
-      'h-1.5 w-1.5 rounded-full shrink-0' + (overdue ? ' bg-danger' : ' bg-ok');
-    dot.setAttribute('aria-hidden', 'true');
-    left.appendChild(dot);
-
-    const title = document.createElement('span');
-    title.className = 'text-sm truncate min-w-0' + (overdue ? ' text-danger' : ' text-ink');
-    title.textContent = item.title;
-    left.appendChild(title);
-
-    li.appendChild(left);
-
-    const time = document.createElement('span');
-    time.className =
-      'text-xs shrink-0 tabular-nums' + (overdue ? ' text-danger' : ' text-ink-dim');
-    time.textContent = formatRemindAt(item.remind_at);
-    li.appendChild(time);
-
-    ul.appendChild(li);
-  });
-  remindersListEl.replaceChildren(ul);
 }
 
 // ---- Shortcuts ----
@@ -258,24 +164,19 @@ function renderShortcuts(items) {
 
 // ---- Load ----
 async function loadDashboard() {
-  // The former /api/dashboard aggregate is gone — the home page reads the three
-  // resources directly and composes them. "Upcoming reminders" (active, soonest
-  // first, top 5) is derived here rather than by a bespoke server endpoint.
-  const [focusRes, remindersRes, shortcutsRes] = await Promise.all([
+  // The former /api/dashboard aggregate is gone — the home page reads the
+  // resources directly and composes them.
+  const [focusRes, shortcutsRes] = await Promise.all([
     get('/api/v1/focuses?limit=200'),
-    get('/api/v1/reminders?limit=200'),
     get('/api/v1/shortcuts?limit=200'),
   ]);
-  if (!focusRes.ok || !remindersRes.ok || !shortcutsRes.ok) {
-    const message = focusRes.error ?? remindersRes.error ?? shortcutsRes.error ?? 'Failed to load.';
+  if (!focusRes.ok || !shortcutsRes.ok) {
+    const message = focusRes.error ?? shortcutsRes.error ?? 'Failed to load.';
     renderError(focusListEl, message);
-    renderError(remindersListEl, message);
     renderError(shortcutsGridEl, message);
     return;
   }
-  const upcoming = (remindersRes.data ?? []).filter((r) => r.is_active).slice(0, 5);
   renderFocuses(focusRes.data ?? []);
-  renderReminders(upcoming);
   renderShortcuts(shortcutsRes.data ?? []);
 }
 

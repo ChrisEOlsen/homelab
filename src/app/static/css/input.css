@@ -1155,6 +1155,19 @@ footer {
 }
 
 /*
+ * Bottom breathing room on very tall pages.
+ *
+ * A mobile browser's bottom toolbar overlays the viewport without shortening
+ * the scrollable document, so the last ~80px of a page sits under it even at
+ * maximum scroll — the footer and the tail of the final panel become
+ * unreachable. Tailwind's pb-24 covers the toolbar; this adds the device's own
+ * safe-area inset on top, for home-indicator devices. Costs nothing on desktop.
+ */
+.page-bottom-gap {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
+/*
  * .collapsible — folds at every width.
  *
  * Distinct from .collapsible-mobile above, which is forced open at 768px+

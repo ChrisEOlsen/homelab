@@ -1,43 +1,6 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
 import { createModal } from '/static/js/lib/modal.js';
 
-// ---- Clock (nav signature element) ----
-function tickClock() {
-  const text = new Date().toLocaleTimeString([], { hour12: false });
-  const clock = document.getElementById('clock');
-  const clockMobile = document.getElementById('clock-mobile');
-  if (clock) clock.textContent = text;
-  if (clockMobile) clockMobile.textContent = text;
-}
-tickClock();
-setInterval(tickClock, 1000);
-
-// ---- Mobile nav drawer ----
-const navToggle = document.getElementById('nav-toggle');
-const navClose = document.getElementById('nav-close');
-const drawer = document.getElementById('mobile-drawer');
-const backdrop = document.getElementById('mobile-drawer-backdrop');
-
-function openDrawer() {
-  drawer.classList.remove('translate-x-full');
-  backdrop.classList.remove('hidden');
-  navToggle.setAttribute('aria-expanded', 'true');
-}
-
-function closeDrawer() {
-  drawer.classList.add('translate-x-full');
-  backdrop.classList.add('hidden');
-  navToggle.setAttribute('aria-expanded', 'false');
-}
-
-navToggle.addEventListener('click', openDrawer);
-navClose.addEventListener('click', closeDrawer);
-backdrop.addEventListener('click', closeDrawer);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeDrawer();
-});
-drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeDrawer));
-
 // ---- Collapsible-mobile section helper ----
 function makeCollapsibleSection(labelText, detailsClassName) {
   const details = document.createElement('details');
