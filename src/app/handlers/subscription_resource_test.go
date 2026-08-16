@@ -45,9 +45,9 @@ func TestSubscriptionResourceCRUD(t *testing.T) {
 	router := subscriptionRouter(testDB, appCache)
 	model := models.NewSubscriptionModel(testDB.Read, testDB.Write, appCache)
 	billing_dayTestVal := int64(1)
-	ended_onTestVal := "test"
+	ended_onTestVal := "2026-02-01"
 	notesTestVal := "test"
-	id, err := model.Create("test", int64(1), "test", &billing_dayTestVal, true, "test", &ended_onTestVal, &notesTestVal)
+	id, err := model.Create("test", int64(1), "test", &billing_dayTestVal, true, "2026-01-01", &ended_onTestVal, &notesTestVal)
 	if err != nil {
 		t.Fatalf("seed Create: %v", err)
 	}
@@ -77,15 +77,15 @@ func TestSubscriptionResourceCRUD(t *testing.T) {
 	}
 
 	// Create.
-	if rec := do(http.MethodPost, "/api/v1/subscriptions", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "test", "ended_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPost, "/api/v1/subscriptions", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "2026-01-01", "ended_on": "2026-02-01", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("create: got %d, body %s", rec.Code, rec.Body.String())
 	}
 
 	// Update: existing and missing.
-	if rec := do(http.MethodPut, "/api/v1/subscriptions/1", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "test", "ended_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPut, "/api/v1/subscriptions/1", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "2026-01-01", "ended_on": "2026-02-01", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("update: got %d, body %s", rec.Code, rec.Body.String())
 	}
-	if rec := do(http.MethodPut, "/api/v1/subscriptions/999999", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "test", "ended_on": "test", "notes": "test"}`); rec.Code != 404 {
+	if rec := do(http.MethodPut, "/api/v1/subscriptions/999999", `{"name": "test", "amount_cents": 1, "cadence": "monthly", "billing_day": 1, "is_active": true, "started_on": "2026-01-01", "ended_on": "2026-02-01", "notes": "test"}`); rec.Code != 404 {
 		t.Errorf("update missing: got %d, want 404", rec.Code)
 	}
 
@@ -257,5 +257,60 @@ func TestSubscriptionRejectsInvalidCadence(t *testing.T) {
 	}
 	if item.AmountCents != 12000 {
 		t.Errorf("row mutated: amount_cents got %d, want unchanged %d", item.AmountCents, 12000)
+	}
+}
+
+// TestSubscriptionUpdateRejectsInvalidStartedOn covers the added floor under
+// started_on on the full-replace PUT: unlike create, update has no default,
+// so an omitted or malformed started_on must be a 422 — the caller has to say
+// what it means rather than corrupt a money calculation (see
+// MonthlyEquivalentFor's slice-bounds panic on a short started_on).
+func TestSubscriptionUpdateRejectsInvalidStartedOn(t *testing.T) {
+	testDB := db.OpenTest(t, subscriptionResourceSchema())
+	appCache := cache.New()
+	router := subscriptionRouter(testDB, appCache)
+	model := models.NewSubscriptionModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	id, err := model.Create("Streaming", 1500, "monthly", nil, true, "2026-01-01", nil, nil)
+	if err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+
+	// started_on omitted entirely -> 422.
+	rec := do(http.MethodPut, "/api/v1/subscriptions/1", `{"name": "Streaming", "amount_cents": 1500, "cadence": "monthly", "is_active": true}`)
+	if rec.Code != 422 {
+		t.Errorf("omitted started_on: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	// started_on present but impossible calendar date -> 422.
+	rec = do(http.MethodPut, "/api/v1/subscriptions/1", `{"name": "Streaming", "amount_cents": 1500, "cadence": "monthly", "is_active": true, "started_on": "2026-13-45"}`)
+	if rec.Code != 422 {
+		t.Errorf("malformed started_on: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	// ended_on present but malformed -> 422. is_active is false so the
+	// deactivate-stamping branch does not overwrite the supplied ended_on
+	// before validation runs.
+	rec = do(http.MethodPut, "/api/v1/subscriptions/1", `{"name": "Streaming", "amount_cents": 1500, "cadence": "monthly", "is_active": false, "started_on": "2026-01-01", "ended_on": "not-a-date"}`)
+	if rec.Code != 422 {
+		t.Errorf("malformed ended_on: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	item, err := model.Find(id)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item.StartedOn != "2026-01-01" {
+		t.Errorf("row mutated: started_on got %q, want unchanged %q", item.StartedOn, "2026-01-01")
+	}
+	if item.EndedOn != nil {
+		t.Errorf("row mutated: ended_on got %v, want unchanged nil", item.EndedOn)
 	}
 }

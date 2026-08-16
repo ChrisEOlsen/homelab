@@ -63,6 +63,57 @@ INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on, e
 	}
 }
 
+// TestMonthlyEquivalentForSkipsMalformedStartedOn covers the guard added
+// alongside the existing endedOn check: a row whose started_on is too short
+// to carry a YYYY-MM prefix (empty, or truncated like "2026") must be
+// skipped rather than slice-panicking or being counted, while a well-formed
+// sibling row in the same table is still counted correctly.
+func TestMonthlyEquivalentForSkipsMalformedStartedOn(t *testing.T) {
+	d := db.OpenTest(t, subscriptionSchema)
+	m := NewSubscriptionModel(d.Read, d.Write, cache.New())
+
+	if _, err := d.Write.Exec(`
+INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on, ended_on) VALUES
+  ('Good',    1000, 'monthly', 1, '2026-01-01', NULL),
+  ('Empty',   2000, 'monthly', 1, '', NULL),
+  ('Short',   3000, 'monthly', 1, '2026', NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := m.MonthlyEquivalentFor("2026-08")
+	if err != nil {
+		t.Fatalf("MonthlyEquivalentFor: %v", err)
+	}
+	if got != 1000 {
+		t.Fatalf("want only the well-formed row (1000), got %d", got)
+	}
+}
+
+// TestTotalThroughSkipsMalformedStartedOn is the TotalThrough counterpart:
+// same malformed rows, same expectation that only the well-formed sibling
+// contributes, without panicking.
+func TestTotalThroughSkipsMalformedStartedOn(t *testing.T) {
+	d := db.OpenTest(t, subscriptionSchema)
+	m := NewSubscriptionModel(d.Read, d.Write, cache.New())
+
+	if _, err := d.Write.Exec(`
+INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on, ended_on) VALUES
+  ('Good',    1000, 'monthly', 1, '2026-06-01', NULL),
+  ('Empty',   2000, 'monthly', 1, '', NULL),
+  ('Short',   3000, 'monthly', 1, '2026', NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := m.TotalThrough("2026-08")
+	if err != nil {
+		t.Fatalf("TotalThrough: %v", err)
+	}
+	// Good spans 2026-06, 2026-07, 2026-08 = 3 months * 1000 = 3000.
+	if got != 3000 {
+		t.Fatalf("want only the well-formed row's 3 months (3000), got %d", got)
+	}
+}
+
 func TestMonthsBetween(t *testing.T) {
 	if got := monthsBetween("2026-08", "2026-08"); got != 1 {
 		t.Fatalf("same month: want 1, got %d", got)

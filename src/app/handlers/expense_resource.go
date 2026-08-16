@@ -93,6 +93,10 @@ func ExpenseCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Hand
 			jsonError(w, "status must be planned or bought", 422)
 			return
 		}
+		if !validDate(req.IncurredOn) {
+			jsonError(w, "incurred_on must be a valid YYYY-MM-DD date", 422)
+			return
+		}
 		model := models.NewExpenseModel(readDB, writeDB, appCache)
 		id, err := model.Create(req.Name, req.AmountCents, req.Category, req.Status, req.IncurredOn, req.Notes)
 		if err != nil {
@@ -128,6 +132,10 @@ func ExpenseUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.Handl
 		}
 		if req.Status != "planned" && req.Status != "bought" {
 			jsonError(w, "status must be planned or bought", 422)
+			return
+		}
+		if !validDate(req.IncurredOn) {
+			jsonError(w, "incurred_on must be a valid YYYY-MM-DD date", 422)
 			return
 		}
 		model := models.NewExpenseModel(readDB, writeDB, appCache)

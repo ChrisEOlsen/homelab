@@ -95,6 +95,14 @@ func SubscriptionCreatePOST(readDB, writeDB *sql.DB, appCache *cache.Cache) http
 			jsonError(w, "cadence must be monthly, yearly, or weekly", 422)
 			return
 		}
+		if !validDate(req.StartedOn) {
+			jsonError(w, "started_on must be a valid YYYY-MM-DD date", 422)
+			return
+		}
+		if req.EndedOn != nil && *req.EndedOn != "" && !validDate(*req.EndedOn) {
+			jsonError(w, "ended_on must be a valid YYYY-MM-DD date", 422)
+			return
+		}
 		model := models.NewSubscriptionModel(readDB, writeDB, appCache)
 		id, err := model.Create(req.Name, req.AmountCents, req.Cadence, req.BillingDay, req.IsActive, req.StartedOn, req.EndedOn, req.Notes)
 		if err != nil {
@@ -130,6 +138,14 @@ func SubscriptionUpdatePUT(readDB, writeDB *sql.DB, appCache *cache.Cache) http.
 		}
 		if req.Cadence != "monthly" && req.Cadence != "yearly" && req.Cadence != "weekly" {
 			jsonError(w, "cadence must be monthly, yearly, or weekly", 422)
+			return
+		}
+		if !validDate(req.StartedOn) {
+			jsonError(w, "started_on must be a valid YYYY-MM-DD date", 422)
+			return
+		}
+		if req.EndedOn != nil && *req.EndedOn != "" && !validDate(*req.EndedOn) {
+			jsonError(w, "ended_on must be a valid YYYY-MM-DD date", 422)
 			return
 		}
 		model := models.NewSubscriptionModel(readDB, writeDB, appCache)

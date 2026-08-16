@@ -44,7 +44,7 @@ func TestExpenseResourceCRUD(t *testing.T) {
 	model := models.NewExpenseModel(testDB.Read, testDB.Write, appCache)
 	categoryTestVal := "test"
 	notesTestVal := "test"
-	id, err := model.Create("test", int64(1), &categoryTestVal, "test", "test", &notesTestVal)
+	id, err := model.Create("test", int64(1), &categoryTestVal, "test", "2026-01-01", &notesTestVal)
 	if err != nil {
 		t.Fatalf("seed Create: %v", err)
 	}
@@ -74,15 +74,15 @@ func TestExpenseResourceCRUD(t *testing.T) {
 	}
 
 	// Create.
-	if rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "2026-01-01", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("create: got %d, body %s", rec.Code, rec.Body.String())
 	}
 
 	// Update: existing and missing.
-	if rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "2026-01-01", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("update: got %d, body %s", rec.Code, rec.Body.String())
 	}
-	if rec := do(http.MethodPut, "/api/v1/expenses/999999", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 404 {
+	if rec := do(http.MethodPut, "/api/v1/expenses/999999", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "2026-01-01", "notes": "test"}`); rec.Code != 404 {
 		t.Errorf("update missing: got %d, want 404", rec.Code)
 	}
 
@@ -238,5 +238,42 @@ func TestExpenseUpdateRejectsInvalidStatus(t *testing.T) {
 	}
 	if item.AmountCents != 300 {
 		t.Errorf("row mutated: amount_cents got %d, want unchanged %d", item.AmountCents, 300)
+	}
+}
+
+// TestExpenseUpdateRejectsInvalidIncurredOn covers the added floor under
+// incurred_on on the full-replace PUT: a malformed date passes the existing
+// non-empty check but must still be rejected with 422, since incurred_on
+// feeds monthRange-based string comparisons that would otherwise silently
+// mis-bucket real money into the wrong month.
+func TestExpenseUpdateRejectsInvalidIncurredOn(t *testing.T) {
+	testDB := db.OpenTest(t, expenseResourceSchema())
+	appCache := cache.New()
+	router := expenseRouter(testDB, appCache)
+	model := models.NewExpenseModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	id, err := model.Create("widget", 1000, nil, "planned", "2026-01-01", nil)
+	if err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+
+	rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "widget", "amount_cents": 1000, "status": "planned", "incurred_on": "not-a-date"}`)
+	if rec.Code != 422 {
+		t.Errorf("malformed incurred_on: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	item, err := model.Find(id)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item.IncurredOn != "2026-01-01" {
+		t.Errorf("row mutated: incurred_on got %q, want unchanged %q", item.IncurredOn, "2026-01-01")
 	}
 }

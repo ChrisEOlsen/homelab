@@ -43,6 +43,18 @@ func splitMonth(s string) (year, month int, ok bool) {
 	return y, m, true
 }
 
+// monthPrefix returns the YYYY-MM prefix of a date string, and false if the
+// value is too short to carry one. Month membership is decided by string
+// comparison on these prefixes, so an unreadable date must drop out of the
+// calculation rather than slice-panic or compare as an empty string that
+// sorts before every real month.
+func monthPrefix(date string) (string, bool) {
+	if len(date) < 7 {
+		return "", false
+	}
+	return date[:7], true
+}
+
 type subRow struct {
 	cadence   string
 	amount    int
@@ -78,7 +90,11 @@ func (m *SubscriptionModel) MonthlyEquivalentFor(month string) (int, error) {
 	}
 	total := 0
 	for _, r := range rows {
-		if r.startedOn[:7] > month {
+		startPrefix, ok := monthPrefix(r.startedOn)
+		if !ok {
+			continue
+		}
+		if startPrefix > month {
 			continue
 		}
 		if r.endedOn != nil && len(*r.endedOn) >= 7 && (*r.endedOn)[:7] < month {
@@ -99,9 +115,9 @@ func (m *SubscriptionModel) TotalThrough(month string) (int, error) {
 	}
 	total := 0
 	for _, r := range rows {
-		start := r.startedOn
-		if len(start) >= 7 {
-			start = start[:7]
+		start, ok := monthPrefix(r.startedOn)
+		if !ok {
+			continue
 		}
 		end := month
 		if r.endedOn != nil && len(*r.endedOn) >= 7 && (*r.endedOn)[:7] < month {
