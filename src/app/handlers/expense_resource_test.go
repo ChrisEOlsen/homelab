@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"gova/app/cache"
@@ -73,15 +74,15 @@ func TestExpenseResourceCRUD(t *testing.T) {
 	}
 
 	// Create.
-	if rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "test", "amount_cents": 1, "category": "test", "status": "test", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("create: got %d, body %s", rec.Code, rec.Body.String())
 	}
 
 	// Update: existing and missing.
-	if rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "test", "amount_cents": 1, "category": "test", "status": "test", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
+	if rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 200 {
 		t.Errorf("update: got %d, body %s", rec.Code, rec.Body.String())
 	}
-	if rec := do(http.MethodPut, "/api/v1/expenses/999999", `{"name": "test", "amount_cents": 1, "category": "test", "status": "test", "incurred_on": "test", "notes": "test"}`); rec.Code != 404 {
+	if rec := do(http.MethodPut, "/api/v1/expenses/999999", `{"name": "test", "amount_cents": 1, "category": "test", "status": "planned", "incurred_on": "test", "notes": "test"}`); rec.Code != 404 {
 		t.Errorf("update missing: got %d, want 404", rec.Code)
 	}
 
@@ -98,4 +99,144 @@ func TestExpenseResourceCRUD(t *testing.T) {
 		t.Errorf("delete: got %d", rec.Code)
 	}
 	_ = id
+}
+
+// TestExpenseCreateDefaultsStatusAndDate covers the hand-customized defaulting
+// in ExpenseCreatePOST: an omitted status becomes "planned" and an omitted
+// incurred_on becomes today.
+func TestExpenseCreateDefaultsStatusAndDate(t *testing.T) {
+	testDB := db.OpenTest(t, expenseResourceSchema())
+	appCache := cache.New()
+	router := expenseRouter(testDB, appCache)
+	model := models.NewExpenseModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	today := time.Now().Format("2006-01-02")
+
+	rec := do(http.MethodPost, "/api/v1/expenses", `{"name": "gizmo", "amount_cents": 500}`)
+	if rec.Code != 200 {
+		t.Fatalf("create: got %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	item, err := model.Find(1)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item.Status != "planned" {
+		t.Errorf("status: got %q, want %q", item.Status, "planned")
+	}
+	if item.IncurredOn != today {
+		t.Errorf("incurred_on: got %q, want %q", item.IncurredOn, today)
+	}
+}
+
+// TestExpenseUpdateBoughtRestampsDate covers the hand-customized re-stamping
+// in ExpenseUpdatePUT: marking an item bought with no incurred_on moves it to
+// today, but an explicit incurred_on always wins.
+func TestExpenseUpdateBoughtRestampsDate(t *testing.T) {
+	testDB := db.OpenTest(t, expenseResourceSchema())
+	appCache := cache.New()
+	router := expenseRouter(testDB, appCache)
+	model := models.NewExpenseModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	today := time.Now().Format("2006-01-02")
+
+	// Case 1: bought with no incurred_on -> re-stamped to today.
+	id1, err := model.Create("widget", 1000, nil, "planned", "2020-01-01", nil)
+	if err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+	rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "widget", "amount_cents": 1000, "status": "bought", "incurred_on": ""}`)
+	if rec.Code != 200 {
+		t.Fatalf("update bought no date: got %d, body %s", rec.Code, rec.Body.String())
+	}
+	item1, err := model.Find(id1)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item1.IncurredOn != today {
+		t.Errorf("restamp: got %q, want today %q", item1.IncurredOn, today)
+	}
+	if item1.Status != "bought" {
+		t.Errorf("status: got %q, want %q", item1.Status, "bought")
+	}
+
+	// Case 2: bought with an explicit incurred_on -> the supplied date wins.
+	id2, err := model.Create("gadget", 2000, nil, "planned", "2020-01-01", nil)
+	if err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+	rec = do(http.MethodPut, "/api/v1/expenses/2", `{"name": "gadget", "amount_cents": 2000, "status": "bought", "incurred_on": "2021-06-15"}`)
+	if rec.Code != 200 {
+		t.Fatalf("update bought explicit date: got %d, body %s", rec.Code, rec.Body.String())
+	}
+	item2, err := model.Find(id2)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item2.IncurredOn != "2021-06-15" {
+		t.Errorf("explicit date: got %q, want %q", item2.IncurredOn, "2021-06-15")
+	}
+}
+
+// TestExpenseUpdateRejectsInvalidStatus covers the added floor under status
+// on the full-replace PUT: a status outside {planned, bought}, or an omitted
+// status, is rejected with 422 and the row is left unchanged.
+func TestExpenseUpdateRejectsInvalidStatus(t *testing.T) {
+	testDB := db.OpenTest(t, expenseResourceSchema())
+	appCache := cache.New()
+	router := expenseRouter(testDB, appCache)
+	model := models.NewExpenseModel(testDB.Read, testDB.Write, appCache)
+
+	do := func(method, target, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, target, strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, r)
+		return rec
+	}
+
+	id, err := model.Create("thingamajig", 300, nil, "bought", "2020-05-05", nil)
+	if err != nil {
+		t.Fatalf("seed Create: %v", err)
+	}
+
+	// Invalid status value.
+	rec := do(http.MethodPut, "/api/v1/expenses/1", `{"name": "thingamajig", "amount_cents": 300, "status": "wishlist", "incurred_on": "2020-05-05"}`)
+	if rec.Code != 422 {
+		t.Errorf("invalid status: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	// Status omitted entirely (incurred_on supplied so the failure is the
+	// status check, not the incurred_on-required check).
+	rec = do(http.MethodPut, "/api/v1/expenses/1", `{"name": "thingamajig", "amount_cents": 300, "incurred_on": "2020-05-05"}`)
+	if rec.Code != 422 {
+		t.Errorf("omitted status: got %d, want 422, body %s", rec.Code, rec.Body.String())
+	}
+
+	item, err := model.Find(id)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if item.Status != "bought" {
+		t.Errorf("row mutated: status got %q, want unchanged %q", item.Status, "bought")
+	}
+	if item.IncurredOn != "2020-05-05" {
+		t.Errorf("row mutated: incurred_on got %q, want unchanged %q", item.IncurredOn, "2020-05-05")
+	}
+	if item.AmountCents != 300 {
+		t.Errorf("row mutated: amount_cents got %d, want unchanged %d", item.AmountCents, 300)
+	}
 }
