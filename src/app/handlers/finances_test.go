@@ -36,6 +36,9 @@ type summaryEnvelope struct {
 			ShoppingBoughtCents    int `json:"shopping_bought_cents"`
 			ShoppingCommittedCents int `json:"shopping_committed_cents"`
 		} `json:"spending"`
+		TaxCents                        int `json:"tax_cents"`
+		ProjectedTaxCents               int `json:"projected_tax_cents"`
+		TaxRateBP                       int `json:"tax_rate_bp"`
 		NetCents                        int `json:"net_cents"`
 		NetAfterCommittedCents          int `json:"net_after_committed_cents"`
 		ProjectedNetCents               int `json:"projected_net_cents"`
@@ -99,20 +102,36 @@ INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on) V
 		t.Fatalf("committed: want 3000, got %d", env.Data.Spending.ShoppingCommittedCents)
 	}
 
-	// net = earned - subscriptions - bought; planned never subtracts.
-	if want := 15000 - 1200 - 20000; env.Data.NetCents != want {
+	// Tax is 18% (the default FINANCE_TAX_RATE_BP) of gym ('wl') income only.
+	// Earned wl income is session b's $50 (5000c): 5000*1800bp = 900450000/10000
+	// rounds (via (cents*bp+5000)/10000) to 900. The cc session ($100) is
+	// untaxed by default. Projected wl income adds session c's future $60
+	// (5000+6000=11000c): tax is 1980.
+	if env.Data.TaxRateBP != 1800 {
+		t.Fatalf("tax rate bp: want 1800, got %d", env.Data.TaxRateBP)
+	}
+	if env.Data.TaxCents != 900 {
+		t.Fatalf("tax: want 900 (18%% of the earned wl session only), got %d", env.Data.TaxCents)
+	}
+	if env.Data.ProjectedTaxCents != 1980 {
+		t.Fatalf("projected tax: want 1980 (18%% of all wl sessions), got %d", env.Data.ProjectedTaxCents)
+	}
+
+	// net = earned - tax - subscriptions - bought; planned never subtracts.
+	if want := 15000 - 900 - 1200 - 20000; env.Data.NetCents != want {
 		t.Fatalf("net: want %d, got %d", want, env.Data.NetCents)
 	}
-	if want := 15000 - 1200 - 20000 - 3000; env.Data.NetAfterCommittedCents != want {
+	if want := 15000 - 900 - 1200 - 20000 - 3000; env.Data.NetAfterCommittedCents != want {
 		t.Fatalf("net after committed: want %d, got %d", want, env.Data.NetAfterCommittedCents)
 	}
 
 	// The forward-looking pair: the same arithmetic against projected income
-	// rather than earned, which is what the Net tile's disclosure shows.
-	if want := 21000 - 1200 - 20000; env.Data.ProjectedNetCents != want {
+	// (and projected tax) rather than earned, which is what the Net tile's
+	// disclosure shows.
+	if want := 21000 - 1980 - 1200 - 20000; env.Data.ProjectedNetCents != want {
 		t.Fatalf("projected net: want %d, got %d", want, env.Data.ProjectedNetCents)
 	}
-	if want := 21000 - 1200 - 20000 - 3000; env.Data.ProjectedNetAfterCommittedCents != want {
+	if want := 21000 - 1980 - 1200 - 20000 - 3000; env.Data.ProjectedNetAfterCommittedCents != want {
 		t.Fatalf("projected net after committed: want %d, got %d",
 			want, env.Data.ProjectedNetAfterCommittedCents)
 	}
@@ -297,5 +316,122 @@ INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on) V
 	}
 	if envOld.Data.AllTime.SpendCents == 0 {
 		t.Fatal("all_time.spend_cents should be nonzero given the seeded subscription")
+	}
+}
+
+// TestFinancesSummaryTaxOnlyAppliesToGymIncome guards the requirement as
+// stated: 18% of gym ('wl') income is tax; independent-client ('cc') sessions
+// are excluded because he registers those himself at year end. A fixture with
+// one of each source must tax only the wl one.
+func TestFinancesSummaryTaxOnlyAppliesToGymIncome(t *testing.T) {
+	d := db.OpenTest(t, financesSchema)
+
+	if _, err := d.Write.Exec(`
+INSERT INTO training_sessions (uid, source, client_name, session_date, start_at, end_at, duration_min, amount_cents, rate_source, status) VALUES
+ ('cc-1','cc','Independent','2026-08-03','2026-08-03 11:00:00','2026-08-03 12:00:00',60,10000,'client','scheduled'),
+ ('wl-1','wl','Gym Member', '2026-08-04','2026-08-04 09:00:00','2026-08-04 09:45:00',45, 5000,'rule',  'scheduled')`); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month=2026-08", nil)
+	rec := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var env summaryEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// Only the $50 wl session is taxable: 5000 * 18% = 900 (round-half-up).
+	// The $100 cc session contributes nothing.
+	if env.Data.TaxCents != 900 {
+		t.Fatalf("tax: want 900 (18%% of the wl session only, cc excluded), got %d", env.Data.TaxCents)
+	}
+	if env.Data.ProjectedTaxCents != 900 {
+		t.Fatalf("projected tax: want 900 (both sessions already earned), got %d", env.Data.ProjectedTaxCents)
+	}
+}
+
+// TestFinancesSummaryZeroTaxRateMatchesPreTaxArithmetic pins
+// FINANCE_TAX_RATE_BP=0 to zero tax and, critically, to every net figure
+// exactly matching the pre-tax arithmetic (earned/projected minus
+// subscriptions and bought shopping only) -- i.e. adding tax support must not
+// change behavior at all when the rate is zero.
+func TestFinancesSummaryZeroTaxRateMatchesPreTaxArithmetic(t *testing.T) {
+	t.Setenv("FINANCE_TAX_RATE_BP", "0")
+
+	d := db.OpenTest(t, financesSchema)
+	if _, err := d.Write.Exec(`
+INSERT INTO training_sessions (uid, source, client_name, session_date, start_at, end_at, duration_min, amount_cents, rate_source, status) VALUES
+ ('wl-1','wl','Gym Member', '2026-08-04','2026-08-04 09:00:00','2026-08-04 09:45:00',45, 5000,'rule',  'scheduled'),
+ ('wl-2','wl','Later',      '2026-08-28','2026-08-28 09:00:00','2026-08-28 10:00:00',60, 6000,'rule',  'scheduled')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec(`
+INSERT INTO expenses (name, amount_cents, status, incurred_on) VALUES
+ ('Rack', 2000, 'bought', '2026-08-02')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec(`
+INSERT INTO subscriptions (name, amount_cents, cadence, is_active, started_on) VALUES
+ ('Spotify', 1200, 'monthly', 1, '2026-01-01')`); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month=2026-08", nil)
+	rec := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var env summaryEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if env.Data.TaxRateBP != 0 {
+		t.Fatalf("tax rate bp: want 0, got %d", env.Data.TaxRateBP)
+	}
+	if env.Data.TaxCents != 0 || env.Data.ProjectedTaxCents != 0 {
+		t.Fatalf("zero rate: want zero tax, got tax=%d projected_tax=%d", env.Data.TaxCents, env.Data.ProjectedTaxCents)
+	}
+
+	wantNet := env.Data.Income.EarnedCents - env.Data.Spending.SubscriptionsCents - env.Data.Spending.ShoppingBoughtCents
+	if env.Data.NetCents != wantNet {
+		t.Fatalf("net at zero tax rate: want %d, got %d", wantNet, env.Data.NetCents)
+	}
+	wantProjectedNet := env.Data.Income.ProjectedCents - env.Data.Spending.SubscriptionsCents - env.Data.Spending.ShoppingBoughtCents
+	if env.Data.ProjectedNetCents != wantProjectedNet {
+		t.Fatalf("projected net at zero tax rate: want %d, got %d", wantProjectedNet, env.Data.ProjectedNetCents)
+	}
+}
+
+// TestFinancesSummaryTaxRoundsRatherThanTruncates guards the integer
+// round-half-up rule -- (cents*bp + 5000) / 10000 -- against a naive
+// (cents*bp)/10000 truncation. 3333 cents at the default 18% is 599.94: a
+// truncating implementation floors to 599; rounding correctly gives 600.
+func TestFinancesSummaryTaxRoundsRatherThanTruncates(t *testing.T) {
+	d := db.OpenTest(t, financesSchema)
+	if _, err := d.Write.Exec(`
+INSERT INTO training_sessions (uid, source, client_name, session_date, start_at, end_at, duration_min, amount_cents, rate_source, status) VALUES
+ ('wl-1','wl','Gym Member', '2026-08-04','2026-08-04 09:00:00','2026-08-04 09:45:00',45, 3333,'rule',  'scheduled')`); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/finances/summary?month=2026-08", nil)
+	rec := httptest.NewRecorder()
+	FinancesGET(d.Read, d.Write, cache.New())(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var env summaryEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if env.Data.TaxCents != 600 {
+		t.Fatalf("tax rounding: want 600 (round-half-up of 599.94, not the truncated 599), got %d", env.Data.TaxCents)
 	}
 }

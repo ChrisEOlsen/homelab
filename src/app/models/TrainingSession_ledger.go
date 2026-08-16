@@ -199,10 +199,11 @@ ORDER BY start_at ASC`, start, end)
 
 // MonthIncomeResult separates money already worked for from money merely booked.
 type MonthIncomeResult struct {
-	EarnedCents    int
-	ProjectedCents int
-	SessionCount   int
-	EarnedBySource map[string]int
+	EarnedCents       int
+	ProjectedCents    int
+	SessionCount      int
+	EarnedBySource    map[string]int
+	ProjectedBySource map[string]int
 }
 
 // MonthIncome totals a month. earned counts only sessions that have already
@@ -210,7 +211,7 @@ type MonthIncomeResult struct {
 // bookings, which is why the page shows both — on the 3rd, projected is most of
 // the month's calendar and earned is three days of work.
 func (m *TrainingSessionModel) MonthIncome(month, now string) (MonthIncomeResult, error) {
-	out := MonthIncomeResult{EarnedBySource: map[string]int{}}
+	out := MonthIncomeResult{EarnedBySource: map[string]int{}, ProjectedBySource: map[string]int{}}
 	start, end := monthRange(month)
 
 	err := m.readDB.QueryRow(`
@@ -243,7 +244,33 @@ GROUP BY source`, start, end, now)
 		}
 		out.EarnedBySource[src] = cents
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	// Same grouped total, minus the end_at <= ? predicate: the whole month's
+	// booked income by source, not just what has already finished. Tax on the
+	// projected figure needs this the same way projected income itself skips
+	// the earned-only filter above.
+	projRows, err := m.readDB.Query(`
+SELECT source, COALESCE(SUM(amount_cents), 0)
+FROM training_sessions
+WHERE session_date >= ? AND session_date < ? AND status = 'scheduled'
+GROUP BY source`, start, end)
+	if err != nil {
+		return out, err
+	}
+	defer projRows.Close()
+
+	for projRows.Next() {
+		var src string
+		var cents int
+		if err := projRows.Scan(&src, &cents); err != nil {
+			return out, err
+		}
+		out.ProjectedBySource[src] = cents
+	}
+	return out, projRows.Err()
 }
 
 // AllTimeEarned totals every finished, non-cancelled session ever recorded.
@@ -254,6 +281,32 @@ func (m *TrainingSessionModel) AllTimeEarned(now string) (int, error) {
 		now,
 	).Scan(&cents)
 	return cents, err
+}
+
+// AllTimeEarnedBySource is AllTimeEarned's per-source split -- the same
+// status = 'scheduled' AND end_at <= ? filter, grouped by source, so a caller
+// (e.g. all-time tax) can apply a per-source rule to money already earned
+// rather than the flat total.
+func (m *TrainingSessionModel) AllTimeEarnedBySource(now string) (map[string]int, error) {
+	out := map[string]int{}
+	rows, err := m.readDB.Query(
+		"SELECT source, COALESCE(SUM(amount_cents), 0) FROM training_sessions WHERE status = 'scheduled' AND end_at <= ? GROUP BY source",
+		now,
+	)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var src string
+		var cents int
+		if err := rows.Scan(&src, &cents); err != nil {
+			return out, err
+		}
+		out[src] = cents
+	}
+	return out, rows.Err()
 }
 
 // NeedsReviewCount is all-time, not per-month: a flagged session in a month you

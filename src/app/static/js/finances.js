@@ -282,12 +282,28 @@ function tile(label, value, emphasis = false) {
   return cell;
 }
 
+// Formats basis points as a percent for the tax secondary line, e.g. 1800 ->
+// "18", 1750 -> "17.5" -- trailing zeros dropped, never a hardcoded "18%" so
+// the label always matches whatever FINANCE_TAX_RATE_BP is actually set to.
+function fmtBPPercent(bp) {
+  return (Math.round((Number(bp ?? 0) / 100) * 100) / 100).toString();
+}
+
 function renderLedger() {
   const s = state.summary;
   ledgerEl.replaceChildren();
   if (!s) return;
 
-  ledgerEl.appendChild(tile('Earned', fmtMoney(s.income.earned_cents)));
+  // Earned gains a secondary line showing tax deducted -- gym ('wl') income
+  // only, per FINANCE_TAX_SOURCES -- so the 18%-is-gone rule is visible right
+  // next to the number it reduces, not just buried in Net.
+  const earned = tile('Earned', fmtMoney(s.income.earned_cents));
+  const taxLine = document.createElement('div');
+  taxLine.className = 'text-xs text-ink-dim tabular-nums';
+  taxLine.textContent = `− ${fmtMoney(s.tax_cents)} tax (${fmtBPPercent(s.tax_rate_bp)}% of gym)`;
+  earned.appendChild(taxLine);
+  ledgerEl.appendChild(earned);
+
   ledgerEl.appendChild(tile('Projected', fmtMoney(s.income.projected_cents)));
   ledgerEl.appendChild(tile('Subscriptions', fmtMoney(s.spending.subscriptions_cents)));
 
@@ -401,6 +417,7 @@ function computeChartData(state) {
   const sessions = (s.sessions ?? []).filter((x) => x.status === 'scheduled');
   const expenses = (s.expenses ?? []).filter((x) => x.status === 'bought');
   const subsCents = s.spending?.subscriptions_cents ?? 0;
+  const taxRateBP = s.tax_rate_bp ?? 0;
 
   const days = [];
   const cumEarned = [];
@@ -409,22 +426,40 @@ function computeChartData(state) {
   let earnedRun = 0;
   let allRun = 0;
   let spendRun = 0;
+  let gymCumCents = 0; // running total of gym ('wl') session cents, taxed on the day earned
+  let taxRun = 0; // cumulative tax already folded into spendRun
 
   for (let d = 1; d <= daysCount; d++) {
     const dateStr = `${state.month}-${pad2(d)}`;
     let dayAll = 0;
     let dayEarned = 0;
+    let dayGym = 0;
     for (const sess of sessions) {
       if (sess.session_date !== dateStr) continue;
       dayAll += sess.amount_cents;
       if (sess.end_at <= nowStr) dayEarned += sess.amount_cents;
+      // Tax applies to gym ('wl') sessions only, matching the ledger tile and
+      // the backend's default FINANCE_TAX_SOURCES. It lands on the session's
+      // own day, not lumped on day 1 like subscriptions.
+      if (sess.source === 'wl') dayGym += sess.amount_cents;
     }
     let daySpend = 0;
     for (const exp of expenses) {
       if (exp.incurred_on === dateStr) daySpend += exp.amount_cents;
     }
+
+    // Tax is rounded on the *cumulative* gym total, same as the backend
+    // rounds once on the month's summed gym income -- not per-session or
+    // per-day -- so the running total this loop builds up lands on exactly
+    // s.projected_tax_cents by the last day, never a cent off from rounding
+    // the same money twice in two different places.
+    gymCumCents += dayGym;
+    const taxCum = Math.floor((gymCumCents * taxRateBP + 5000) / 10000);
+    const dayTax = taxCum - taxRun;
+    taxRun = taxCum;
+
     if (d === 1) spendRun += subsCents; // the month's subscription total lands as a step on day 1
-    spendRun += daySpend;
+    spendRun += daySpend + dayTax;
     earnedRun += dayEarned;
     allRun += dayAll;
 
@@ -497,7 +532,7 @@ function buildChartAriaLabel(data, month) {
   const netCents = incomeCents - spendCents;
   return (
     `Cumulative income and spend for ${month}: income ${fmtMoney(incomeCents)}, ` +
-    `spend ${fmtMoney(spendCents)}, net ${fmtMoney(netCents)}. ` +
+    `spend (including tax on gym income) ${fmtMoney(spendCents)}, net ${fmtMoney(netCents)}. ` +
     `The shaded band between the lines shows Net: shaded in the income color where ` +
     `income leads, and in the spend color where spending is ahead of income.`
   );
@@ -807,7 +842,7 @@ function renderChart() {
   const legend = document.createElement('div');
   legend.className = 'flex flex-wrap items-center gap-4';
   legend.appendChild(chartLegendEntry('var(--color-accent-dim)', 'Income'));
-  legend.appendChild(chartLegendEntry('var(--color-chart-cool)', 'Spend'));
+  legend.appendChild(chartLegendEntry('var(--color-chart-cool)', 'Spend (incl. tax)'));
   const bandNote = document.createElement('span');
   bandNote.className = 'text-xs text-ink-dim';
   bandNote.textContent = 'Shaded band = Net (income color when ahead, spend color when spend is ahead)';

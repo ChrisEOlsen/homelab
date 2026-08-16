@@ -151,6 +151,60 @@ func TestMonthIncomeSplitsEarnedFromProjected(t *testing.T) {
 	if got.EarnedBySource["cc"] != 10000 {
 		t.Fatalf("earned_by_source cc: want 10000 earned, got %d", got.EarnedBySource["cc"])
 	}
+	// ProjectedBySource is the same grouped query without the end_at <= ?
+	// predicate: both the finished and the future cc session count.
+	if got.ProjectedBySource["cc"] != 20000 {
+		t.Fatalf("projected_by_source cc: want 20000 (both sessions), got %d", got.ProjectedBySource["cc"])
+	}
+}
+
+// TestAllTimeEarnedBySourceSplitsBySource guards AllTimeEarnedBySource against
+// AllTimeEarned drifting apart: the flat total must equal the sum of the
+// per-source split, and a future (not-yet-finished) session must be excluded
+// from both, same as AllTimeEarned's own end_at <= ? filter.
+func TestAllTimeEarnedBySourceSplitsBySource(t *testing.T) {
+	d := db.OpenTest(t, trainingSessionSchema)
+	m := NewTrainingSessionModel(d.Read, d.Write, cache.New())
+
+	past1 := newTestSession("wl-past-1", "2026-08-03", 5000)
+	past1.Source = "wl"
+	if _, err := m.UpsertFromCalendar(past1, "now"); err != nil {
+		t.Fatal(err)
+	}
+	past2 := newTestSession("cc-past-1", "2026-08-04", 3000)
+	past2.Source = "cc"
+	if _, err := m.UpsertFromCalendar(past2, "now"); err != nil {
+		t.Fatal(err)
+	}
+	future := newTestSession("wl-future-1", "2026-08-28", 9000)
+	future.Source = "wl"
+	if _, err := m.UpsertFromCalendar(future, "now"); err != nil {
+		t.Fatal(err)
+	}
+
+	now := "2026-08-15 09:00:00"
+	bySource, err := m.AllTimeEarnedBySource(now)
+	if err != nil {
+		t.Fatalf("AllTimeEarnedBySource: %v", err)
+	}
+	if bySource["wl"] != 5000 {
+		t.Fatalf("wl: want 5000 (future session excluded), got %d", bySource["wl"])
+	}
+	if bySource["cc"] != 3000 {
+		t.Fatalf("cc: want 3000, got %d", bySource["cc"])
+	}
+
+	total, err := m.AllTimeEarned(now)
+	if err != nil {
+		t.Fatalf("AllTimeEarned: %v", err)
+	}
+	var sum int
+	for _, v := range bySource {
+		sum += v
+	}
+	if sum != total {
+		t.Fatalf("per-source split (%d) must sum to the flat total (%d)", sum, total)
+	}
 }
 
 func TestCancelMissingWithNoSeenUIDsCancelsNothing(t *testing.T) {
