@@ -41,8 +41,11 @@ const syncBtn = document.getElementById('sync-btn');
 const syncStatusEl = document.getElementById('sync-status');
 
 // ---- State ----
+const today = new Date();
 export const state = {
-  month: new Date().toISOString().slice(0, 7), // YYYY-MM in local terms is close
+  // Local wall clock, not toISOString() -- that is UTC, and from ~8pm on the
+  // last day of a month it would open the page on the next month.
+  month: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`,
   summary: null,
   clients: [],
   rateRules: [],
@@ -405,6 +408,8 @@ export function renderAll() {
   renderLedger();
   renderSyncStatus();
   renderSessions();
+  renderShopping();
+  renderSubscriptions();
   renderAllTime();
 }
 
@@ -417,9 +422,282 @@ document.getElementById('month-next').addEventListener('click', async () => {
   await loadSummary();
 });
 
+// Injected by add_js_form, then rethemed to the Instrument palette and given
+// real money parsing — the generated version posts every field as a string,
+// which the Go handler's int decode rejects.
+function setupExpensesForm(container) {
+  const form = document.createElement('form');
+  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+
+  const mk = (placeholder, width) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.className =
+      `${width} bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent`;
+    return input;
+  };
+
+  const nameInput = mk('Item', 'flex-1 min-w-40');
+  const amountInput = mk('$0.00', 'w-24');
+  const categoryInput = mk('Category (optional)', 'w-40');
+  form.append(nameInput, amountInput, categoryInput);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.className =
+    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  submitBtn.textContent = 'Add';
+  form.appendChild(submitBtn);
+
+  const errEl = document.createElement('p');
+  errEl.className = 'text-sm text-danger w-full hidden';
+  form.appendChild(errEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.classList.add('hidden');
+
+    const cents = parseMoney(amountInput.value);
+    if (!nameInput.value.trim()) {
+      errEl.textContent = 'Name is required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (cents === null) {
+      errEl.textContent = 'Enter an amount, e.g. 45 or 45.50';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    const res = await post('/api/v1/expenses', {
+      name: nameInput.value.trim(),
+      amount_cents: cents,
+      category: categoryInput.value.trim() || null,
+      status: 'planned',
+      incurred_on: `${state.month}-01`,
+      notes: null,
+    });
+    submitBtn.disabled = false;
+
+    if (!res.ok) {
+      errEl.textContent = res.error ?? 'Could not add the item.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    form.reset();
+    await loadSummary();
+  });
+
+  container.appendChild(form);
+}
+
+// ---- Shopping panel ----
+const shoppingEl = document.getElementById('shopping-panel');
+
+function expenseRow(item) {
+  const li = document.createElement('li');
+  li.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-b border-hairline last:border-0';
+
+  const name = document.createElement('span');
+  name.className = 'text-sm text-ink flex-1 min-w-32';
+  name.textContent = item.name;
+  if (item.status === 'bought') name.classList.add('text-ink-dim', 'line-through');
+  li.appendChild(name);
+
+  if (item.category) {
+    const cat = document.createElement('span');
+    cat.className = 'text-xs text-ink-dim';
+    cat.textContent = item.category;
+    li.appendChild(cat);
+  }
+
+  const when = document.createElement('span');
+  when.className = 'text-xs text-ink-dim tabular-nums';
+  when.textContent = item.incurred_on;
+  li.appendChild(when);
+
+  const amount = document.createElement('span');
+  amount.className = 'text-sm tabular-nums text-ink w-20 text-right';
+  amount.textContent = fmtMoney(item.amount_cents);
+  li.appendChild(amount);
+
+  li.appendChild(iconButton(item.status === 'bought' ? 'Un-buy' : 'Bought', async () => {
+    await put(`/api/v1/expenses/${item.id}`, {
+      ...item,
+      status: item.status === 'bought' ? 'planned' : 'bought',
+      // Blank so the handler re-stamps it to today when marking bought.
+      incurred_on: item.status === 'bought' ? item.incurred_on : '',
+    });
+    await loadSummary();
+  }));
+
+  li.appendChild(iconButton('Delete', async () => {
+    await del(`/api/v1/expenses/${item.id}`);
+    await loadSummary();
+  }, true));
+
+  return li;
+}
+
+function renderShopping() {
+  const items = state.summary?.expenses ?? [];
+  const bought = state.summary?.spending.shopping_bought_cents ?? 0;
+  const committed = state.summary?.spending.shopping_committed_cents ?? 0;
+  const body = panel(shoppingEl, 'Shopping',
+    `${fmtMoney(bought)} spent · ${fmtMoney(committed)} planned`);
+
+  if (items.length === 0) {
+    emptyLine(body, 'Nothing on the list this month.');
+  } else {
+    const list = document.createElement('ul');
+    items.forEach((item) => list.appendChild(expenseRow(item)));
+    body.appendChild(list);
+  }
+  setupExpensesForm(body);
+}
+
+// ---- Subscriptions panel ----
+const subscriptionsEl = document.getElementById('subscriptions-panel');
+const CADENCES = ['monthly', 'yearly', 'weekly'];
+
+function subscriptionRow(item) {
+  const li = document.createElement('li');
+  li.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 py-2 border-b border-hairline last:border-0';
+
+  const name = document.createElement('span');
+  name.className = 'text-sm text-ink flex-1 min-w-32';
+  name.textContent = item.name;
+  if (!item.is_active) name.classList.add('text-ink-dim', 'line-through');
+  li.appendChild(name);
+
+  const cadence = document.createElement('span');
+  cadence.className = 'text-xs text-ink-dim';
+  cadence.textContent = item.cadence;
+  li.appendChild(cadence);
+
+  const amount = document.createElement('span');
+  amount.className = 'text-sm tabular-nums text-ink w-20 text-right';
+  amount.textContent = fmtMoney(item.amount_cents);
+  li.appendChild(amount);
+
+  li.appendChild(iconButton(item.is_active ? 'Stop' : 'Resume', async () => {
+    await put(`/api/v1/subscriptions/${item.id}`, { ...item, is_active: !item.is_active });
+    await loadAll();
+  }));
+
+  li.appendChild(iconButton('Delete', async () => {
+    await del(`/api/v1/subscriptions/${item.id}`);
+    await loadAll();
+  }, true));
+
+  return li;
+}
+
+function subscriptionForm(container) {
+  const form = document.createElement('form');
+  form.className = 'flex flex-wrap items-end gap-2 pt-2';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Subscription';
+  nameInput.className =
+    'flex-1 min-w-40 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+
+  const amountInput = document.createElement('input');
+  amountInput.type = 'text';
+  amountInput.placeholder = '$0.00';
+  amountInput.className =
+    'w-24 bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+
+  const cadenceSelect = document.createElement('select');
+  cadenceSelect.className =
+    'bg-canvas border border-hairline px-2 py-1.5 text-sm text-ink focus:outline-none focus:border-accent';
+  CADENCES.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    cadenceSelect.appendChild(opt);
+  });
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.className =
+    'px-3 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  submitBtn.textContent = 'Add';
+
+  const errEl = document.createElement('p');
+  errEl.className = 'text-sm text-danger w-full hidden';
+
+  form.append(nameInput, amountInput, cadenceSelect, submitBtn, errEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.classList.add('hidden');
+
+    const cents = parseMoney(amountInput.value);
+    if (!nameInput.value.trim() || cents === null) {
+      errEl.textContent = 'Name and a numeric amount are both required.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    const res = await post('/api/v1/subscriptions', {
+      name: nameInput.value.trim(),
+      amount_cents: cents,
+      cadence: cadenceSelect.value,
+      billing_day: null,
+      is_active: true,
+      started_on: '',
+      ended_on: null,
+      notes: null,
+    });
+    submitBtn.disabled = false;
+
+    if (!res.ok) {
+      errEl.textContent = res.error ?? 'Could not add the subscription.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    form.reset();
+    await loadAll();
+  });
+
+  container.appendChild(form);
+}
+
+async function loadSubscriptions() {
+  const res = await get('/api/v1/subscriptions?limit=200&sort=name');
+  state.subscriptions = res.ok ? (res.data ?? []) : [];
+}
+
+function renderSubscriptions() {
+  const monthly = state.summary?.spending.subscriptions_cents ?? 0;
+  const body = panel(subscriptionsEl, 'Subscriptions', `${fmtMoney(monthly)} this month`);
+
+  if (state.subscriptions.length === 0) {
+    emptyLine(body, 'No recurring payments recorded.');
+  } else {
+    const list = document.createElement('ul');
+    state.subscriptions.forEach((item) => list.appendChild(subscriptionRow(item)));
+    body.appendChild(list);
+  }
+  subscriptionForm(body);
+}
+
 // @inject-forms
 
-async function init() {
+// loadAll refetches everything the page owns. The summary carries the month's
+// sessions and shopping rows; subscriptions come from their own list endpoint
+// because they are not month-scoped.
+export async function loadAll() {
+  await loadSubscriptions();
   await loadSummary();
+}
+
+async function init() {
+  await loadAll();
 }
 init();
