@@ -64,6 +64,11 @@
   --color-accent-dim: #c9762f;
   --color-ok: #5fd39a;
   --color-danger: #ff7b72;
+  /* Cool counterpart to --color-accent-dim for two-series dataviz (finances
+     chart: income vs. spend). Validated with the dataviz palette checker
+     against both light and dark surfaces — same value in both, like the
+     other status/accent tokens above, so it is not re-derived per theme. */
+  --color-chart-cool: #5b7fd4;
 }
 
 /*
@@ -149,6 +154,7 @@
   --color-accent-dim: #c9762f;
   --color-ok: #5fd39a;
   --color-danger: #ff7b72;
+  --color-chart-cool: #5b7fd4;
 
   --color-backdrop: #000000;
 
@@ -1146,6 +1152,32 @@ footer {
 }
 .collapsible-mobile > summary.collapsible-toggle::-webkit-details-marker {
   display: none;
+}
+
+/*
+ * .collapsible — folds at every width.
+ *
+ * Distinct from .collapsible-mobile above, which is forced open at 768px+
+ * because those panels are a page's only content. The finances page stacks
+ * six panels, so folding the ones you are not reading is useful on a desktop
+ * too. Kept as a separate class so the other five pages keep their behaviour.
+ */
+.collapsible > summary.collapsible-toggle {
+  list-style: none;
+}
+.collapsible > summary.collapsible-toggle::-webkit-details-marker {
+  display: none;
+}
+.collapsible-chevron {
+  transition: transform 150ms ease;
+}
+.collapsible:not([open]) > summary.collapsible-toggle .collapsible-chevron {
+  transform: rotate(-90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapsible-chevron {
+    transition: none;
+  }
 }
 
 /*

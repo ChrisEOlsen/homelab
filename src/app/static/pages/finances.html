@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TaskMaster &middot; Homelab</title>
+  <title>Finances · Homelab</title>
   <script>
     (function() {
       try {
@@ -27,14 +27,14 @@
       <nav aria-label="Feature pages" class="hidden md:flex items-center divide-x divide-hairline border border-hairline bg-surface text-xs overflow-x-auto">
         <a href="/static/pages/home.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Dashboard</a>
         <a href="/static/pages/reminders.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Reminders</a>
-        <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
-          <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-          Tasks
-        </span>
+        <a href="/static/pages/todos.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Tasks</a>
         <a href="/static/pages/journal.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Journal</a>
         <a href="/static/pages/bookmarks.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Bookmarks</a>
         <a href="/static/pages/logger.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Logger</a>
-        <a href="/static/pages/finances.html" class="px-3 py-1.5 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors whitespace-nowrap">Finances</a>
+        <span aria-current="page" class="px-3 py-1.5 flex items-center gap-1.5 text-ink whitespace-nowrap">
+          <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+          Finances
+        </span>
       </nav>
 
       <div class="hidden md:flex items-center gap-3 shrink-0 text-xs text-ink-dim tabular-nums">
@@ -73,14 +73,14 @@
     <nav aria-label="Feature pages (mobile)" class="flex flex-col p-2 text-sm overflow-y-auto">
       <a href="/static/pages/home.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Dashboard</a>
       <a href="/static/pages/reminders.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Reminders</a>
-      <span class="px-3 py-3 flex items-center gap-2 text-ink border-b border-hairline">
-        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-        Tasks
-      </span>
+      <a href="/static/pages/todos.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Tasks</a>
       <a href="/static/pages/journal.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Journal</a>
       <a href="/static/pages/bookmarks.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Bookmarks</a>
       <a href="/static/pages/logger.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors border-b border-hairline">Logger</a>
-      <a href="/static/pages/finances.html" class="px-3 py-3 text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">Finances</a>
+      <span class="px-3 py-3 flex items-center gap-2 text-ink">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>
+        Finances
+      </span>
     </nav>
     <div class="mt-auto px-4 py-3 border-t border-hairline text-xs text-ink-dim flex items-center justify-between gap-1.5 tabular-nums shrink-0">
       <span class="flex items-center gap-1.5">
@@ -97,10 +97,36 @@
     </div>
   </aside>
 
-  <main class="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-    <h1 class="text-xl font-semibold tracking-tight text-ink page-title">TaskMaster</h1>
-    <div id="app" class="text-sm text-ink-dim">Loading&hellip;</div>
-    <div id="forms-container"></div>
+  <main class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-xl font-semibold tracking-tight text-ink page-title">Finances</h1>
+      <div class="flex items-center gap-2">
+        <button id="month-prev" type="button" aria-label="Previous month"
+                class="px-2 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">&lsaquo;</button>
+        <span id="month-label" class="text-sm text-ink tabular-nums min-w-32 text-center">&hellip;</span>
+        <button id="month-next" type="button" aria-label="Next month"
+                class="px-2 py-1.5 text-sm border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">&rsaquo;</button>
+      </div>
+    </div>
+
+    <section id="ledger" class="grid grid-cols-2 md:grid-cols-5 gap-px bg-hairline border border-hairline" aria-label="Month ledger"></section>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p id="sync-status" class="text-xs text-ink-dim">Never synced.</p>
+      <button id="sync-btn" type="button"
+              class="px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors">Sync now</button>
+    </div>
+
+    <section id="chart-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Cash flow chart"></section>
+
+    <section id="sessions-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Sessions"></section>
+    <section id="shopping-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Shopping list"></section>
+    <section id="subscriptions-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Subscriptions"></section>
+    <section id="clients-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Clients"></section>
+    <section id="rates-panel" class="border border-hairline bg-surface p-5 space-y-3" aria-label="Duration rates"></section>
+    <section id="all-time" class="border border-hairline bg-surface px-5 py-4 text-xs text-ink-dim tabular-nums" aria-label="All-time totals"></section>
+
   </main>
 
   <footer class="border-t border-hairline px-4 sm:px-6 py-4 text-xs text-ink-dim">
@@ -108,6 +134,6 @@
   </footer>
 
   <script type="module" src="/static/js/lib/theme.js"></script>
-  <script type="module" src="/static/js/todos.js"></script>
+  <script type="module" src="/static/js/finances.js"></script>
 </body>
 </html>

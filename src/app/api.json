@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:8f99fcfe30e008bbda2ad908b5a5a7b684c5307038f0c63884b66ac1166c43b7",
-  "generated_at": "2026-08-14T14:58:58Z",
+  "hash": "sha256:263a0776064aaddd37105f1063949c52e0ab96aa41226c83d40b6f0701737b0b",
+  "generated_at": "2026-08-16T02:17:04Z",
   "models": [
     {
       "name": "Bookmark",
@@ -389,6 +389,281 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "client",
+      "table": "clients",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "match_name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "rate_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "expense",
+      "table": "expenses",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "incurred_on",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "rate_rule",
+      "table": "rate_rules",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "duration_min",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "subscription",
+      "table": "subscriptions",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "cadence",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "billing_day",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "started_on",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "ended_on",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "training_session",
+      "table": "training_sessions",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "uid",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "client_name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "client_id",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "session_date",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "start_at",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "end_at",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "duration_min",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "rate_source",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "override_cents",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "needs_review",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
     }
   ],
   "endpoints": [
@@ -521,6 +796,160 @@
       "auth": false,
       "model": "Bookmark",
       "kind": "update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/calendar/sync",
+      "handler": "CalendarSyncPOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clients",
+      "handler": "ClientListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/clients",
+      "handler": "ClientCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/clients/{id}",
+      "handler": "ClientUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "client",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/expenses",
+      "handler": "ExpenseListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/expenses",
+      "handler": "ExpenseCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finances/summary",
+      "handler": "FinancesGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "kind": "custom"
     },
     {
       "method": "GET",
@@ -758,6 +1187,71 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/rate_rules",
+      "handler": "RateRuleListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rate_rules",
+      "handler": "RateRuleCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/rate_rules/{id}",
+      "handler": "RateRuleUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "rate_rule",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/reminders",
       "handler": "ReminderListGET",
       "deps": [
@@ -898,6 +1392,71 @@
       "auth": false,
       "model": "Shortcut",
       "kind": "detail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subscriptions",
+      "handler": "SubscriptionListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/subscriptions",
+      "handler": "SubscriptionCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/subscriptions/{id}",
+      "handler": "SubscriptionUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "subscription",
+      "kind": "update"
     },
     {
       "method": "GET",
@@ -1210,6 +1769,71 @@
       "auth": false,
       "model": "Todo",
       "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training_sessions",
+      "handler": "TrainingSessionListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/training_sessions",
+      "handler": "TrainingSessionCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "update"
     }
   ]
 }
