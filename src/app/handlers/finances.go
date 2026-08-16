@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,17 @@ func financeTaxSources() map[string]bool {
 			out[s] = true
 		}
 	}
+	return out
+}
+
+// taxSourceList flattens the taxed-source set for the wire, sorted so the
+// payload is stable between requests (Go map order is not).
+func taxSourceList(taxed map[string]bool) []string {
+	out := make([]string, 0, len(taxed))
+	for s := range taxed {
+		out = append(out, s)
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -187,9 +199,14 @@ func FinancesGET(readDB, writeDB *sql.DB, appCache *cache.Cache) http.HandlerFun
 				"shopping_bought_cents":    bought,
 				"shopping_committed_cents": committed,
 			},
-			"tax_cents":                           taxCents,
-			"projected_tax_cents":                 projectedTaxCents,
-			"tax_rate_bp":                         taxRateBP,
+			"tax_cents":           taxCents,
+			"projected_tax_cents": projectedTaxCents,
+			"tax_rate_bp":         taxRateBP,
+			// Which sources are taxed, so the page never has to hardcode it.
+			// The chart accrues tax per day from the session rows, and without
+			// this it would keep taxing only 'wl' after FINANCE_TAX_SOURCES
+			// changed -- the ledger would move and the chart would not.
+			"tax_sources":                         taxSourceList(taxSources),
 			"net_cents":                           net,
 			"net_after_committed_cents":           net - committed,
 			"projected_net_cents":                 projectedNet,

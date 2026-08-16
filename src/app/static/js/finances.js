@@ -418,6 +418,10 @@ function computeChartData(state) {
   const expenses = (s.expenses ?? []).filter((x) => x.status === 'bought');
   const subsCents = s.spending?.subscriptions_cents ?? 0;
   const taxRateBP = s.tax_rate_bp ?? 0;
+  // Falls back to the backend's own default rather than an empty set: an empty
+  // set would silently tax nothing and quietly disagree with the ledger, which
+  // is the failure this lookup exists to prevent.
+  const taxedSources = new Set(s.tax_sources ?? ['wl']);
 
   const days = [];
   const cumEarned = [];
@@ -438,10 +442,12 @@ function computeChartData(state) {
       if (sess.session_date !== dateStr) continue;
       dayAll += sess.amount_cents;
       if (sess.end_at <= nowStr) dayEarned += sess.amount_cents;
-      // Tax applies to gym ('wl') sessions only, matching the ledger tile and
-      // the backend's default FINANCE_TAX_SOURCES. It lands on the session's
-      // own day, not lumped on day 1 like subscriptions.
-      if (sess.source === 'wl') dayGym += sess.amount_cents;
+      // Which sources are taxed comes from the summary, never a literal here:
+      // FINANCE_TAX_SOURCES is configurable, and a hardcoded 'wl' would keep
+      // the chart taxing only gym income after the ledger had moved on. Tax
+      // lands on the session's own day rather than being lumped onto day 1
+      // like subscriptions, because it accrues as the income is earned.
+      if (taxedSources.has(sess.source)) dayGym += sess.amount_cents;
     }
     let daySpend = 0;
     for (const exp of expenses) {
