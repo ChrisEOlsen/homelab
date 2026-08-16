@@ -401,7 +401,9 @@ function buildChartAriaLabel(data, month) {
   const netCents = incomeCents - spendCents;
   return (
     `Cumulative income and spend for ${month}: income ${fmtMoney(incomeCents)}, ` +
-    `spend ${fmtMoney(spendCents)}, net ${fmtMoney(netCents)}.`
+    `spend ${fmtMoney(spendCents)}, net ${fmtMoney(netCents)}. ` +
+    `The shaded band between the lines shows Net: shaded in the income color where ` +
+    `income leads, and in the spend color where spending is ahead of income.`
   );
 }
 
@@ -476,14 +478,37 @@ function drawChart(host, data, month) {
   // the solid/dashed split below.
   const incomeCombined = data.days.map((d) => (d <= data.todayIdx ? data.cumEarned[d - 1] : data.cumAll[d - 1]));
 
-  // Net-gap fill -- a quiet neutral wash (not either series' color), so the
-  // narrowing gap reads as "space between the lines", never a third series.
-  if (data.daysCount > 1) {
-    const top = data.days.map((d) => `${xAt(d)},${yAt(incomeCombined[d - 1])}`);
-    const bottomRev = [...data.days].reverse().map((d) => `${xAt(d)},${yAt(data.cumSpend[d - 1])}`);
+  // Net-gap fill -- one quadrilateral per day-interval, not a single polygon
+  // spanning the whole month. A single top-path/bottom-path-reversed polygon
+  // self-intersects (renders as a bowtie) wherever income and spend cross --
+  // which happens on day 1 of essentially every month with subscriptions,
+  // since the month's whole subscription total lands as a spend step on day
+  // 1 while income starts at zero and accrues session by session. Each
+  // per-interval quad (income[i], income[i+1], spend[i+1], spend[i]) is a
+  // simple trapezoid regardless of which line is on top, so it tiles
+  // seamlessly and never self-intersects. Each quad is tinted with whichever
+  // series is ahead over that interval -- income color when income leads,
+  // spend color when spend leads -- at low opacity so the lines stay the
+  // dominant marks. Only the two validated series colors are used; no third
+  // hue.
+  for (let i = 1; i < data.daysCount; i++) {
+    const x0 = xAt(data.days[i - 1]);
+    const x1 = xAt(data.days[i]);
+    const income0 = incomeCombined[i - 1];
+    const income1 = incomeCombined[i];
+    const spend0 = data.cumSpend[i - 1];
+    const spend1 = data.cumSpend[i];
+    const netSum = (income0 - spend0) + (income1 - spend1);
+    const color = netSum >= 0 ? 'var(--color-accent-dim)' : 'var(--color-chart-cool)';
+    const points = [
+      `${x0},${yAt(income0)}`,
+      `${x1},${yAt(income1)}`,
+      `${x1},${yAt(spend1)}`,
+      `${x0},${yAt(spend0)}`,
+    ];
     svg.appendChild(svgEl('polygon', {
-      points: [...top, ...bottomRev].join(' '),
-      fill: 'var(--color-ink)', 'fill-opacity': '0.06', stroke: 'none',
+      points: points.join(' '),
+      fill: color, 'fill-opacity': '0.15', stroke: 'none',
     }));
   }
 
@@ -675,6 +700,10 @@ function renderChart() {
   legend.className = 'flex flex-wrap items-center gap-4';
   legend.appendChild(chartLegendEntry('var(--color-accent-dim)', 'Income'));
   legend.appendChild(chartLegendEntry('var(--color-chart-cool)', 'Spend'));
+  const bandNote = document.createElement('span');
+  bandNote.className = 'text-xs text-ink-dim';
+  bandNote.textContent = 'Shaded band = Net (income color when ahead, spend color when spend is ahead)';
+  legend.appendChild(bandNote);
   body.appendChild(legend);
 
   const host = document.createElement('div');
