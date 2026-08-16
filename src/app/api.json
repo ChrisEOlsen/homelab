@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:813f7f258d5769090c6c1be841bbeae011268d612f8edfe1b31024264b105c36",
-  "generated_at": "2026-08-16T01:27:42Z",
+  "hash": "sha256:272f499df8939144e320580fa1a8dd5f336e4cba61e9c563f0dc93ef890da537",
+  "generated_at": "2026-08-16T01:37:49Z",
   "models": [
     {
       "name": "Bookmark",
@@ -447,6 +447,52 @@
       ]
     },
     {
+      "name": "expense",
+      "table": "expenses",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "incurred_on",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
       "name": "rate_rule",
       "table": "rate_rules",
       "fields": [
@@ -758,6 +804,71 @@
       ],
       "auth": false,
       "model": "client",
+      "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/expenses",
+      "handler": "ExpenseListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/expenses",
+      "handler": "ExpenseCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/expenses/{id}",
+      "handler": "ExpenseUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "expense",
       "kind": "update"
     },
     {

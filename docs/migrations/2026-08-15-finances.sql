@@ -56,3 +56,16 @@ CREATE TABLE training_sessions (
 
 CREATE INDEX idx_training_sessions_date ON training_sessions(session_date);
 CREATE INDEX idx_training_sessions_status ON training_sessions(status);
+
+CREATE TABLE expenses (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    category TEXT,
+    status TEXT NOT NULL DEFAULT 'planned',
+    incurred_on TEXT NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_expenses_incurred_on ON expenses(incurred_on);
