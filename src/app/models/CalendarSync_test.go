@@ -1,0 +1,92 @@
+package models
+
+import (
+	"testing"
+
+	"gova/app/cache"
+	"gova/app/db"
+)
+
+func TestCalendarSyncModel_CRUD(t *testing.T) {
+	testDB := db.OpenTest(t, `CREATE TABLE calendar_syncs (
+		id INTEGER PRIMARY KEY,
+		finished_at TEXT,
+		ok INTEGER NOT NULL,
+		events_seen INTEGER NOT NULL,
+		created_count INTEGER NOT NULL,
+		updated_count INTEGER NOT NULL,
+		cancelled_count INTEGER NOT NULL,
+		error TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`)
+	m := NewCalendarSyncModel(testDB.Read, testDB.Write, cache.New())
+
+	finished_atTestVal := "test"
+	errorTestVal := "test"
+	id, err := m.Create(&finished_atTestVal, true, int64(1), int64(1), int64(1), int64(1), &errorTestVal)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if id == 0 {
+		t.Fatal("Create returned id 0")
+	}
+
+	found, err := m.Find(id)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if found.ID != id {
+		t.Errorf("Find: got ID %d, want %d", found.ID, id)
+	}
+
+	items, total, err := m.GetPage(50, 0, QueryOpts{})
+	if err != nil {
+		t.Fatalf("GetPage: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("GetPage: got total %d, want 1", total)
+	}
+	if len(items) != 1 {
+		t.Fatalf("GetPage: got %d items, want 1", len(items))
+	}
+	if items[0].ID != id {
+		t.Errorf("GetPage: got ID %d, want %d", items[0].ID, id)
+	}
+
+	if items[0].FinishedAt == nil {
+		t.Errorf("GetPage: finished_at was not recovered (nil)")
+	} else if *items[0].FinishedAt != finished_atTestVal {
+		t.Errorf("GetPage: finished_at got %v, want %v", *items[0].FinishedAt, finished_atTestVal)
+	}
+
+	if items[0].Error == nil {
+		t.Errorf("GetPage: error was not recovered (nil)")
+	} else if *items[0].Error != errorTestVal {
+		t.Errorf("GetPage: error got %v, want %v", *items[0].Error, errorTestVal)
+	}
+
+	// An offset past the end returns an empty (non-nil) slice, not an error,
+	// and the total still reflects the full table.
+	page2, total2, err := m.GetPage(50, 50, QueryOpts{})
+	if err != nil {
+		t.Fatalf("GetPage(offset 50): %v", err)
+	}
+	if page2 == nil {
+		t.Error("GetPage past the end returned a nil slice; want empty")
+	}
+	if len(page2) != 0 {
+		t.Errorf("GetPage(offset 50): got %d items, want 0", len(page2))
+	}
+	if total2 != 1 {
+		t.Errorf("GetPage(offset 50): got total %d, want 1", total2)
+	}
+
+	if err := m.Delete(id); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := m.Find(id); err == nil {
+		t.Error("Find after Delete: expected error, got nil")
+	}
+}
+
+

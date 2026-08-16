@@ -82,3 +82,15 @@ CREATE TABLE subscriptions (
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE calendar_syncs (
+    id INTEGER PRIMARY KEY,
+    finished_at TEXT,
+    ok INTEGER NOT NULL DEFAULT 0,
+    events_seen INTEGER NOT NULL DEFAULT 0,
+    created_count INTEGER NOT NULL DEFAULT 0,
+    updated_count INTEGER NOT NULL DEFAULT 0,
+    cancelled_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
