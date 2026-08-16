@@ -32,6 +32,7 @@ func RegisterGenerated(r chi.Router, database *db.DB, appCache *cache.Cache) {
 	r.Delete("/api/v1/expenses/{id}", ExpenseDeleteDELETE(database.Read, database.Write, appCache))
 	r.Get("/api/v1/expenses/{id}", ExpenseDetailGET(database.Read, database.Write, appCache))
 	r.Put("/api/v1/expenses/{id}", ExpenseUpdatePUT(database.Read, database.Write, appCache))
+	r.Get("/api/v1/finances/summary", FinancesGET(database.Read, database.Write, appCache))
 	r.Get("/api/v1/focuses", FocusListGET(database.Read, database.Write, appCache))
 	r.Post("/api/v1/focuses", FocusCreatePOST(database.Read, database.Write, appCache))
 	r.Delete("/api/v1/focuses/{id}", FocusDeleteDELETE(database.Read, database.Write, appCache))

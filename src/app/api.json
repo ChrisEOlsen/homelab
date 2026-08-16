@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:71eb8c615535055c591f4f3fc40197efd7564ebed17eded3464041d217d40f2c",
-  "generated_at": "2026-08-16T02:07:53Z",
+  "hash": "sha256:263a0776064aaddd37105f1063949c52e0ab96aa41226c83d40b6f0701737b0b",
+  "generated_at": "2026-08-16T02:17:04Z",
   "models": [
     {
       "name": "Bookmark",
@@ -938,6 +938,18 @@
       "auth": false,
       "model": "expense",
       "kind": "update"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finances/summary",
+      "handler": "FinancesGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "kind": "custom"
     },
     {
       "method": "GET",
