@@ -566,21 +566,33 @@ function drawChart(host, data, month) {
   // between them, so nothing else is labeled point-by-point.
   const incomeEndCents = incomeCombined[data.daysCount - 1] ?? 0;
   const spendEndCents = data.cumSpend[data.daysCount - 1] ?? 0;
-  const incomeLabel = svgEl('text', {
-    x: String(xAt(data.daysCount) + 6), y: String(yAt(incomeEndCents)),
-    'text-anchor': 'start', 'dominant-baseline': 'middle',
-    fill: 'var(--color-ink)', 'font-size': '11', 'font-weight': '600',
-  });
-  incomeLabel.textContent = fmtMoney(incomeEndCents);
-  svg.appendChild(incomeLabel);
+  // Each end label is named as well as valued. In a fully past month both
+  // lines render solid, so line style stops telling them apart and identity
+  // would otherwise rest on colour plus the legend alone. The name is stacked
+  // above the figure rather than inline with it so the pair still fits the
+  // right margin at the widest realistic amount.
+  function endLabel(cents, baseY, seriesName) {
+    const x = String(xAt(data.daysCount) + 6);
 
-  const spendLabel = svgEl('text', {
-    x: String(xAt(data.daysCount) + 6), y: String(yAt(spendEndCents) + 13),
-    'text-anchor': 'start', 'dominant-baseline': 'middle',
-    fill: 'var(--color-ink)', 'font-size': '11', 'font-weight': '600',
-  });
-  spendLabel.textContent = fmtMoney(spendEndCents);
-  svg.appendChild(spendLabel);
+    const name = svgEl('text', {
+      x, y: String(baseY - 7),
+      'text-anchor': 'start', 'dominant-baseline': 'middle',
+      fill: 'var(--color-ink-dim)', 'font-size': '9',
+    });
+    name.textContent = seriesName;
+    svg.appendChild(name);
+
+    const value = svgEl('text', {
+      x, y: String(baseY + 5),
+      'text-anchor': 'start', 'dominant-baseline': 'middle',
+      fill: 'var(--color-ink)', 'font-size': '11', 'font-weight': '600',
+    });
+    value.textContent = fmtMoney(cents);
+    svg.appendChild(value);
+  }
+
+  endLabel(incomeEndCents, yAt(incomeEndCents), 'Income');
+  endLabel(spendEndCents, yAt(spendEndCents) + 22, 'Spend');
 
   // Hover layer -- one invisible full-height band per day (a generous hit
   // target, never the 2px line itself), plus a shared crosshair and tooltip.
