@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -17,19 +18,32 @@ import (
 // app container over the tailnet interface it binds (HOST in calsync's .env).
 const DefaultICSURL = "http://100.85.186.108:5522/calendar.ics"
 
+// runMu serializes whole sync runs process-wide. It is deliberately package
+// scope, not a Service field: the generated route signature gives the handler
+// only db handles, so it constructs a fresh Service per request, and a
+// per-instance mutex would be inert exactly when it matters -- a button press
+// landing during a ticker run.
+var runMu sync.Mutex
+
 // Result is one sync run, returned to the page and written to calendar_syncs.
+//
+// events_seen is every event the feed parsed successfully -- not what was
+// applied. created + updated is what was actually written to the ledger;
+// failed is the difference, the count of events that parsed fine but failed
+// to store (e.g. a constraint violation on one row). Do not read events_seen
+// as "sessions now in the ledger" -- read created + updated for that.
 type Result struct {
 	OK         bool   `json:"ok"`
 	EventsSeen int    `json:"events_seen"`
 	Created    int    `json:"created"`
 	Updated    int    `json:"updated"`
 	Cancelled  int    `json:"cancelled"`
+	Failed     int    `json:"failed"`
 	Error      string `json:"error,omitempty"`
 	FinishedAt string `json:"finished_at"`
 }
 
-// Service owns one sync loop. The mutex keeps the button and the background
-// ticker from running the same reconciliation at the same time.
+// Service owns one sync loop.
 type Service struct {
 	url      string
 	client   *http.Client
@@ -37,7 +51,6 @@ type Service struct {
 	clients  *models.ClientModel
 	rules    *models.RateRuleModel
 	syncs    *models.CalendarSyncModel
-	mu       sync.Mutex
 }
 
 func NewService(url string, sessions *models.TrainingSessionModel, clients *models.ClientModel,
@@ -71,6 +84,7 @@ func NewFromDB(readDB, writeDB *sql.DB, c *cache.Cache) *Service {
 func Now() time.Time {
 	loc, err := time.LoadLocation(FeedTimezone)
 	if err != nil {
+		log.Printf("calendar: failed to load timezone %q, falling back to UTC -- every stored timestamp and the earned/projected boundary will shift by the zone offset until this is fixed: %v", FeedTimezone, err)
 		return time.Now().UTC()
 	}
 	return time.Now().In(loc)
@@ -79,8 +93,12 @@ func Now() time.Time {
 // Run performs one whole sync and records it. It never returns an error: an
 // unreachable feed is a logged failed run, not a broken endpoint.
 func (s *Service) Run(ctx context.Context) Result {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if !runMu.TryLock() {
+		res := Result{FinishedAt: Now().Format("2006-01-02 15:04:05")}
+		res.Error = "a sync is already running"
+		return res
+	}
+	defer runMu.Unlock()
 
 	res := Result{FinishedAt: Now().Format("2006-01-02 15:04:05")}
 
@@ -153,13 +171,40 @@ func (s *Service) Run(ctx context.Context) Result {
 			NeedsReview: p.NeedsReview,
 		}, now)
 		if err != nil {
-			return s.record(res, err)
+			// One bad row must not stall the other ~130 events, and it must
+			// not skip reconciliation either -- seen is already appended
+			// above, so the seen-set stays complete and CancelMissing below
+			// remains safe to run.
+			res.Failed++
+			continue
 		}
 		if created {
 			res.Created++
 		} else {
 			res.Updated++
 		}
+	}
+
+	// The feed contractually covers the current week plus five forward, but
+	// nothing enforces that on the dates it actually contains. One event with
+	// a wild DTSTART (an upstream year typo, a stale recurring master) would
+	// otherwise drag the reconcile floor back years and cancel every ledger
+	// row it swept past -- unrecoverable, because the feed can never re-show a
+	// past date. Clamp to a window a little wider than the feed's real reach.
+	floor := Now().AddDate(0, 0, -14).Format("2006-01-02")
+	ceil := Now().AddDate(0, 0, 70).Format("2006-01-02")
+	if minDate < floor {
+		minDate = floor
+	}
+	if maxDate > ceil {
+		maxDate = ceil
+	}
+
+	if minDate > maxDate {
+		// Every event fell outside the sane window -- a feed this far off is
+		// not one to reconcile against. Events were still upserted above; only
+		// the cancel sweep is skipped.
+		return s.record(res, fmt.Errorf("all events fell outside the sane reconcile window (%s..%s) -- refusing to reconcile", floor, ceil))
 	}
 
 	// Reconcile only inside the window this feed actually covered. Anything
@@ -169,6 +214,13 @@ func (s *Service) Run(ctx context.Context) Result {
 		return s.record(res, err)
 	}
 	res.Cancelled = cancelled
+
+	if res.Failed > 0 {
+		res.OK = false
+		res.Error = fmt.Sprintf("%d of %d events failed to store", res.Failed, res.EventsSeen)
+		return s.record(res, nil)
+	}
+
 	res.OK = true
 	return s.record(res, nil)
 }
