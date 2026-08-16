@@ -1,7 +1,7 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:0d401b08089760636e78247889e582608fd615afb43c9d2ef2efb6acf0145839",
-  "generated_at": "2026-08-16T01:24:21Z",
+  "hash": "sha256:813f7f258d5769090c6c1be841bbeae011268d612f8edfe1b31024264b105c36",
+  "generated_at": "2026-08-16T01:27:42Z",
   "models": [
     {
       "name": "Bookmark",
@@ -469,6 +469,92 @@
           "name": "label",
           "type": "string",
           "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "training_session",
+      "table": "training_sessions",
+      "fields": [
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "uid",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "client_name",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "client_id",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "nullable": true
+        },
+        {
+          "name": "session_date",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "start_at",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "end_at",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "duration_min",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "amount_cents",
+          "type": "int",
+          "nullable": false
+        },
+        {
+          "name": "rate_source",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "override_cents",
+          "type": "int",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false
+        },
+        {
+          "name": "needs_review",
+          "type": "boolean",
+          "nullable": false
         },
         {
           "name": "created_at",
@@ -1427,6 +1513,71 @@
       "auth": false,
       "model": "Todo",
       "kind": "custom"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training_sessions",
+      "handler": "TrainingSessionListGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "list"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/training_sessions",
+      "handler": "TrainingSessionCreatePOST",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "create"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionDeleteDELETE",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionDetailGET",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "detail"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/training_sessions/{id}",
+      "handler": "TrainingSessionUpdatePUT",
+      "deps": [
+        "read",
+        "write",
+        "cache"
+      ],
+      "auth": false,
+      "model": "training_session",
+      "kind": "update"
     }
   ]
 }

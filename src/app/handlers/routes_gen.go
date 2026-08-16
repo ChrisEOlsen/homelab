@@ -84,4 +84,9 @@ func RegisterGenerated(r chi.Router, database *db.DB, appCache *cache.Cache) {
 	r.Get("/api/v1/todos/{id}", TodoDetailGET(database.Read, database.Write, appCache))
 	r.Put("/api/v1/todos/{id}", TodoUpdatePUT(database.Read, database.Write, appCache))
 	r.Post("/api/v1/todos/{id}/toggle", TodoTogglePOST(database.Read, database.Write, appCache))
+	r.Get("/api/v1/training_sessions", TrainingSessionListGET(database.Read, database.Write, appCache))
+	r.Post("/api/v1/training_sessions", TrainingSessionCreatePOST(database.Read, database.Write, appCache))
+	r.Delete("/api/v1/training_sessions/{id}", TrainingSessionDeleteDELETE(database.Read, database.Write, appCache))
+	r.Get("/api/v1/training_sessions/{id}", TrainingSessionDetailGET(database.Read, database.Write, appCache))
+	r.Put("/api/v1/training_sessions/{id}", TrainingSessionUpdatePUT(database.Read, database.Write, appCache))
 }
