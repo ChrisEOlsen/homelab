@@ -192,6 +192,16 @@ export function panel(container, title, subtitle, action, onOpen) {
 
   details.addEventListener('toggle', () => {
     const set = readCollapsed();
+
+    // Setting `open` above queues a toggle event, and this listener is
+    // attached before that event dispatches -- so construction itself fires a
+    // toggle. Without this guard a panel whose onOpen rebuilds the panel
+    // recreates the <details>, which fires another toggle, forever: the
+    // element is destroyed and rebuilt continuously, so it can never be
+    // clicked or hovered. Compare against what is already stored and bail
+    // when nothing actually changed; only a real user toggle disagrees.
+    if (details.open === !set.has(title)) return;
+
     if (details.open) set.delete(title);
     else set.add(title);
     writeCollapsed(set);
@@ -867,7 +877,15 @@ function chartLegendEntry(colorVar, label) {
 
 function renderChart() {
   const subtitle = state.summaryError ? 'unavailable' : monthLabel(state.month);
-  const body = panel(chartEl, 'Cash Flow', subtitle, null, renderChart);
+  // Redraw the SVG on open, rather than re-running renderChart -- that would
+  // rebuild the panel from scratch, which is both wasteful and the shape that
+  // recursed. A folded panel has no width to measure, so the chart needs one
+  // redraw once it has one again; this is the same call the resize handler makes.
+  const body = panel(chartEl, 'Cash Flow', subtitle, null, () => {
+    if (chartSvgHost && chartLastData) {
+      drawChart(chartSvgHost, chartLastData.data, chartLastData.month);
+    }
+  });
 
   if (state.summaryError) {
     errorLine(body, `Could not load the chart for ${monthLabel(state.month)}: ${state.summaryError}`);
