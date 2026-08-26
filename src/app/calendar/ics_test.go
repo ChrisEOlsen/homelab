@@ -16,12 +16,17 @@ const fixture = "BEGIN:VCALENDAR\r\n" +
 	" essliving.com/rs/appointment-view.html?k_business=54598\r\n" +
 	"X-CALSYNC-SOURCE:wl\r\n" +
 	"END:VEVENT\r\n" +
+	// A cc event in the CURRENT feed shape: calsync reads coachchrisfitness.com's
+	// admin API, so the UID is that app's calendar_events.id, X-CALSYNC-ID
+	// carries the same id, and DTEND is the real end (45 minutes here, not the
+	// flat 60 the old DOM scraper had to assume).
 	"BEGIN:VEVENT\r\n" +
-	"UID:cc-20260810110000JohnKublacki@calsync\r\n" +
+	"UID:cc-35@calsync\r\n" +
 	"SUMMARY:John Kublacki\r\n" +
 	"DTSTART;TZID=America/New_York:20260810T110000\r\n" +
-	"DTEND;TZID=America/New_York:20260810T120000\r\n" +
+	"DTEND;TZID=America/New_York:20260810T114500\r\n" +
 	"X-CALSYNC-SOURCE:cc\r\n" +
+	"X-CALSYNC-ID:35\r\n" +
 	"END:VEVENT\r\n" +
 	"BEGIN:VEVENT\r\n" +
 	"UID:wl-999@calsync\r\n" +
@@ -63,8 +68,18 @@ func TestParseFeed(t *testing.T) {
 	if cc.ClientName != "John Kublacki" || cc.Service != "" {
 		t.Fatalf("cc summary should be all client: client=%q service=%q", cc.ClientName, cc.Service)
 	}
-	if cc.DurationMin() != 60 {
-		t.Fatalf("cc duration: want 60, got %d", cc.DurationMin())
+	// 45, not 60: cc end times are real now. A regression here means either the
+	// parser stopped reading DTEND or calsync went back to assuming a duration.
+	if cc.DurationMin() != 45 {
+		t.Fatalf("cc duration: want 45, got %d", cc.DurationMin())
+	}
+	if cc.SourceID != "35" {
+		t.Fatalf("cc SourceID: want 35, got %q", cc.SourceID)
+	}
+	// wl carries no X-CALSYNC-ID in this fixture, and an absent id must read as
+	// empty rather than inheriting the previous event's.
+	if wl.SourceID != "" {
+		t.Fatalf("wl SourceID: want empty, got %q", wl.SourceID)
 	}
 
 	// A summary containing its own colon must survive property splitting whole.
@@ -178,5 +193,39 @@ func TestEscapedTextRoundTrips(t *testing.T) {
 	const want = "45-Minute Training\nwith Christopher Olsen"
 	if got := unescape(raw); got != want {
 		t.Fatalf("escaped newline survived unescaped: got %q want %q", got, want)
+	}
+}
+
+// The ledger still holds rows written under calsync's previous cc UID scheme
+// (a name-derived "cc-<stamp><Name>@calsync") for dates older than the
+// reconcile window, and those rows are frozen history that can never be
+// re-synced. The parser must therefore stay indifferent to the UID's shape and
+// keep treating a feed without X-CALSYNC-ID as valid, so re-reading an archived
+// feed never silently drops events.
+func TestLegacyCCUIDStillParses(t *testing.T) {
+	doc := "BEGIN:VEVENT\r\n" +
+		"UID:cc-20260810110000JohnKublacki@calsync\r\n" +
+		"SUMMARY:John Kublacki\r\n" +
+		"DTSTART;TZID=America/New_York:20260810T110000\r\n" +
+		"DTEND;TZID=America/New_York:20260810T120000\r\n" +
+		"X-CALSYNC-SOURCE:cc\r\n" +
+		"END:VEVENT\r\n"
+
+	events, err := Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("want 1 event, got %d", len(events))
+	}
+	e := events[0]
+	if e.UID != "cc-20260810110000JohnKublacki@calsync" {
+		t.Errorf("legacy UID mangled: %q", e.UID)
+	}
+	if e.SourceID != "" {
+		t.Errorf("legacy event has no X-CALSYNC-ID, want empty SourceID, got %q", e.SourceID)
+	}
+	if e.ClientName != "John Kublacki" || e.DurationMin() != 60 {
+		t.Errorf("legacy event parsed wrong: client=%q duration=%d", e.ClientName, e.DurationMin())
 	}
 }

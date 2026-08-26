@@ -22,17 +22,37 @@ const emDash = " — "
 
 // Event is one VEVENT reduced to what the ledger needs.
 type Event struct {
-	UID        string
-	Source     string // "wl" (gym) or "cc" (own booking app), from X-CALSYNC-SOURCE
+	UID    string
+	Source string // "wl" (gym) or "cc" (own booking app), from X-CALSYNC-SOURCE
+	// SourceID is the upstream system's own primary key for this appointment,
+	// from X-CALSYNC-ID. It is the SESSION's id, not the client's: for cc it is
+	// coachchrisfitness.com's calendar_events.id, so it identifies one booking
+	// and says nothing about who the booking is with.
+	//
+	// It is worth carrying because UID is a formatted string and formats
+	// change. When calsync switched cc UIDs from a name-derived form
+	// ("cc-20260824110000JohnKublacki@calsync") to this id, every cc row in the
+	// ledger was re-created under a new UID and the old one cancelled — which
+	// would have silently orphaned any manual override onto the dead row.
+	// Keying identity on (Source, SourceID) where it is present makes that
+	// class of upstream change harmless. Empty when the feed omits it, which
+	// is the case for every event calsync cannot supply an id for.
+	SourceID   string
 	ClientName string
 	Service    string
 	Start      time.Time // wall clock in FeedTimezone; no zone attached
 	End        time.Time
 }
 
-// DurationMin is the priced length of the appointment. WellnessLiving events
-// carry a real end time; CC events are stamped at CC_DURATION_MIN by calsync
-// because that UI has no end time at all.
+// DurationMin is the real length of the appointment. Both sources now carry a
+// true end time: calsync reads cc from its admin JSON API, which returns
+// end_datetime, so cc sessions are no longer all stamped at CC_DURATION_MIN
+// (that setting survives only as a fallback for an event with no usable end).
+//
+// Note this is NOT what prices a cc session. Resolve() settles cc on the client
+// rate or the independent default and returns before it reaches the duration
+// rule table, so duration prices gym (wl) sessions only. Correcting the cc
+// durations from a flat 60 to their real 45/60 therefore moved no money.
 func (e Event) DurationMin() int { return int(e.End.Sub(e.Start).Minutes()) }
 
 // Date is the YYYY-MM-DD the session is grouped under.
@@ -91,6 +111,8 @@ func Parse(r io.Reader) ([]Event, error) {
 			}
 		case "X-CALSYNC-SOURCE":
 			cur.Source = value
+		case "X-CALSYNC-ID":
+			cur.SourceID = value
 		}
 	}
 	return out, nil
