@@ -81,6 +81,151 @@ func TestUpsertEndpoint_ConflictErrors(t *testing.T) {
 	}
 }
 
+func samplePage() Page {
+	return Page{Path: "/projects", File: "projects", Title: "Projects"}
+}
+
+func TestUpsertPage_AddsThenRefreshes(t *testing.T) {
+	var m Manifest
+	if err := m.UpsertPage(samplePage()); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	refreshed := samplePage()
+	refreshed.Title = "All Projects"
+	if err := m.UpsertPage(refreshed); err != nil {
+		t.Fatalf("same path + same file must refresh, not error: %v", err)
+	}
+	if len(m.Pages) != 1 {
+		t.Fatalf("re-registering the same page duplicated it: got %d", len(m.Pages))
+	}
+	if m.Pages[0].Title != "All Projects" {
+		t.Errorf("refresh did not take: %+v", m.Pages[0])
+	}
+}
+
+func TestUpsertPage_ConflictErrorsAndDoesNotMutate(t *testing.T) {
+	var m Manifest
+	if err := m.UpsertPage(samplePage()); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	conflict := samplePage()
+	conflict.File = "projects_admin"
+	err := m.UpsertPage(conflict)
+	if err == nil {
+		t.Fatal("expected conflict for same path served by a different file")
+	}
+	if !strings.Contains(err.Error(), "/projects") || !strings.Contains(err.Error(), "projects.html") {
+		t.Errorf("conflict error should name the path and the incumbent file: %v", err)
+	}
+	if len(m.Pages) != 1 || m.Pages[0].File != "projects" {
+		t.Errorf("conflict must not mutate the manifest, got %+v", m.Pages)
+	}
+}
+
+func TestValidatePagePath(t *testing.T) {
+	for _, ok := range []string{"/login", "/projects", "/settings/profile"} {
+		if err := validatePagePath(ok); err != nil {
+			t.Errorf("validatePagePath(%q) should pass: %v", ok, err)
+		}
+	}
+	// The inverse of create_handler's check: the API namespace is off limits to
+	// pages, which is what keeps the two tables provably disjoint.
+	for _, bad := range []string{"/api/v1/projects", "/api/v1/", "/api", "/api/anything", "projects", "", "/static/pages/x"} {
+		if err := validatePagePath(bad); err == nil {
+			t.Errorf("validatePagePath(%q) should be rejected", bad)
+		}
+	}
+}
+
+// TestListPage_PluralNamespaceCannotCollideWithAuthPages proves the path scheme
+// holds structurally rather than by convention: resource pages are plural, the
+// auth pages are singular, and toPlural never returns its input unchanged — so
+// even a resource named "login" lands somewhere else.
+func TestListPage_PluralNamespaceCannotCollideWithAuthPages(t *testing.T) {
+	for _, name := range []string{"login", "register"} {
+		p := listPage(name, "T")
+		if p.Path == "/login" || p.Path == "/register" {
+			t.Errorf("resource %q collides with an auth page at %s", name, p.Path)
+		}
+	}
+	if got := listPage("project", "Projects").Path; got != "/projects" {
+		t.Errorf("listPage path: got %q, want /projects", got)
+	}
+	if got := listPage("project", "Projects").File; got != "projects" {
+		t.Errorf("listPage file: got %q, want projects", got)
+	}
+}
+
+func TestUpdateManifestAt_PageConflictWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	handlersDir := filepath.Join(dir, "handlers")
+	_ = os.MkdirAll(handlersDir, 0755)
+	apiPath := filepath.Join(dir, "api.json")
+
+	if err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, nil, []Page{samplePage()}); err != nil {
+		t.Fatal(err)
+	}
+	beforeAPI, _ := os.ReadFile(apiPath)
+	beforePages, _ := os.ReadFile(filepath.Join(handlersDir, "pages_gen.go"))
+
+	bad := samplePage()
+	bad.File = "projects_admin"
+	// A conflicting page must abort the WHOLE update — the endpoint below must
+	// not land either.
+	err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, []Endpoint{sampleEndpoint()}, []Page{bad})
+	if err == nil {
+		t.Fatal("expected page conflict error")
+	}
+	afterAPI, _ := os.ReadFile(apiPath)
+	afterPages, _ := os.ReadFile(filepath.Join(handlersDir, "pages_gen.go"))
+	if string(beforeAPI) != string(afterAPI) {
+		t.Error("page conflict must not modify api.json")
+	}
+	if string(beforePages) != string(afterPages) {
+		t.Error("page conflict must not modify pages_gen.go")
+	}
+	if strings.Contains(string(afterAPI), "ProjectListGET") {
+		t.Error("page conflict must abort the endpoint upsert too — nothing written")
+	}
+}
+
+func TestUpdateManifestAt_PagesAreIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	handlersDir := filepath.Join(dir, "handlers")
+	_ = os.MkdirAll(handlersDir, 0755)
+	apiPath := filepath.Join(dir, "api.json")
+
+	for i := 0; i < 3; i++ {
+		if err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, nil, []Page{samplePage()}); err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+	}
+	m, _ := readManifestAt(apiPath)
+	if len(m.Pages) != 1 {
+		t.Fatalf("re-running a scaffold duplicated page rows: %+v", m.Pages)
+	}
+	gen, err := os.ReadFile(filepath.Join(handlersDir, "pages_gen.go"))
+	if err != nil {
+		t.Fatalf("pages_gen.go not written: %v", err)
+	}
+	if n := strings.Count(string(gen), `r.Get("/projects", pageFile("projects"))`); n != 1 {
+		t.Errorf("pages_gen.go has %d copies of the route, want 1:\n%s", n, gen)
+	}
+}
+
+func TestHash_SensitiveToPages(t *testing.T) {
+	var a Manifest
+	a.canonicalize()
+	empty := a.Hash
+
+	var b Manifest
+	_ = b.UpsertPage(samplePage())
+	b.canonicalize()
+	if b.Hash == empty {
+		t.Error("adding a page must change the manifest hash — a page is part of the served surface")
+	}
+}
+
 func TestHash_StableAndSensitive(t *testing.T) {
 	var a Manifest
 	a.UpsertModel(sampleModel())
@@ -158,6 +303,36 @@ func TestFieldsToModel_AddsIDAndCreatedAt(t *testing.T) {
 	}
 }
 
+func TestFieldsToModel_CarriesFormatAndRef(t *testing.T) {
+	fields := []Field{
+		{Name: "remind_at", Type: "string", Format: "datetime-local"},
+		{Name: "category_id", Type: "int", Ref: "log_category"},
+	}
+	m := fieldsToModel("reminder", "reminders", fields)
+	// id, remind_at, category_id, created_at
+	if m.Fields[1].Format != "datetime-local" {
+		t.Errorf("format not carried: %q", m.Fields[1].Format)
+	}
+	if m.Fields[2].References != "log_category" {
+		t.Errorf("references not carried: %q", m.Fields[2].References)
+	}
+}
+
+func TestValidateRefsAt(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "api.json")
+	os.WriteFile(p, []byte(`{"api_version":"1.0.0","models":[{"name":"log_category","table":"log_categories","fields":[]}],"endpoints":[]}`), 0644)
+	if err := validateRefsAt(p, []Field{{Name: "category_id", Type: "int", Ref: "log_category"}}); err != nil {
+		t.Errorf("known ref should pass: %v", err)
+	}
+	if err := validateRefsAt(p, []Field{{Name: "x_id", Type: "int", Ref: "nope"}}); err == nil {
+		t.Error("unknown ref should fail")
+	}
+	if err := validateRefsAt(p, []Field{{Name: "title", Type: "string"}}); err != nil {
+		t.Errorf("no refs should pass: %v", err)
+	}
+}
+
 func TestUpdateManifestAt_WritesAndRegenerates(t *testing.T) {
 	dir := t.TempDir()
 	handlersDir := filepath.Join(dir, "handlers")
@@ -168,7 +343,8 @@ func TestUpdateManifestAt_WritesAndRegenerates(t *testing.T) {
 
 	err := updateManifestAt(apiPath, handlersDir, fixedTime(),
 		[]Model{sampleModel()},
-		[]Endpoint{sampleEndpoint()})
+		[]Endpoint{sampleEndpoint()},
+		[]Page{{Path: "/projects", File: "projects", Title: "Projects"}})
 	if err != nil {
 		t.Fatalf("updateManifestAt: %v", err)
 	}
@@ -193,7 +369,7 @@ func TestUpdateManifestAt_ConflictWritesNothing(t *testing.T) {
 	apiPath := filepath.Join(dir, "api.json")
 
 	// Seed one endpoint.
-	if err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, []Endpoint{sampleEndpoint()}); err != nil {
+	if err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, []Endpoint{sampleEndpoint()}, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := os.ReadFile(apiPath)
@@ -201,7 +377,7 @@ func TestUpdateManifestAt_ConflictWritesNothing(t *testing.T) {
 	// Same (method,path), different handler -> conflict.
 	bad := sampleEndpoint()
 	bad.Handler = "Rogue"
-	err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, []Endpoint{bad})
+	err := updateManifestAt(apiPath, handlersDir, fixedTime(), nil, []Endpoint{bad}, nil)
 	if err == nil {
 		t.Fatal("expected conflict error")
 	}
@@ -233,7 +409,7 @@ func TestWriteThenRead_RoundTrips(t *testing.T) {
 }
 
 func TestResourceEndpoints_FiveWithKinds(t *testing.T) {
-	eps := resourceEndpoints("project")
+	eps := resourceEndpoints(sampleModel())
 	if len(eps) != 5 {
 		t.Fatalf("got %d endpoints, want 5", len(eps))
 	}
@@ -278,6 +454,48 @@ func TestResourceEndpoints_FiveWithKinds(t *testing.T) {
 	}
 }
 
+func TestResourceEndpoints_Schemas(t *testing.T) {
+	m := fieldsToModel("reminder", "reminders", []Field{
+		{Name: "title", Type: "string"},
+		{Name: "remind_at", Type: "string", Format: "datetime-local"},
+	})
+	eps := resourceEndpoints(m)
+	byKind := map[string]Endpoint{}
+	for _, e := range eps {
+		byKind[e.Kind] = e
+	}
+	// create: request is writable fields (no id/created_at), response is the object.
+	cr := byKind["create"]
+	if cr.Request == nil || cr.Request.Shape != "object" {
+		t.Fatalf("create request shape: %+v", cr.Request)
+	}
+	for _, f := range cr.Request.Fields {
+		if f.Name == "id" || f.Name == "created_at" {
+			t.Errorf("create request must not include auto column %q", f.Name)
+		}
+	}
+	if cr.Response == nil || cr.Response.Model != "reminder" || cr.Response.Shape != "object" {
+		t.Errorf("create response should be object/model reminder: %+v", cr.Response)
+	}
+	// list response is a list of the model; delete response is {ok}.
+	if byKind["list"].Response.Shape != "list" {
+		t.Errorf("list response shape: %+v", byKind["list"].Response)
+	}
+	if byKind["delete"].Response.Fields[0].Name != "ok" {
+		t.Errorf("delete response should be {ok}: %+v", byKind["delete"].Response)
+	}
+	// format hint survives into the create request body.
+	var sawFmt bool
+	for _, f := range cr.Request.Fields {
+		if f.Name == "remind_at" && f.Format == "datetime-local" {
+			sawFmt = true
+		}
+	}
+	if !sawFmt {
+		t.Error("create request lost the datetime-local format hint")
+	}
+}
+
 func TestAuthEndpoints_SixWithKinds(t *testing.T) {
 	eps := authEndpoints()
 	if len(eps) != 6 {
@@ -294,7 +512,7 @@ func TestAuthEndpoints_SixWithKinds(t *testing.T) {
 		"POST /api/v1/auth/logout":         {"LogoutPOST", "auth_logout", false, 0},
 		"GET /api/v1/auth/me":              {"MeGET", "auth_me", true, 3},
 		"POST /api/v1/auth/login_token":    {"MobileLoginPOST", "mobile_login", false, 3},
-		"DELETE /api/v1/auth/logout_token": {"MobileLogoutDELETE", "mobile_logout", false, 1},
+		"DELETE /api/v1/auth/logout_token": {"MobileLogoutDELETE", "mobile_logout", false, 2},
 		"GET /api/v1/auth/me_token":        {"MobileMeGET", "mobile_me", false, 3},
 	}
 	for _, e := range eps {

@@ -14,18 +14,19 @@
 // execute in document order, which is what guarantees that.
 
 const NAV_ITEMS = [
-  { href: '/static/pages/home.html', label: 'Dashboard' },
-  { href: '/static/pages/todos.html', label: 'Tasks' },
-  { href: '/static/pages/bookmarks.html', label: 'Bookmarks' },
-  { href: '/static/pages/logger.html', label: 'Logger' },
-  { href: '/static/pages/finances.html', label: 'Finances' },
+  { href: '/', label: 'Dashboard' },
+  { href: '/todos', label: 'Tasks' },
+  { href: '/bookmarks', label: 'Bookmarks' },
+  { href: '/logger', label: 'Logger' },
+  { href: '/finances', label: 'Finances' },
 ];
 
-// `/` is served by HomeGET as home.html, so it has to fold into the same
-// key the hrefs above produce.
+// Pages are served by routes registered in api.json's pages table
+// (handlers/pages_gen.go), so the current-page key is the route's last
+// segment — and `/` is the home shell's route.
 function currentPageFile() {
   const path = window.location.pathname;
-  if (path === '/' || path === '') return 'home.html';
+  if (path === '/' || path === '') return 'home';
   return path.slice(path.lastIndexOf('/') + 1);
 }
 
@@ -101,7 +102,9 @@ const MOBILE_SKIN = {
 
 function navList(skin, current) {
   const nodes = NAV_ITEMS.map((item, i) => {
-    const isCurrent = item.href.endsWith('/' + current);
+    // Home is the bare route '/', so it matches on equality rather than a
+    // trailing segment — '/' + 'home' would never equal it.
+    const isCurrent = item.href === '/' ? current === 'home' : item.href === '/' + current;
     const node = document.createElement(isCurrent ? 'span' : 'a');
 
     if (isCurrent) {
@@ -137,7 +140,7 @@ function buildHeader(current) {
     'max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4';
 
   const brand = document.createElement('a');
-  brand.href = '/static/pages/home.html';
+  brand.href = '/';
   brand.className = 'flex items-center gap-2 text-sm font-medium shrink-0';
   const beacon = document.createElement('span');
   beacon.className = 'h-2 w-2 rounded-full bg-accent led-pulse';

@@ -6,10 +6,13 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"errors"
+	"go/format"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -146,6 +149,8 @@ var funcMap = template.FuncMap{
 	},
 	"sqlType": func(t string) string {
 		switch t {
+		case "timestamp":
+			return "DATETIME"
 		case "int":
 			return "INTEGER"
 		case "boolean":
@@ -170,6 +175,30 @@ var funcMap = template.FuncMap{
 		return strings.Join(vals, ", ")
 	},
 	// testDecls declares the addressable locals testArgs points at.
+	// hasTimestamp reports whether any field is a timestamp, so a generated
+	// test can import "time" only when it actually needs it.
+	"hasTimestamp": func(fields []Field) bool {
+		for _, f := range fields {
+			if f.Type == "timestamp" {
+				return true
+			}
+		}
+		return false
+	},
+	// testFieldMismatch emits the "did the round trip lose it?" condition for
+	// one field.
+	//
+	// `!=` is right for every scalar and WRONG for a timestamp: time.Time's ==
+	// compares the internal representation — wall clock, monotonic reading and
+	// the *Location pointer — so a value that came back from SQLite through a
+	// different location object compares unequal while naming the same instant.
+	// A generated test that flaked on that would be blamed on the database.
+	"testFieldMismatch": func(f Field, got, want string) string {
+		if f.Type == "timestamp" {
+			return "!time.Time(" + got + ").Equal(time.Time(" + want + "))"
+		}
+		return got + " != " + want
+	},
 	"testDecls": func(fields []Field, indent string) string {
 		lines := []string{}
 		for _, f := range fields {
@@ -223,6 +252,16 @@ func goTypeFor(t string) string {
 	switch t {
 	case "int":
 		return "int64"
+	case "timestamp":
+		// models.Time, unqualified because generated models live in that
+		// package. Declaring a DATETIME column as `string` — which is what
+		// every author had to do before this type existed — puts SQLite's
+		// native "2026-08-15 19:40:07" on the wire beside created_at's
+		// RFC3339, so ONE JSON OBJECT carries two timestamp formats. A browser
+		// parses both and never notices; a typed client with an .iso8601
+		// decoder rejects the row outright. That is the shape worth
+		// remembering: a wire defect only the second client finds.
+		return "Time"
 	case "boolean":
 		return "bool"
 	case "float":
@@ -236,6 +275,11 @@ func nullTypeFor(t string) string {
 	switch t {
 	case "int":
 		return "sql.NullInt64"
+	case "timestamp":
+		// models.NullTime, not sql.NullTime: its payload is a Time, so the
+		// pointer scanAssigns takes is a *Time and the nullable column
+		// serializes exactly like the non-nullable one.
+		return "NullTime"
 	case "boolean":
 		return "sql.NullBool"
 	case "float":
@@ -249,6 +293,8 @@ func nullFieldFor(t string) string {
 	switch t {
 	case "int":
 		return "Int64"
+	case "timestamp":
+		return "Time"
 	case "boolean":
 		return "Bool"
 	case "float":
@@ -262,6 +308,8 @@ func testLiteralFor(t string) string {
 	switch t {
 	case "int":
 		return "int64(1)"
+	case "timestamp":
+		return "Time(time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC))"
 	case "boolean":
 		return "true"
 	case "float":
@@ -306,6 +354,52 @@ func toPascal(snake string) string {
 	return strings.Join(parts, "")
 }
 
+// toJSIdent turns an endpoint slug into a valid JavaScript identifier.
+//
+// toPascal splits on "_" only, which is right for a model name — every caller
+// but one feeds it a name already through isSafeIdent. add_js_form is the
+// exception: its input is a URL path, and a path carries separators an
+// identifier cannot. "admin/trainers" came back as "Admin/trainers", so the
+// tool emitted `function setupAdmin/trainersForm(container)` and injected a
+// matching call. That is a syntax error, and because the target is an ES
+// module the parse failure takes the whole module down — loadList and every
+// other export with it, not just the form.
+//
+// So split on anything that is not ASCII alphanumeric, not just "_": "/" and
+// "-" reach here the same way. Segments already valid are untouched, which
+// keeps existing output stable ("client_notes" -> "ClientNotes" as before).
+func toJSIdent(slug string) string {
+	parts := strings.FieldsFunc(slug, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9')
+	})
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(strings.ToUpper(p[:1]) + p[1:])
+	}
+	out := b.String()
+	// An identifier may not start with a digit; "/api/v1/2fa_codes" would.
+	if out != "" && out[0] >= '0' && out[0] <= '9' {
+		out = "N" + out
+	}
+	return out
+}
+
+// formNameFor derives the generated form function's name from the endpoint the
+// form posts to, falling back to the page name. The versioned prefix is
+// stripped first so the function is named after the resource, not after "v1".
+func formNameFor(apiEndpoint, page string) string {
+	slug := strings.TrimPrefix(apiEndpoint, "/api/v1/")
+	slug = strings.TrimPrefix(slug, "/api/")
+	slug = strings.TrimPrefix(slug, "/")
+	slug = strings.Trim(slug, "/")
+	if name := toJSIdent(slug); name != "" {
+		return name
+	}
+	// The template appends "Form" itself; adding it here too produced
+	// setupClientsFormForm.
+	return toJSIdent(page)
+}
+
 func toPlural(s string) string {
 	if strings.HasSuffix(s, "y") {
 		return s[:len(s)-1] + "ies"
@@ -322,16 +416,40 @@ type Field struct {
 	// Nullable is filled in by applySchema from the real table's
 	// PRAGMA table_info output — never from the caller's field argument.
 	Nullable bool
+	// Format is a semantic hint (datetime-local, date, time, json, email) for a
+	// string-stored column. Ref is the target model name for a foreign key.
+	// Both are declaration metadata layered over the base storage Type.
+	Format string
+	Ref    string
+}
+
+// semanticFormats maps a DSL logical type to its manifest format hint. Each is
+// stored as TEXT and carried in Go as a string — only the semantic differs.
+var semanticFormats = map[string]string{
+	"datetime": "datetime-local",
+	"date":     "date",
+	"time":     "time",
+	"json":     "json",
+	"email":    "email",
 }
 
 func parseFields(raw []string) []Field {
 	fields := make([]Field, 0, len(raw))
 	for _, f := range raw {
-		parts := strings.SplitN(f, ":", 2)
-		if len(parts) == 2 {
-			fields = append(fields, Field{Name: parts[0], Type: parts[1]})
-		} else {
-			fields = append(fields, Field{Name: parts[0], Type: "string"})
+		parts := strings.Split(f, ":")
+		name := parts[0]
+		switch {
+		case len(parts) >= 3 && parts[1] == "ref":
+			// name:ref:<model> -> INTEGER FK column, int64 in Go.
+			fields = append(fields, Field{Name: name, Type: "int", Ref: parts[2]})
+		case len(parts) == 2:
+			if hint, ok := semanticFormats[parts[1]]; ok {
+				fields = append(fields, Field{Name: name, Type: "string", Format: hint})
+			} else {
+				fields = append(fields, Field{Name: name, Type: parts[1]})
+			}
+		default:
+			fields = append(fields, Field{Name: name, Type: "string"})
 		}
 	}
 	return fields
@@ -376,22 +494,60 @@ func errResult(msg string) *mcp.CallToolResult {
 // updateManifest is the production wrapper around updateManifestAt, binding
 // the real manifest/handlers paths and the wall clock. Tool handlers call
 // this after rendering their files to self-register into api.json and
-// regenerate routes_gen.go.
-func updateManifest(models []Model, endpoints []Endpoint) error {
-	return updateManifestAt(manifestFilePath, handlersDirPath, time.Now(), models, endpoints)
+// regenerate routes_gen.go + pages_gen.go.
+func updateManifest(models []Model, endpoints []Endpoint, pages []Page) error {
+	return updateManifestAt(manifestFilePath, handlersDirPath, time.Now(), models, endpoints, pages)
 }
 
+// renderToFile renders a template and writes it, running Go output through
+// gofmt on the way.
+//
+// The generator used to emit Go that does not pass gofmt — struct fields
+// unaligned, blank lines where a range produced nothing. Cosmetic on its own,
+// but it means every generated project's first commit carries unformatted files
+// and `gofmt -l` is useless as a check from that moment on: the signal is
+// permanently full of noise nobody put there, so nobody looks at it, so a
+// genuinely mangled hand edit hides in the list.
+//
+// Formatting HERE rather than in each template is the fix, because the
+// alternative is keeping ~20 templates hand-aligned against a `{{range}}` whose
+// output length is not known until it runs. That is not a thing a human can
+// maintain, which is why it drifted.
+//
+// A FORMAT ERROR IS NOT FATAL. If the rendered output does not parse, the
+// unformatted bytes are written anyway and the error surfaces at build time,
+// pointing at the real problem — refusing to write would leave the author with
+// an empty file and a message about formatting.
 func renderToFile(tmplName, outPath string, data TemplateData) error {
-	tmpl, err := getTemplate(tmplName)
+	out, err := renderToString(tmplName, data)
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(outPath)
+	return writeGoFile(outPath, out)
+}
+
+// formatGo runs src through gofmt, or returns it unchanged with a log line if
+// it does not parse.
+//
+// Applied at RENDER time, not only at write time, so that what a caller sees
+// and what lands on disk are the same bytes — the generated-file sync tests
+// compare a render against the committed file, and a formatter that ran on only
+// one side of that comparison would report permanent drift.
+func formatGo(name, src string) string {
+	formatted, err := format.Source([]byte(src))
 	if err != nil {
-		return err
+		log.Printf("gova-builder: %s does not parse as Go, leaving it unformatted: %v", name, err)
+		return src
 	}
-	defer f.Close()
-	return tmpl.Execute(f, data)
+	return string(formatted)
+}
+
+// writeGoFile writes src to path, gofmt-ing it first when path is a .go file.
+func writeGoFile(path, src string) error {
+	if strings.HasSuffix(path, ".go") {
+		src = formatGo(path, src)
+	}
+	return os.WriteFile(path, []byte(src), 0644)
 }
 
 func renderToString(tmplName string, data TemplateData) (string, error) {
@@ -469,50 +625,53 @@ func main() {
 	s.AddTool(mcp.NewTool("create_model",
 		mcp.WithDescription("Generate models/Name.go with GetPage/Find/Create/Delete and 5-min cache. Table must exist first (run execute_sql)."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Model name in snake_case")),
-		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type. Types: string, int, float, boolean, password, timestamp. A DATETIME column MUST be declared timestamp, not string — string puts SQLite's native '2026-08-15 19:40:07' on the wire beside created_at's RFC3339, so one JSON object carries two timestamp formats and a typed client's .iso8601 decoder rejects the row. An unknown type is an error, not a silent string. name:ref:<model> declares a foreign key; name:email|url|uuid|date|datetime declare a string with a format hint.")),
 	), handleCreateModel)
 
 	s.AddTool(mcp.NewTool("create_handler",
-		mcp.WithDescription("Generate a single JSON handler in handlers/name.go AND register its route in api.json + routes_gen.go. Implement the TODO logic after."),
+		mcp.WithDescription("Generate a single JSON handler in handlers/name.go AND register its route in api.json + routes_gen.go. Implement the TODO logic after. Declare request_schema/response_schema (JSON: {\"shape\":\"object|list|empty\",\"model\":\"<name>\"?,\"fields\":[{\"name\",\"type\",\"nullable\",\"format\"}]?}) and a one-line summary so native clients can consume this custom endpoint — a custom endpoint without a declared body is opaque to them."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Handler name in snake_case")),
 		mcp.WithString("method", mcp.Required(), mcp.Description("HTTP method: GET, POST, PUT, DELETE")),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Full route path, e.g. /api/v1/projects/{id}/archive")),
 		mcp.WithBoolean("auth_required", mcp.Description("Require authentication — enforced by a RequireAuth route wrap")),
+		mcp.WithString("request_schema", mcp.Description("JSON BodySchema for the request body (omit for GET/no-body endpoints)")),
+		mcp.WithString("response_schema", mcp.Description("JSON BodySchema for the response data")),
+		mcp.WithString("summary", mcp.Description("One-line description of what this endpoint does")),
 	), handleCreateHandler)
 
 	s.AddTool(mcp.NewTool("create_page",
-		mcp.WithDescription("Generate: static/pages/filename.html + static/js/filename.js + handlers/filename.go, and register its GET route in api.json + routes_gen.go. After: add forms with add_js_form."),
+		mcp.WithDescription("Generate a page: static/pages/filename.html + static/js/filename.js, and register it at a human-facing URL in api.json's pages table + pages_gen.go. The page is served by the generated pageFile helper — no Go handler is created or needed. Use create_handler for the JSON endpoints the page's JS calls. After: add forms with add_js_form."),
 		mcp.WithString("filename", mcp.Required(), mcp.Description("Page filename without extension")),
 		mcp.WithString("title", mcp.Required(), mcp.Description("Page title")),
-		mcp.WithString("path", mcp.Required(), mcp.Description("Full route path, e.g. /api/v1/projects")),
-		mcp.WithBoolean("auth_required", mcp.Description("JS module calls requireAuth() on load; also enforced server-side by a RequireAuth route wrap")),
+		mcp.WithString("path", mcp.Required(), mcp.Description("Human-facing URL, e.g. /projects or /settings. Must NOT be under /api/ — that namespace belongs to create_handler.")),
+		mcp.WithBoolean("auth_required", mcp.Description("Wraps the page route in middleware.RequirePageAuth: a signed-out visitor gets a 303 to /login instead of the shell. This is a courtesy, NOT a boundary — the shell is inert and every datum on it comes from an /api/v1/ endpoint, so set auth:true on THOSE. What it buys is removing the flash of a page the visitor is about to be redirected out of. The JS module still calls requireAuth() on load.")),
 	), handleCreatePage)
 
 	s.AddTool(mcp.NewTool("scaffold_list",
-		mcp.WithDescription("Generate 4 files: model + JSON list handler + HTML shell + JS module, and register the GET route in api.json + routes_gen.go. After: add forms with add_js_form."),
+		mcp.WithDescription("Generate 4 files: model + JSON list handler + HTML shell + JS module, register GET /api/v1/<plural> in api.json + routes_gen.go, and serve the shell at /<plural> via pages_gen.go. After: add forms with add_js_form."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Resource name in snake_case")),
-		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type. Types: string, int, float, boolean, password, timestamp. A DATETIME column MUST be declared timestamp, not string — string puts SQLite's native '2026-08-15 19:40:07' on the wire beside created_at's RFC3339, so one JSON object carries two timestamp formats and a typed client's .iso8601 decoder rejects the row. An unknown type is an error, not a silent string. name:ref:<model> declares a foreign key; name:email|url|uuid|date|datetime declare a string with a format hint.")),
 	), handleScaffoldList)
 
 	s.AddTool(mcp.NewTool("scaffold_resource",
-		mcp.WithDescription("Generate full CRUD for a resource: model (with Update) + list/detail/create/update/delete handlers + list page, and register all 5 routes in api.json + routes_gen.go. List supports ?sort=&filter= (whitelisted columns). Table must exist first (run execute_sql). Endpoints are public; protect per-endpoint via the manifest. Use scaffold_list for read-only resources."),
+		mcp.WithDescription("Generate full CRUD for a resource: model (with Update) + list/detail/create/update/delete handlers + list page, register all 5 routes in api.json + routes_gen.go, and serve the list page at /<plural> via pages_gen.go. List supports ?sort=&filter= (whitelisted columns). Table must exist first (run execute_sql). Endpoints are public; protect per-endpoint via the manifest. Use scaffold_list for read-only resources."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Resource name in snake_case")),
-		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type. Types: string, int, float, boolean, password, timestamp. A DATETIME column MUST be declared timestamp, not string — string puts SQLite's native '2026-08-15 19:40:07' on the wire beside created_at's RFC3339, so one JSON object carries two timestamp formats and a typed client's .iso8601 decoder rejects the row. An unknown type is an error, not a silent string. name:ref:<model> declares a foreign key; name:email|url|uuid|date|datetime declare a string with a format hint.")),
 	), handleScaffoldResource)
 
 	s.AddTool(mcp.NewTool("scaffold_auth",
-		mcp.WithDescription("Generate the full auth system — cookie (web) AND bearer (mobile) in one run: users + rate_limits + mobile_tokens tables, User model, cookie handlers (login/logout/me) + bearer handlers (login_token/logout_token/me_token) and the login page, all 6 routes self-registered in api.json + routes_gen.go. Run scaffold_registration after for a registration endpoint."),
+		mcp.WithDescription("Generate the full auth system — cookie (web) AND bearer (mobile) in one run: users + rate_limits + mobile_tokens tables, User + MobileToken models, cookie handlers (login/logout/me) + bearer handlers (login_token/logout_token/me_token), all 6 routes self-registered in api.json + routes_gen.go, and the login page served at /login via pages_gen.go. Run scaffold_registration after for a registration endpoint."),
 	), handleScaffoldAuth)
 
 	s.AddTool(mcp.NewTool("scaffold_registration",
-		mcp.WithDescription("Generate registration JSON handler + HTML page. Run after scaffold_auth. Registers the route in api.json + routes_gen.go."),
+		mcp.WithDescription("Generate registration JSON handler + HTML page. Run after scaffold_auth. Registers POST /api/v1/auth/register in api.json + routes_gen.go and the page /register in pages_gen.go."),
 	), handleScaffoldRegistration)
 
 	s.AddTool(mcp.NewTool("add_js_form",
 		mcp.WithDescription("Inject a creation form into an existing JS module at the // @inject-forms marker. The form uses api.js for submission. Requires: (1) JS file exists with the marker, (2) a POST handler exists at api_endpoint."),
 		mcp.WithString("page", mcp.Required(), mcp.Description("Target page filename without extension")),
 		mcp.WithString("api_endpoint", mcp.Required(), mcp.Description("API endpoint the form POSTs to")),
-		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type")),
+		mcp.WithArray("fields", mcp.Required(), mcp.Description("Fields as name:type. Types: string, int, float, boolean, password, timestamp. A DATETIME column MUST be declared timestamp, not string — string puts SQLite's native '2026-08-15 19:40:07' on the wire beside created_at's RFC3339, so one JSON object carries two timestamp formats and a typed client's .iso8601 decoder rejects the row. An unknown type is an error, not a silent string. name:ref:<model> declares a foreign key; name:email|url|uuid|date|datetime declare a string with a format hint.")),
 		mcp.WithString("title", mcp.Description("Optional form section title")),
 		mcp.WithString("submit_label", mcp.Description("Submit button label (default: Submit)")),
 	), handleAddJSForm)
@@ -596,18 +755,45 @@ func handleCreateModel(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	if err := renderToFile("model_test.go.tmpl", testPath, data); err != nil {
 		return errResult(err.Error()), nil
 	}
-	return mcp.NewToolResultText("Created: " + outPath + "\nCreated: " + testPath), nil
+
+	// api.json is documented as the source of truth for "every model, with
+	// field types and nullability", and create_model used to be the one tool
+	// that wrote a model without saying so. Three calls in one project left the
+	// manifest listing only `user`, with inspect_app reporting no divergence —
+	// a manifest that is silently incomplete is worse than one that is visibly
+	// stale, because nothing goes looking. No runtime effect; a native client
+	// reading the manifest sees a data layer with holes in it.
+	//
+	// Models only: create_model registers no route (create_handler and
+	// create_page do that for their own), so endpoints and pages stay nil.
+	if err := updateManifest([]Model{fieldsToModel(name, toPlural(name), fields)}, nil, nil); err != nil {
+		return errResult("manifest update failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText("Created: " + outPath + "\nCreated: " + testPath +
+		"\n\nRegistered model " + name + " in api.json."), nil
 }
 func handleCreateHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	name, _ := req.Params.Arguments["name"].(string)
 	method, _ := req.Params.Arguments["method"].(string)
 	path, _ := req.Params.Arguments["path"].(string)
 	authRequired, _ := req.Params.Arguments["auth_required"].(bool)
+	requestSchema, _ := req.Params.Arguments["request_schema"].(string)
+	responseSchema, _ := req.Params.Arguments["response_schema"].(string)
+	summary, _ := req.Params.Arguments["summary"].(string)
 	if !isSafeIdent(name) {
 		return errResult("invalid handler name"), nil
 	}
 	if !strings.HasPrefix(path, "/api/v1/") {
 		return errResult("path must start with /api/v1/"), nil
+	}
+	reqSchema, err := parseBodySchemaArg(requestSchema)
+	if err != nil {
+		return errResult("request_schema: " + err.Error()), nil
+	}
+	respSchema, err := parseBodySchemaArg(responseSchema)
+	if err != nil {
+		return errResult("response_schema: " + err.Error()), nil
 	}
 	data := newData(name, nil)
 	data.Method = strings.ToUpper(method)
@@ -623,8 +809,9 @@ func handleCreateHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		Handler: toPascal(name) + strings.ToUpper(method),
 		Deps:    []string{"read", "write", "cache"},
 		Auth:    authRequired, Kind: "custom",
+		Summary: summary, Request: reqSchema, Response: respSchema,
 	}
-	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+	if err := updateManifest(nil, []Endpoint{endpoint}, nil); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
@@ -640,8 +827,8 @@ func handleCreatePage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	if !isSafeIdent(filename) {
 		return errResult("invalid filename"), nil
 	}
-	if !strings.HasPrefix(path, "/api/v1/") {
-		return errResult("path must start with /api/v1/"), nil
+	if err := validatePagePath(path); err != nil {
+		return errResult(err.Error()), nil
 	}
 	data := newData(filename, nil)
 	data.Title = title
@@ -656,24 +843,35 @@ func handleCreatePage(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	if err := renderToFile("page.js.tmpl", jsPath, data); err != nil {
 		return errResult(err.Error()), nil
 	}
-	handlerPath := "/src/app/handlers/" + filename + ".go"
-	if err := renderToFile("handler.go.tmpl", handlerPath, data); err != nil {
-		return errResult(err.Error()), nil
-	}
 
-	endpoint := Endpoint{
-		Method: "GET", Path: path, Handler: toPascal(filename) + "GET",
-		Deps: []string{"read", "write", "cache"}, Auth: authRequired, Kind: "custom",
-	}
-	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+	page := Page{Path: path, File: filename, Title: title, Auth: authRequired}
+	if err := updateManifest(nil, nil, []Page{page}); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
 	return mcp.NewToolResultText(
-		"Created: " + htmlPath + "\nCreated: " + jsPath + "\nCreated: " + handlerPath +
-			"\nRegistered GET " + path + " in api.json + routes_gen.go.\n" +
-			"Add forms with add_js_form.\n\n" + runPatternChecks(),
+		"Created: " + htmlPath + "\nCreated: " + jsPath +
+			"\nRegistered page " + path + " -> static/pages/" + filename + ".html in api.json + pages_gen.go.\n" +
+			"The page is served by the generated pageFile helper — there is no Go handler to implement.\n" +
+			"Add API endpoints with create_handler, and forms with add_js_form.\n\n" + runPatternChecks(),
 	), nil
+}
+
+// validatePagePath enforces the page namespace: a human-facing URL, never an
+// API one. This is the exact inverse of create_handler's check, and it is what
+// makes the two tables provably disjoint — no page can shadow an endpoint and
+// no endpoint can shadow a page.
+func validatePagePath(path string) error {
+	if !strings.HasPrefix(path, "/") {
+		return errors.New("page path must start with /")
+	}
+	if path == "/api" || strings.HasPrefix(path, "/api/") {
+		return errors.New("page path must not be under /api/ — that namespace belongs to create_handler and the scaffold tools; give the page a human-facing URL like /projects")
+	}
+	if strings.HasPrefix(path, "/static/") {
+		return errors.New("page path must not be under /static/ — that prefix is the static file server")
+	}
+	return nil
 }
 func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	name, _ := req.Params.Arguments["name"].(string)
@@ -691,6 +889,9 @@ func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 	fields, applyErr := applySchema(toPlural(name), fields)
 	if applyErr != nil {
 		return errResult(applyErr.Error()), nil
+	}
+	if err := validateRefs(fields); err != nil {
+		return errResult(err.Error()), nil
 	}
 	data := newData(name, fields)
 	data.Title = toPascal(toPlural(name))
@@ -719,30 +920,56 @@ func handleScaffoldList(ctx context.Context, req mcp.CallToolRequest) (*mcp.Call
 		Handler: toPascal(name) + "ListGET",
 		Deps:    []string{"read", "write", "cache"},
 		Auth:    false, Model: name, Kind: "list",
+		Response: resourceResponse(model, "list"),
 	}
-	if err := updateManifest([]Model{model}, []Endpoint{endpoint}); err != nil {
+	if err := updateManifest([]Model{model}, []Endpoint{endpoint}, []Page{listPage(name, data.Title)}); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
 	return mcp.NewToolResultText(
 		strings.Join(results, "\n") +
-			"\n\nRegistered route GET /api/v1/" + toPlural(name) + " and updated api.json + routes_gen.go.\n" +
+			"\n\nRegistered route GET /api/v1/" + toPlural(name) + " and page /" + toPlural(name) +
+			" — updated api.json + routes_gen.go + pages_gen.go.\n" +
 			"Add forms with add_js_form.\n\n" + runPatternChecks(),
 	), nil
 }
-// resourceEndpoints returns the five CRUD endpoints scaffold_resource registers.
-// The handler symbols must match resource_handlers.go.tmpl exactly.
-func resourceEndpoints(name string) []Endpoint {
-	p := toPascal(name)
+
+// listPage is the page row scaffold_list and scaffold_resource register for the
+// list shell they emit at static/pages/<plural>.html.
+//
+// The path scheme across all four scaffolds is: resource pages are always
+// PLURAL (/projects, /invoices) and the two auth pages take their singular verb
+// (/login, /register). Because toPlural never returns its input unchanged, a
+// resource literally named "login" registers /logins — so the two namespaces
+// cannot collide no matter what a resource is called, without needing a
+// reserved-word list to enforce it.
+func listPage(name, title string) Page {
 	plural := toPlural(name)
+	return Page{Path: "/" + plural, File: plural, Title: title, Auth: false}
+}
+
+// resourceEndpoints returns the five CRUD endpoints scaffold_resource registers,
+// each carrying the request/response body schema derived from the model + kind.
+// The handler symbols must match resource_handlers.go.tmpl exactly.
+func resourceEndpoints(m Model) []Endpoint {
+	p := toPascal(m.Name)
+	plural := toPlural(m.Name)
 	base := "/api/v1/" + plural
 	rwc := []string{"read", "write", "cache"}
+	mk := func(method, path, handler, kind string) Endpoint {
+		return Endpoint{
+			Method: method, Path: path, Handler: handler, Deps: rwc,
+			Model: m.Name, Kind: kind,
+			Request:  resourceRequest(m, kind),
+			Response: resourceResponse(m, kind),
+		}
+	}
 	return []Endpoint{
-		{Method: "GET", Path: base, Handler: p + "ListGET", Deps: rwc, Model: name, Kind: "list"},
-		{Method: "GET", Path: base + "/{id}", Handler: p + "DetailGET", Deps: rwc, Model: name, Kind: "detail"},
-		{Method: "POST", Path: base, Handler: p + "CreatePOST", Deps: rwc, Model: name, Kind: "create"},
-		{Method: "PUT", Path: base + "/{id}", Handler: p + "UpdatePUT", Deps: rwc, Model: name, Kind: "update"},
-		{Method: "DELETE", Path: base + "/{id}", Handler: p + "DeleteDELETE", Deps: rwc, Model: name, Kind: "delete"},
+		mk("GET", base, p+"ListGET", "list"),
+		mk("GET", base+"/{id}", p+"DetailGET", "detail"),
+		mk("POST", base, p+"CreatePOST", "create"),
+		mk("PUT", base+"/{id}", p+"UpdatePUT", "update"),
+		mk("DELETE", base+"/{id}", p+"DeleteDELETE", "delete"),
 	}
 }
 
@@ -757,7 +984,10 @@ func authEndpoints() []Endpoint {
 		{Method: "POST", Path: "/api/v1/auth/logout", Handler: "LogoutPOST", Deps: []string{}, Kind: "auth_logout"},
 		{Method: "GET", Path: "/api/v1/auth/me", Handler: "MeGET", Deps: rwc, Auth: true, Kind: "auth_me"},
 		{Method: "POST", Path: "/api/v1/auth/login_token", Handler: "MobileLoginPOST", Deps: rwc, Kind: "mobile_login"},
-		{Method: "DELETE", Path: "/api/v1/auth/logout_token", Handler: "MobileLogoutDELETE", Deps: []string{"write"}, Kind: "mobile_logout"},
+		// logout_token takes both handles because it goes through
+		// models.MobileTokenModel, whose constructor owns the read side too —
+		// the handler itself no longer touches the database directly.
+		{Method: "DELETE", Path: "/api/v1/auth/logout_token", Handler: "MobileLogoutDELETE", Deps: []string{"read", "write"}, Kind: "mobile_logout"},
 		{Method: "GET", Path: "/api/v1/auth/me_token", Handler: "MobileMeGET", Deps: rwc, Kind: "mobile_me"},
 	}
 }
@@ -778,6 +1008,9 @@ func handleScaffoldResource(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	fields, applyErr := applySchema(toPlural(name), fields)
 	if applyErr != nil {
 		return errResult(applyErr.Error()), nil
+	}
+	if err := validateRefs(fields); err != nil {
+		return errResult(err.Error()), nil
 	}
 	data := newData(name, fields)
 	data.CRUD = true
@@ -801,14 +1034,15 @@ func handleScaffoldResource(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	}
 
 	model := fieldsToModel(name, toPlural(name), fields)
-	if err := updateManifest([]Model{model}, resourceEndpoints(name)); err != nil {
+	if err := updateManifest([]Model{model}, resourceEndpoints(model), []Page{listPage(name, data.Title)}); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
 	return mcp.NewToolResultText(
 		strings.Join(results, "\n") +
 			"\n\nRegistered full CRUD (list, detail, create, update, delete) for /api/v1/" + toPlural(name) +
-			" in api.json + routes_gen.go. Endpoints are public — set auth:true per endpoint in api.json to protect them (requires scaffold_auth).\n" +
+			" plus the page /" + toPlural(name) +
+			" in api.json + routes_gen.go + pages_gen.go. Endpoints are public — set auth:true per endpoint in api.json to protect them (requires scaffold_auth).\n" +
 			"Add a create form with add_js_form.\n\n" + runPatternChecks(),
 	), nil
 }
@@ -854,8 +1088,20 @@ CREATE TABLE IF NOT EXISTS mobile_tokens (
 	type fileSpec struct{ tmpl, out string }
 	specs := []fileSpec{
 		{"user_model.go.tmpl", "/src/app/models/User.go"},
+		{"mobile_token_model.go.tmpl", "/src/app/models/MobileToken.go"},
 		{"auth_handler.go.tmpl", "/src/app/handlers/auth.go"},
 		{"auth_test.go.tmpl", "/src/app/handlers/auth_test.go"},
+		// clientip.go and auth_buckets.go carry the two decisions the login
+		// handlers are only ONE LINE of each: whose address is the rate-limit
+		// bucket key, and which action that bucket belongs to. They live in
+		// their own files, with their own tests, because a scaffold_auth re-run
+		// truncates auth.go, mobile_auth.go and both their _test.go files — a
+		// guard inside the file it guards cannot survive the event it guards
+		// against.
+		{"clientip.go.tmpl", "/src/app/handlers/clientip.go"},
+		{"clientip_test.go.tmpl", "/src/app/handlers/clientip_test.go"},
+		{"auth_buckets.go.tmpl", "/src/app/handlers/auth_buckets.go"},
+		{"auth_buckets_test.go.tmpl", "/src/app/handlers/auth_buckets_test.go"},
 		{"logout_handler.go.tmpl", "/src/app/handlers/logout.go"},
 		{"login_page.html.tmpl", "/src/app/static/pages/login.html"},
 		{"login.js.tmpl", "/src/app/static/js/login.js"},
@@ -875,11 +1121,14 @@ CREATE TABLE IF NOT EXISTS mobile_tokens (
 		{Name: "email", Type: "string", Nullable: false},
 		{Name: "created_at", Type: "timestamp", Nullable: false},
 	}}
-	if err := updateManifest([]Model{userModel}, authEndpoints()); err != nil {
+	// Title mirrors the shell's own <title> so api.json does not describe the
+	// page differently from how it renders.
+	loginPage := Page{Path: "/login", File: "login", Title: "Sign In", Auth: false}
+	if err := updateManifest([]Model{userModel}, authEndpoints(), []Page{loginPage}); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
-	results = append(results, "\nRegistered full auth — cookie (login, logout, me) and bearer (login_token, logout_token, me_token) — plus the user model in api.json + routes_gen.go.")
+	results = append(results, "\nRegistered full auth — cookie (login, logout, me) and bearer (login_token, logout_token, me_token) — plus the user model and the /login page in api.json + routes_gen.go + pages_gen.go.")
 
 	return mcp.NewToolResultText(strings.Join(results, "\n") + "\n\n" + runPatternChecks()), nil
 }
@@ -902,11 +1151,12 @@ func handleScaffoldRegistration(ctx context.Context, req mcp.CallToolRequest) (*
 
 	endpoint := Endpoint{Method: "POST", Path: "/api/v1/auth/register", Handler: "RegisterPOST",
 		Deps: []string{"read", "write", "cache"}, Kind: "register"}
-	if err := updateManifest(nil, []Endpoint{endpoint}); err != nil {
+	registerPage := Page{Path: "/register", File: "register", Title: "Create Account", Auth: false}
+	if err := updateManifest(nil, []Endpoint{endpoint}, []Page{registerPage}); err != nil {
 		return errResult("manifest update failed: " + err.Error()), nil
 	}
 
-	results = append(results, "\nRegistered registration route in api.json + routes_gen.go.")
+	results = append(results, "\nRegistered registration route and the /register page in api.json + routes_gen.go + pages_gen.go.")
 	return mcp.NewToolResultText(strings.Join(results, "\n") + "\n\n" + runPatternChecks()), nil
 }
 func handleAddJSForm(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -922,15 +1172,11 @@ func handleAddJSForm(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		return errResult("invalid page name"), nil
 	}
 
-	// Strip the versioned API prefix so the generated form function is named
-	// after the resource, not after "v1".
-	endpointSlug := strings.TrimPrefix(apiEndpoint, "/api/v1/")
-	endpointSlug = strings.TrimPrefix(endpointSlug, "/api/")
-	endpointSlug = strings.TrimPrefix(endpointSlug, "/")
-	endpointSlug = strings.Trim(endpointSlug, "/")
-	formName := toPascal(endpointSlug)
+	formName := formNameFor(apiEndpoint, page)
 	if formName == "" {
-		formName = toPascal(page) + "Form"
+		return errResult("cannot derive a form function name from api_endpoint " +
+			strconv.Quote(apiEndpoint) + " or page " + strconv.Quote(page) +
+			": no alphanumeric characters to build an identifier from"), nil
 	}
 
 	fields := parseFields(rawFieldsToStrings(rawFields))

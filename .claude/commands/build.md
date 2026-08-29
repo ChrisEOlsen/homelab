@@ -21,8 +21,8 @@ Read `.env`. Verify `SESSION_SECRET` is set to something other than the placehol
 
 Use the `gova-brainstorm` skill with the contents of `SEED.md` as input.
 
-- Clarify the app's features and data model
-- Confirm auth requirements, resource types, external integrations
+- Run its **Scale Gate** first and state the classification. A full `/build` from a fresh `SEED.md` is normally Standard or Large. An incremental change to an existing app is often Small — on that path there is no spec document, and Step 3's plan is the only written artifact.
+- Batch clarifying questions with the harness's batched-question tool (`AskUserQuestion` in Claude Code, `question` in opencode) — features and data model in one call, auth/resources/integrations in the next. Do not ask one question per message.
 - Wait for developer approval before proceeding
 
 ---
@@ -33,6 +33,7 @@ Use the `gova-writing-plans` skill.
 
 **Mandatory constraints for the plan:**
 - Tasks are **MCP tool calls**, not Go code or JS written by hand
+- The plan specifies contracts, not bodies — exact MCP tool calls, exact paths, and exact cross-task names and literals go in verbatim; customization bodies are described and the implementer writes them once. Do not pre-write the implementation into the plan.
 - Scaffold-generated code (models, handlers, auth) already has tests from its scaffold call — only plan a test-writing step for hand-customized logic, per `gova-writing-plans` Step 3b
 - One task per feature: `execute_sql` → `scaffold_*` → `add_js_form`
 - Follow the Golden Recipe from `CLAUDE.md` for every feature
@@ -80,8 +81,18 @@ Subagents must confirm at the start of each task:
 - Follow the Golden Recipe from CLAUDE.md
 - Never write raw SQL in handler files — use model methods only
 - CSS recompiles automatically on `docker compose restart app` — restart once after a JS/HTML-only UI pass with no Go changes
-- Use the `ui-ux-pro-max` skill before any UI work — this project's stack is `html-tailwind` (vanilla JS + Tailwind, no framework), not React/Vue/etc.; pass `--stack html-tailwind` to its search CLI
-- Use `context7` MCP for any external API documentation
+- **Design bar — build it slick.** Every page should look like a professionally designed product, not a scaffold with default styling. Concretely:
+  - **Palette:** one accent color used deliberately, a neutral scale for everything else. Not five competing colors, not raw Tailwind defaults everywhere.
+  - **Type:** real hierarchy through weight and size together, not size alone. Tight line-height on headings, comfortable on body.
+  - **Spacing:** one consistent scale, applied generously. Cramped layouts are the single clearest tell of a scaffolded UI.
+  - **Motion:** smooth and purposeful. Transitions on hover, focus, and state changes; entrance animation on lists, modals, and toasts; nothing that jitters, blocks input, or animates on every render. Wrap it in `@media (prefers-reduced-motion: reduce)` so it can be turned off.
+  - **Interaction states:** visible hover, focus, active, and disabled states on everything interactive. Focus rings stay — style them, don't remove them.
+  - **Empty, loading, and error states are designed, not blank.** A list with no rows shows something intentional.
+  - Tailwind utilities plus CSS transitions cover all of this. No framework, no CDN, no JS animation library (Critical Constraint 4).
+- Use the `context7` MCP server for external API documentation. Both installers
+  register it alongside `stripe`. If it is not connected (`/mcp` in Claude Code,
+  `opencode mcp list` in opencode), fall back to web search/fetch rather than
+  stopping.
 - Do not add manual cache calls to model methods — caching is automatic
 - JS safety: NEVER use `element.innerHTML = userValue` (XSS). ALWAYS use `element.textContent` for user-supplied text. ALWAYS use `createElement` for structured HTML.
 
@@ -91,10 +102,21 @@ Subagents must confirm at the start of each task:
 
 If `[x] Payments (Stripe)` is in SEED.md:
 
+> **The webhook lives at `/api/v1/stripe_webhook`, like every other endpoint.**
+> This step used to say `/api/stripe_webhook`, which no tool in the workflow can
+> build: `create_handler` refuses any path outside `/api/v1/`, and hand-wiring
+> the route in `main.go` is forbidden. So a SEED.md with Payments checked had no
+> legal way to create its own handler. Stripe does not care what the path is.
+>
+> Create the handler with `create_handler` during Step 5 like any other endpoint.
+> It needs no CSRF exemption: the request arrives with neither a `csrf_token` nor
+> a session cookie, which is the no-ambient-credential case `middleware.CSRF`
+> already lets through.
+
 1. Read `APP_URL` from `.env`. If empty, STOP:
    > "APP_URL is not set. Set it to your production domain before registering the Stripe webhook."
-2. Register webhook via Stripe MCP: endpoint `${APP_URL}/api/stripe_webhook`
-3. Start local listener: `stripe listen --forward-to http://localhost:[APP_PORT]/api/stripe_webhook`
+2. Register webhook via Stripe MCP: endpoint `${APP_URL}/api/v1/stripe_webhook`
+3. Start local listener: `stripe listen --forward-to http://localhost:[APP_PORT]/api/v1/stripe_webhook`
 4. Extract local webhook secret → write to `.env` as `STRIPE_WEBHOOK_SECRET`
 5. Fire test event: `stripe trigger payment_intent.succeeded`
 6. Verify handler returns 200 in `docker compose logs app`
@@ -104,7 +126,7 @@ If `[x] Payments (Stripe)` is in SEED.md:
 
 ## Step 6: Security Analysis
 
-Run the `/security:analyze` command on `src/app/`.
+Run the security audit command on `src/app/` — `/security:analyze` in Claude Code, `/security-analyze` in opencode.
 
 ---
 
@@ -113,7 +135,7 @@ Run the `/security:analyze` command on `src/app/`.
 If Critical, High, or Medium findings exist:
 1. Write a targeted fix plan
 2. Execute fixes
-3. Re-run `/security:analyze`
+3. Re-run the security audit command
 
 ---
 
@@ -126,7 +148,7 @@ Verify, with evidence for each:
 - **CRUD:** If a create form exists, do edit and delete exist?
 - **Architecture:** Tables via `execute_sql`? Models via `create_model`? No raw SQL in handlers? JS never uses `innerHTML` with user data? (Grep for `innerHTML` and `db.Query`/`db.Exec` outside models/ to confirm, don't assume the rule held.)
 - **Tests:** Run `docker compose exec app go test ./...` now and read the output — all passing? A failing test blocks completion the same as a failing build.
-- **Design:** `ui-ux-pro-max` invoked? Titles set? Mobile-responsive?
+- **Design:** Does it meet the Step 5 design bar — deliberate palette, real type hierarchy, consistent spacing, smooth transitions on interactive elements, designed empty/loading states? Titles set? Mobile-responsive? (Load the pages and look; don't infer from the class names.)
 - **App:** Run `docker compose logs app` now and read the output — no errors?
 - **Environment:** New env vars documented in `env.example`? No hardcoded secrets?
 

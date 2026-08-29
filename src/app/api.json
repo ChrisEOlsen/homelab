@@ -1,7 +1,11 @@
 {
   "api_version": "1.0.0",
-  "hash": "sha256:263a0776064aaddd37105f1063949c52e0ab96aa41226c83d40b6f0701737b0b",
-  "generated_at": "2026-08-16T02:17:04Z",
+  "hash": "sha256:77ec74921bbed733c10d7af9baf5d81caa8eff1213094aacd9130a3de3670657",
+  "generated_at": "2026-08-29T02:16:30Z",
+  "template": {
+    "version": "2026-08-22.1",
+    "fingerprint": "sha256:0663822677091a40e98930ddf4b012698dc1f004e0e4d6c4c58c65dccb5000a3"
+  },
   "models": [
     {
       "name": "Bookmark",
@@ -678,7 +682,11 @@
       ],
       "auth": false,
       "model": "BookmarkCategory",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "BookmarkCategory"
+      }
     },
     {
       "method": "POST",
@@ -691,7 +699,27 @@
       ],
       "auth": false,
       "model": "BookmarkCategory",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -704,7 +732,17 @@
       ],
       "auth": false,
       "model": "BookmarkCategory",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -717,7 +755,11 @@
       ],
       "auth": false,
       "model": "BookmarkCategory",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "BookmarkCategory"
+      }
     },
     {
       "method": "PUT",
@@ -730,7 +772,27 @@
       ],
       "auth": false,
       "model": "BookmarkCategory",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -743,7 +805,11 @@
       ],
       "auth": false,
       "model": "Bookmark",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Bookmark"
+      }
     },
     {
       "method": "POST",
@@ -756,7 +822,42 @@
       ],
       "auth": false,
       "model": "Bookmark",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "category_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -769,7 +870,17 @@
       ],
       "auth": false,
       "model": "Bookmark",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -782,7 +893,11 @@
       ],
       "auth": false,
       "model": "Bookmark",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Bookmark"
+      }
     },
     {
       "method": "PUT",
@@ -795,7 +910,42 @@
       ],
       "auth": false,
       "model": "Bookmark",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "category_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "POST",
@@ -807,7 +957,56 @@
         "cache"
       ],
       "auth": false,
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Run the calendar sync now and return its result",
+      "request": {
+        "shape": "empty"
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "events_seen",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "created",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "updated",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "cancelled",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "failed",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "error",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "finished_at",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -820,7 +1019,11 @@
       ],
       "auth": false,
       "model": "client",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "client"
+      }
     },
     {
       "method": "POST",
@@ -833,7 +1036,62 @@
       ],
       "auth": false,
       "model": "client",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "match_name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "rate_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -846,7 +1104,17 @@
       ],
       "auth": false,
       "model": "client",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -859,7 +1127,11 @@
       ],
       "auth": false,
       "model": "client",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "client"
+      }
     },
     {
       "method": "PUT",
@@ -872,7 +1144,62 @@
       ],
       "auth": false,
       "model": "client",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "match_name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "rate_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -885,7 +1212,11 @@
       ],
       "auth": false,
       "model": "expense",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "expense"
+      }
     },
     {
       "method": "POST",
@@ -898,7 +1229,52 @@
       ],
       "auth": false,
       "model": "expense",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "category",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "incurred_on",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -911,7 +1287,17 @@
       ],
       "auth": false,
       "model": "expense",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -924,7 +1310,11 @@
       ],
       "auth": false,
       "model": "expense",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "expense"
+      }
     },
     {
       "method": "PUT",
@@ -937,7 +1327,52 @@
       ],
       "auth": false,
       "model": "expense",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "category",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "incurred_on",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -949,7 +1384,58 @@
         "cache"
       ],
       "auth": false,
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Monthly finances rollup: flat totals plus nested income/spending/all_time objects, session rows and expense rows",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "month",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "tax_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "projected_tax_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "tax_rate_bp",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "net_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "net_after_committed_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "projected_net_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "projected_net_after_committed_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "needs_review_count",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -962,7 +1448,11 @@
       ],
       "auth": false,
       "model": "Focus",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Focus"
+      }
     },
     {
       "method": "POST",
@@ -975,7 +1465,27 @@
       ],
       "auth": false,
       "model": "Focus",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "text",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -988,7 +1498,17 @@
       ],
       "auth": false,
       "model": "Focus",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1001,7 +1521,11 @@
       ],
       "auth": false,
       "model": "Focus",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Focus"
+      }
     },
     {
       "method": "GET",
@@ -1014,7 +1538,11 @@
       ],
       "auth": false,
       "model": "JournalEntry",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "JournalEntry"
+      }
     },
     {
       "method": "POST",
@@ -1027,7 +1555,42 @@
       ],
       "auth": false,
       "model": "JournalEntry",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "content",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "mood",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "entry_date",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1040,7 +1603,17 @@
       ],
       "auth": false,
       "model": "JournalEntry",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1053,7 +1626,11 @@
       ],
       "auth": false,
       "model": "JournalEntry",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "JournalEntry"
+      }
     },
     {
       "method": "PUT",
@@ -1066,7 +1643,42 @@
       ],
       "auth": false,
       "model": "JournalEntry",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "content",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "mood",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "entry_date",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1079,7 +1691,11 @@
       ],
       "auth": false,
       "model": "LogCategory",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "LogCategory"
+      }
     },
     {
       "method": "POST",
@@ -1092,7 +1708,18 @@
       ],
       "auth": false,
       "model": "LogCategory",
-      "kind": "create"
+      "kind": "create",
+      "summary": "Create a log category (body: title plus a fields array defining its form)",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1105,7 +1732,17 @@
       ],
       "auth": false,
       "model": "LogCategory",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1118,7 +1755,11 @@
       ],
       "auth": false,
       "model": "LogCategory",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "LogCategory"
+      }
     },
     {
       "method": "PUT",
@@ -1131,7 +1772,18 @@
       ],
       "auth": false,
       "model": "LogCategory",
-      "kind": "update"
+      "kind": "update",
+      "summary": "Update a log category (body: title plus a fields array defining its form)",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1144,7 +1796,11 @@
       ],
       "auth": false,
       "model": "LogEntry",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "LogEntry"
+      }
     },
     {
       "method": "POST",
@@ -1157,7 +1813,18 @@
       ],
       "auth": false,
       "model": "LogEntry",
-      "kind": "create"
+      "kind": "create",
+      "summary": "Create a log entry (body: category_id plus a data object matching the category schema)",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1170,7 +1837,17 @@
       ],
       "auth": false,
       "model": "LogEntry",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1183,7 +1860,11 @@
       ],
       "auth": false,
       "model": "LogEntry",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "LogEntry"
+      }
     },
     {
       "method": "GET",
@@ -1196,7 +1877,11 @@
       ],
       "auth": false,
       "model": "rate_rule",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "rate_rule"
+      }
     },
     {
       "method": "POST",
@@ -1209,7 +1894,37 @@
       ],
       "auth": false,
       "model": "rate_rule",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "duration_min",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1222,7 +1937,17 @@
       ],
       "auth": false,
       "model": "rate_rule",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1235,7 +1960,11 @@
       ],
       "auth": false,
       "model": "rate_rule",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "rate_rule"
+      }
     },
     {
       "method": "PUT",
@@ -1248,7 +1977,37 @@
       ],
       "auth": false,
       "model": "rate_rule",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "duration_min",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1261,7 +2020,11 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Reminder"
+      }
     },
     {
       "method": "POST",
@@ -1274,7 +2037,42 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "remind_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "recurrence_type",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "recurrence_days",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1287,7 +2085,17 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1300,7 +2108,11 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Reminder"
+      }
     },
     {
       "method": "PUT",
@@ -1313,7 +2125,47 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "remind_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "recurrence_type",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "recurrence_days",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1326,7 +2178,21 @@
       ],
       "auth": false,
       "model": "Reminder",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Flip a reminder between active and inactive",
+      "request": {
+        "shape": "empty"
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1339,7 +2205,11 @@
       ],
       "auth": false,
       "model": "Shortcut",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Shortcut"
+      }
     },
     {
       "method": "POST",
@@ -1352,7 +2222,32 @@
       ],
       "auth": false,
       "model": "Shortcut",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "PUT",
@@ -1365,7 +2260,18 @@
       ],
       "auth": false,
       "model": "Shortcut",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Reorder shortcuts to match the given id order (body: {\"order\": [id, ...]})",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1378,7 +2284,17 @@
       ],
       "auth": false,
       "model": "Shortcut",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1391,7 +2307,11 @@
       ],
       "auth": false,
       "model": "Shortcut",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Shortcut"
+      }
     },
     {
       "method": "GET",
@@ -1404,7 +2324,11 @@
       ],
       "auth": false,
       "model": "subscription",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "subscription"
+      }
     },
     {
       "method": "POST",
@@ -1417,7 +2341,62 @@
       ],
       "auth": false,
       "model": "subscription",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "cadence",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "billing_day",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "started_on",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "ended_on",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1430,7 +2409,17 @@
       ],
       "auth": false,
       "model": "subscription",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1443,7 +2432,11 @@
       ],
       "auth": false,
       "model": "subscription",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "subscription"
+      }
     },
     {
       "method": "PUT",
@@ -1456,7 +2449,62 @@
       ],
       "auth": false,
       "model": "subscription",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "cadence",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "billing_day",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "started_on",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "ended_on",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1469,7 +2517,11 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Subtask"
+      }
     },
     {
       "method": "POST",
@@ -1482,7 +2534,37 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "todo_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1495,7 +2577,17 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1508,7 +2600,11 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Subtask"
+      }
     },
     {
       "method": "PUT",
@@ -1521,7 +2617,27 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1534,7 +2650,21 @@
       ],
       "auth": false,
       "model": "Subtask",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Flip a subtask's is_done",
+      "request": {
+        "shape": "empty"
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1547,7 +2677,11 @@
       ],
       "auth": false,
       "model": "TodoBlock",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "TodoBlock"
+      }
     },
     {
       "method": "POST",
@@ -1560,7 +2694,42 @@
       ],
       "auth": false,
       "model": "TodoBlock",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "todo_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "header",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "content",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1573,7 +2742,17 @@
       ],
       "auth": false,
       "model": "TodoBlock",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1586,7 +2765,11 @@
       ],
       "auth": false,
       "model": "TodoBlock",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "TodoBlock"
+      }
     },
     {
       "method": "PUT",
@@ -1599,7 +2782,37 @@
       ],
       "auth": false,
       "model": "TodoBlock",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "header",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "content",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1612,7 +2825,11 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "TodoList"
+      }
     },
     {
       "method": "POST",
@@ -1625,7 +2842,27 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1638,7 +2875,17 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1651,7 +2898,11 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "TodoList"
+      }
     },
     {
       "method": "PUT",
@@ -1664,7 +2915,32 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1677,7 +2953,18 @@
       ],
       "auth": false,
       "model": "TodoList",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Delete every completed todo in a list",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1690,7 +2977,11 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "Todo"
+      }
     },
     {
       "method": "POST",
@@ -1703,7 +2994,37 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "list_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "nullable": true
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "PUT",
@@ -1716,7 +3037,18 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Reorder todos to match the given id order (body: {\"order\": [id, ...]})",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1729,7 +3061,17 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1742,7 +3084,11 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "Todo"
+      }
     },
     {
       "method": "PUT",
@@ -1755,7 +3101,47 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "list_id",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "is_done",
+            "type": "boolean",
+            "nullable": false
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "sort_order",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1768,7 +3154,21 @@
       ],
       "auth": false,
       "model": "Todo",
-      "kind": "custom"
+      "kind": "custom",
+      "summary": "Flip a todo's is_done",
+      "request": {
+        "shape": "empty"
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1781,7 +3181,11 @@
       ],
       "auth": false,
       "model": "training_session",
-      "kind": "list"
+      "kind": "list",
+      "response": {
+        "shape": "list",
+        "model": "training_session"
+      }
     },
     {
       "method": "POST",
@@ -1794,7 +3198,92 @@
       ],
       "auth": false,
       "model": "training_session",
-      "kind": "create"
+      "kind": "create",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "uid",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "client_name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "client_id",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "service",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "session_date",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "start_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "end_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "duration_min",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "rate_source",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "override_cents",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "needs_review",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1807,7 +3296,17 @@
       ],
       "auth": false,
       "model": "training_session",
-      "kind": "delete"
+      "kind": "delete",
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "ok",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      }
     },
     {
       "method": "GET",
@@ -1820,7 +3319,11 @@
       ],
       "auth": false,
       "model": "training_session",
-      "kind": "detail"
+      "kind": "detail",
+      "response": {
+        "shape": "object",
+        "model": "training_session"
+      }
     },
     {
       "method": "PUT",
@@ -1833,7 +3336,118 @@
       ],
       "auth": false,
       "model": "training_session",
-      "kind": "update"
+      "kind": "update",
+      "request": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "uid",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "source",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "client_name",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "client_id",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "service",
+            "type": "string",
+            "nullable": true
+          },
+          {
+            "name": "session_date",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "start_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "end_at",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "duration_min",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "amount_cents",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "rate_source",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "override_cents",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "nullable": false
+          },
+          {
+            "name": "needs_review",
+            "type": "boolean",
+            "nullable": false
+          }
+        ]
+      },
+      "response": {
+        "shape": "object",
+        "fields": [
+          {
+            "name": "id",
+            "type": "int",
+            "nullable": false
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "path": "/bookmarks",
+      "file": "bookmarks",
+      "title": "Bookmarks · Homelab",
+      "auth": false
+    },
+    {
+      "path": "/finances",
+      "file": "finances",
+      "title": "Finances · Homelab",
+      "auth": false
+    },
+    {
+      "path": "/logger",
+      "file": "logger",
+      "title": "Logger · Homelab",
+      "auth": false
+    },
+    {
+      "path": "/todos",
+      "file": "todos",
+      "title": "TaskMaster · Homelab",
+      "auth": false
     }
   ]
 }

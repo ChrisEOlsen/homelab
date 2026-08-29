@@ -8,14 +8,14 @@ A template repository for building AI-driven web applications with the GOVA stac
 
 The AI doesn't write the important code — it calls MCP tools that render deterministic templates. No HTMX, no Alpine.js, no Templ compile step. Go handles JSON API. Vanilla ES modules handle all DOM rendering.
 
-**Two containers, one SQLite file.** `app` runs the Go server; `mcp` runs the builder tools so restarting `app` never disconnects Claude Code. No Redis, no MySQL, no Nginx, no frontend build step.
+**Two containers, one SQLite file.** `app` runs the Go server; `mcp` runs the builder tools so restarting `app` never disconnects your agent. No Redis, no MySQL, no Nginx, no frontend build step.
 
 ## Built In, Not Bolted On
 
 - **Auth, done right by default.** Signed HMAC-SHA256 sessions, double-submit CSRF, bcrypt with timing-safe comparison, rate-limited login (5 attempts / 15 min). Scaffold it once with `scaffold_auth`; the security work is already in the template.
-- **Machine-readable API contract.** Every scaffold self-registers into `src/app/api.json` — a manifest of models (with types and nullability) and endpoints, served at `GET /api/v1/_manifest`. Routes are generated from it (`handlers/routes_gen.go`), so `main.go` is never hand-wired. `scaffold_resource` generates full CRUD (list/detail/create/update/delete + `?sort=`/`?filter=`); native clients (see [gova-ios](../gova-ios)) read the manifest instead of reverse-engineering source.
+- **Machine-readable API contract.** Every scaffold self-registers into `src/app/api.json` — a manifest of models (with types and nullability), endpoints and pages, served at `GET /api/v1/_manifest`. Routes and page routes are generated from it (`handlers/routes_gen.go`, `handlers/pages_gen.go`), so `main.go` is never hand-wired. `scaffold_resource` generates full CRUD (list/detail/create/update/delete + `?sort=`/`?filter=`). A native client reads the manifest instead of reverse-engineering source; it also records which template build wrote it, so an app can tell when its vendored generator has fallen behind.
 - **Scaffolds ship with tests.** Every model, handler, and auth endpoint the MCP tools generate comes with a Go test alongside it — CRUD roundtrips, login/CSRF/rate-limit coverage, mobile bearer-token flows. `docker compose exec app go test ./...` runs all of it.
-- **Design intelligence on tap.** The `ui-ux-pro-max` skill brings searchable color palettes, typography pairings, and UX guidelines into the build — no separate design pass required.
+- **Designed, not scaffolded.** The build carries an explicit design bar — deliberate palette, real typographic hierarchy, generous spacing, smooth motion on every interaction, designed empty and loading states — so the output looks like a product rather than a template with default styling. Plain Tailwind and CSS transitions; no framework, no CDN, no animation library.
 
 ## Quick Start
 
@@ -26,7 +26,14 @@ cp env.example .env
 
 | Tool | Install | Context file | Commands |
 |---|---|---|---|
-| **Claude Code** | `./install-claude.sh` | `CLAUDE.md` | `/build`, `/launch` |
+| **Claude Code** | `./install-claude.sh` | `CLAUDE.md` | `/build`, `/launch`, `/security:analyze` |
+| **opencode** | `./install-opencode.sh` | `AGENTS.md` → `CLAUDE.md` | `/build`, `/launch`, `/security-analyze` |
+
+Run either, or both — they share one `.env` and one pair of containers, and the
+rules, commands and skills are single files that both harnesses read (see
+`CLAUDE.md` § Harnesses). The opencode installer also offers a model profile:
+Anthropic, or Ollama Cloud for the times you want to run the build on
+`ollama-cloud` models.
 
 Then:
 1. Fill in `SEED.md` with your app idea

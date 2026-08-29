@@ -45,11 +45,22 @@ func main() {
 	r.Use(middleware.CSRF)
 	r.Use(middleware.Auth)
 
+	// Fallbacks for a path that matched no route, and for a method that is not
+	// registered on a path that did. chi's defaults answer in plain text, which
+	// breaks the envelope contract for /api/ callers; these answer in the
+	// envelope there and leave human-facing URLs alone.
+	r.NotFound(handlers.NotFoundHandler())
+	r.MethodNotAllowed(handlers.MethodNotAllowedHandler())
+
 	// Static files
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
-	// Pages
+	// Pages. Source of truth: api.json's "pages" -> handlers/pages_gen.go.
+	// Never hand-wire a page route here; create_page and the scaffold tools
+	// regenerate RegisterPages. "/" is the framework's own home shell and is
+	// not in the manifest.
 	r.Get("/", handlers.HomeGET())
+	handlers.RegisterPages(r)
 
 	// Framework API endpoints (not scaffolded — wired directly).
 	r.Get("/api/v1/_version", handlers.VersionGET())

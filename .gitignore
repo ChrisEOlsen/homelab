@@ -9,7 +9,30 @@
 src/app/static/css/style.css
 src/builder/builder
 logs/
-opencode.json
+# Generated per machine by install-opencode.sh (opencode's counterpart to
+# .mcp.json). Anchored to the repo root on purpose: a bare `opencode.json`
+# also matched .opencode/opencode.json, which is committed config.
+/opencode.json
 .gemini/settings.json
 data/
+
+# Build-time scratch and template provenance — never committed into an app.
+#
+# .gova-build/ is the gova-build-execution skill's working directory: task
+# briefs, per-task reports, review diffs. It is a record of HOW a build was
+# carried out, useful while it runs and noise afterwards. It was not ignored
+# before, which is how a 20KB report about fixing the template ended up
+# committed and shipping into every project scaffolded from this repo.
+.gova-build/
+
+# Notes about developing THIS repo (the template) rather than an app built with
+# it. A derived project inherits every tracked file, and an AI opening that
+# project reads them as its own project's history — spending context on, and
+# sometimes reasoning from, decisions that belong to somebody else's codebase.
+docs/gova-monolith-history/
+
+# Homelab-specific: the deploy script (server checkout is the deploy target)
+# and one-off migration artifacts.
 sync.sh
+myapp_*.sql
+

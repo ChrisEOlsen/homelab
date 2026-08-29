@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -70,6 +71,65 @@ func TestRegisterTestTemplate_IsValidGo(t *testing.T) {
 
 func TestMobileAuthTestTemplate_IsValidGo(t *testing.T) {
 	renderAndParse(t, "mobile_auth_test.go.tmpl", TemplateData{})
+}
+
+func TestMobileTokenModelTemplate_IsValidGo(t *testing.T) {
+	renderAndParse(t, "mobile_token_model.go.tmpl", TemplateData{})
+}
+
+// TestMobileAuthHandlerTemplate_NoRawSQL enforces Critical Constraint 1 at the
+// template level. scaffold_auth used to emit INSERT/DELETE/SELECT against
+// mobile_tokens straight from the handler, so every app generated from this
+// template shipped a documented-forbidden pattern in its own auth layer.
+func TestMobileAuthHandlerTemplate_NoRawSQL(t *testing.T) {
+	out := renderAndParse(t, "mobile_auth_handler.go.tmpl", newData("user", nil))
+
+	banned := []string{
+		"INSERT INTO", "DELETE FROM", "SELECT ", "UPDATE ",
+		"ExecContext(", "QueryContext(", "QueryRowContext(",
+		".Exec(", ".Query(", ".QueryRow(",
+	}
+	for _, frag := range banned {
+		if strings.Contains(out, frag) {
+			t.Errorf("mobile_auth_handler.go.tmpl contains raw SQL/db access %q — use a model method:\n%s", frag, out)
+		}
+	}
+	if !strings.Contains(out, "models.NewMobileTokenModel(") {
+		t.Errorf("handler should reach mobile_tokens through models.MobileTokenModel:\n%s", out)
+	}
+}
+
+// TestMobileTokenModelTemplate_PinsSQLiteDatetimeLayout pins the storage layout
+// for expires_at. DATETIME is TEXT and SQLite compares it lexicographically:
+// RFC3339's 'T' (0x54) sorts above SQLite's space (0x20), so an RFC3339 expiry
+// from the same calendar date compares greater than the current native
+// timestamp and an expired token passes as valid. Writing and comparing in
+// SQLite's own layout — with the comparison value bound, not sourced from a
+// different clock — is what makes the check correct by construction.
+func TestMobileTokenModelTemplate_PinsSQLiteDatetimeLayout(t *testing.T) {
+	out := renderAndParse(t, "mobile_token_model.go.tmpl", TemplateData{})
+
+	if !strings.Contains(out, `sqliteDatetimeLayout = "2006-01-02 15:04:05"`) {
+		t.Errorf("mobile_token_model.go.tmpl must pin SQLite's own datetime layout:\n%s", out)
+	}
+	if strings.Contains(out, "time.RFC3339") {
+		t.Errorf("expires_at must not be stored or compared as RFC3339:\n%s", out)
+	}
+	for _, want := range []string{
+		`expiresAt.UTC().Format(sqliteDatetimeLayout)`,
+		`now.UTC().Format(sqliteDatetimeLayout)`,
+		`expires_at > ?`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q — expiry must be written and compared in one bound layout:\n%s", want, out)
+		}
+	}
+	// The old shape. Comparing against CURRENT_TIMESTAMP is only safe if
+	// whatever wrote expires_at happened to use the same layout — which is
+	// exactly the accident this template replaces with an explicit bind.
+	if strings.Contains(out, "CURRENT_TIMESTAMP)") || strings.Contains(out, "> CURRENT_TIMESTAMP") {
+		t.Errorf("expiry comparison must bind an explicitly formatted instant, not CURRENT_TIMESTAMP:\n%s", out)
+	}
 }
 
 func sampleFieldsWithNullable() []Field {
@@ -152,6 +212,24 @@ func TestModelTemplate_CreateTakesPointerForNullable(t *testing.T) {
 func TestModelTestTemplate_NullableIsValidGo(t *testing.T) {
 	data := newData("widget", sampleFieldsWithNullable())
 	renderAndParse(t, "model_test.go.tmpl", data)
+}
+
+// TestUserModelTemplate_RateLimitBucketDecays guards the sliding-window reset
+// in RecordFailedAttempt. Without it the limiter is a lifetime quota and any IP
+// that ever accumulates 5 failures is capped at one attempt per 15 minutes for
+// good — an availability failure on a shared NAT, not a nuisance.
+func TestUserModelTemplate_RateLimitBucketDecays(t *testing.T) {
+	out := renderAndParse(t, "user_model.go.tmpl", newData("user", nil))
+
+	if !strings.Contains(out, "attempts = CASE WHEN updated_at < datetime('now', '-15 minutes')") {
+		t.Errorf("RecordFailedAttempt must reset attempts once the window lapses:\n%s", out)
+	}
+	if !strings.Contains(out, "THEN 1 ELSE attempts + 1 END") {
+		t.Errorf("the decayed branch must restart the count at 1:\n%s", out)
+	}
+	if !strings.Contains(out, "WHEN updated_at < datetime('now', '-15 minutes') THEN NULL") {
+		t.Errorf("a decayed bucket must also clear its stale locked_until:\n%s", out)
+	}
 }
 
 func TestHandlerTemplate_NoInlineAuthCheck(t *testing.T) {
@@ -264,6 +342,119 @@ func TestRenderRoutes_MobileBearerNotWrapped(t *testing.T) {
 	}
 }
 
+func pageManifest(pages ...Page) Manifest {
+	m := Manifest{APIVersion: "1.0.0"}
+	for _, p := range pages {
+		_ = m.UpsertPage(p)
+	}
+	m.canonicalize()
+	return m
+}
+
+func TestRenderPages_EmptyIsValidGo(t *testing.T) {
+	out, err := renderPages(pageManifest())
+	if err != nil {
+		t.Fatalf("renderPages: %v", err)
+	}
+	parseAsGo(t, "pages_gen.go", out)
+	if !strings.Contains(out, "func RegisterPages(r chi.Router)") {
+		t.Errorf("missing RegisterPages signature:\n%s", out)
+	}
+}
+
+func TestRenderPages_MountsEachPage(t *testing.T) {
+	out, err := renderPages(pageManifest(
+		Page{Path: "/login", File: "login", Title: "Log In"},
+		Page{Path: "/projects", File: "projects", Title: "Projects", Auth: true},
+	))
+	if err != nil {
+		t.Fatalf("renderPages: %v", err)
+	}
+	parseAsGo(t, "pages_gen.go", out)
+	for _, want := range []string{
+		`r.Get("/login", pageFile("login"))`,
+		// A PAGE'S auth:true MUST RENDER SOMETHING.
+		//
+		// It used to render nothing at all: the flag was written into api.json,
+		// read by nobody, and looked exactly like a security control. The
+		// version of this test that stood here asserted the INERTNESS — "page
+		// routes must not be wrapped in middleware" — and its comment gave a
+		// correct reason for half of it (a browser must not be handed a JSON
+		// 401) and then over-concluded to "no middleware at all". That is why
+		// the defect survived review: the guard read as already-considered.
+		//
+		// RequirePageAuth is the page-shaped answer — a 303 to /login, which is
+		// what the flag reads as and what a browser can act on.
+		`r.With(middleware.RequirePageAuth).Get("/projects", pageFile("projects"))`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing page line:\n  want: %s\n  in:\n%s", want, out)
+		}
+	}
+	// Pages are never mounted under the API prefix, and are never wrapped in
+	// RequireAuth — that one writes a JSON body, which a browser navigating to
+	// a page must not receive.
+	//
+	// The guard here is a courtesy, not a boundary: the shell is inert and every
+	// datum on the page comes from an /api/v1/ endpoint, so THOSE are what carry
+	// auth:true in the endpoint table. What it buys is the removal of the flash
+	// — without it a signed-out visitor renders the whole page and is redirected
+	// only once its JS module has loaded and called requireAuth().
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "pageFile(") {
+			continue
+		}
+		if strings.Contains(line, `"/api/`) {
+			t.Errorf("a page must never be mounted under the API prefix: %s", line)
+		}
+		if strings.Contains(line, "middleware.RequireAuth)") {
+			t.Errorf("a page must not be wrapped in the JSON RequireAuth: %s", line)
+		}
+	}
+}
+
+// TestRenderPages_NoAuthPageMeansNoMiddlewareImport — Go does not compile an
+// unused import, so a project with no guarded page must not get one.
+func TestRenderPages_NoAuthPageMeansNoMiddlewareImport(t *testing.T) {
+	out, err := renderPages(pageManifest(
+		Page{Path: "/login", File: "login", Title: "Log In"},
+	))
+	if err != nil {
+		t.Fatalf("renderPages: %v", err)
+	}
+	parseAsGo(t, "pages_gen.go", out)
+	if strings.Contains(out, `"gova/app/middleware"`) {
+		t.Errorf("no page is guarded, so the import must be absent:\n%s", out)
+	}
+}
+
+// TestRenderPages_ServesByGeneratedFileName pins the two properties that keep
+// page serving safe: the file name comes from the generated table (a Go string
+// literal, never request input), and filepath.Base is a second guard inside the
+// helper.
+func TestRenderPages_ServesByGeneratedFileName(t *testing.T) {
+	out, err := renderPages(pageManifest(Page{Path: "/projects", File: "projects"}))
+	if err != nil {
+		t.Fatalf("renderPages: %v", err)
+	}
+	if !strings.Contains(out, `"./static/pages/" + filepath.Base(name) + ".html"`) {
+		t.Errorf("pageFile must derive its path via filepath.Base:\n%s", out)
+	}
+	if strings.Contains(out, "chi.URLParam") || strings.Contains(out, "r.URL.Path") {
+		t.Errorf("pageFile must never build a path from request input:\n%s", out)
+	}
+}
+
+func TestRenderPages_Deterministic(t *testing.T) {
+	a := Page{Path: "/a", File: "a"}
+	b := Page{Path: "/b", File: "b"}
+	out1, _ := renderPages(pageManifest(a, b))
+	out2, _ := renderPages(pageManifest(b, a))
+	if out1 != out2 {
+		t.Errorf("page render depends on insertion order:\n---1---\n%s\n---2---\n%s", out1, out2)
+	}
+}
+
 func TestModelTemplate_GetPageTakesQueryOpts(t *testing.T) {
 	data := newData("widget", sampleFieldsWithNullable())
 	out := renderAndParse(t, "model.go.tmpl", data)
@@ -344,14 +535,19 @@ func TestResourceHandlersTestTemplate_ValidGo(t *testing.T) {
 	renderAndParse(t, "resource_handlers_test.go.tmpl", data)
 }
 
-// TestRenderRoutes_MatchesCommittedFile is the anti-drift guard: the committed
-// handlers/routes_gen.go must be byte-identical to what renderRoutes produces
-// from the committed api.json. This proves the served route set and the
-// manifest cannot disagree — regenerate routes_gen.go from api.json if it fails.
-func TestRenderRoutes_MatchesCommittedFile(t *testing.T) {
+// TestRenderRoutes_MatchesCommittedManifest asserts that routes_gen.go is in
+// sync with the api.json sitting next to it.
+//
+// This used to render from an EMPTY manifest and demand byte-equality with the
+// committed file, which is true only in a pristine template: the instant a
+// project ran any scaffold, routes_gen.go held real routes and this test was
+// red forever. Every generated app inherited a failing src/builder suite, which
+// teaches people to ignore it. Sync between manifest and generated file is the
+// property actually worth asserting, and it holds in every project.
+func TestRenderRoutes_MatchesCommittedManifest(t *testing.T) {
 	m, err := readManifestAt("../app/api.json")
 	if err != nil {
-		t.Fatalf("read api.json: %v", err)
+		t.Fatalf("read committed api.json: %v", err)
 	}
 	out, err := renderRoutes(m)
 	if err != nil {
@@ -362,7 +558,237 @@ func TestRenderRoutes_MatchesCommittedFile(t *testing.T) {
 		t.Fatalf("read committed routes_gen.go: %v", err)
 	}
 	if string(committed) != out {
-		t.Errorf("committed routes_gen.go is not byte-identical to renderRoutes(api.json).\n"+
-			"Regenerate it to match.\n---committed---\n%s\n---generated---\n%s", committed, out)
+		t.Errorf("handlers/routes_gen.go has drifted from api.json.\n"+
+			"Re-run any scaffold tool (or regenerate) to bring them back in sync.\n"+
+			"---committed---\n%s\n---rendered from api.json---\n%s", committed, out)
+	}
+}
+
+// TestRenderPages_MatchesCommittedManifest is the same sync property for the
+// page table — api.json's "pages" against handlers/pages_gen.go and its
+// generated companion test.
+func TestRenderPages_MatchesCommittedManifest(t *testing.T) {
+	m, err := readManifestAt("../app/api.json")
+	if err != nil {
+		t.Fatalf("read committed api.json: %v", err)
+	}
+	for _, tc := range []struct {
+		file   string
+		render func(Manifest) (string, error)
+	}{
+		{"pages_gen.go", renderPages},
+		{"pages_gen_test.go", renderPagesTest},
+	} {
+		out, err := tc.render(m)
+		if err != nil {
+			t.Fatalf("render %s: %v", tc.file, err)
+		}
+		committed, err := os.ReadFile("../app/handlers/" + tc.file)
+		if err != nil {
+			t.Fatalf("read committed %s: %v", tc.file, err)
+		}
+		if string(committed) != out {
+			t.Errorf("handlers/%s has drifted from api.json.\n"+
+				"Re-run any scaffold tool (or regenerate) to bring them back in sync.\n"+
+				"---committed---\n%s\n---rendered from api.json---\n%s", tc.file, committed, out)
+		}
+	}
+}
+
+func TestRenderPagesTest_IsValidGoAndTablesThePages(t *testing.T) {
+	out, err := renderPagesTest(pageManifest(
+		Page{Path: "/login", File: "login", Title: "Sign In"},
+		Page{Path: "/widgets", File: "widgets", Title: "Widgets", Auth: true},
+	))
+	if err != nil {
+		t.Fatalf("renderPagesTest: %v", err)
+	}
+	parseAsGo(t, "pages_gen_test.go", out)
+	for _, want := range []string{
+		`{path: "/login", file: "login", title: "Sign In", auth: false},`,
+		// The table carries auth, so the generated test can assert per page
+		// that a guarded path redirects a signed-out visitor. Without the field
+		// here, api.json could declare a page guarded and nothing generated
+		// would ever check.
+		`{path: "/widgets", file: "widgets", title: "Widgets", auth: true},`,
+		"RegisterPages(r)",
+		"func TestGeneratedPages_ServeTheirShell(t *testing.T)",
+		"func TestGeneratedPages_GuardedPagesRedirectWhenSignedOut(t *testing.T)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in generated page test:\n%s", want, out)
+		}
+	}
+
+	// The empty case must still compile — a pristine app has no pages.
+	empty, err := renderPagesTest(pageManifest())
+	if err != nil {
+		t.Fatalf("renderPagesTest(empty): %v", err)
+	}
+	parseAsGo(t, "pages_gen_test.go", empty)
+}
+
+func TestClientIPTemplate_IsValidGo(t *testing.T) {
+	renderAndParse(t, "clientip.go.tmpl", newData("user", nil))
+	renderAndParse(t, "clientip_test.go.tmpl", newData("user", nil))
+}
+
+func TestAuthBucketsTemplate_IsValidGo(t *testing.T) {
+	renderAndParse(t, "auth_buckets.go.tmpl", newData("user", nil))
+	renderAndParse(t, "auth_buckets_test.go.tmpl", newData("user", nil))
+}
+
+// TestAuthHandlerTemplates_NamespaceTheirRateLimitBuckets is the template-level
+// half of the guard that handlers/auth_buckets_test.go carries in the generated
+// app.
+//
+// rate_limits has ONE key column and ClearAttempts is a DELETE by that key, so
+// two endpoints that spell the key the same way are one bucket — and a success
+// on either erases the other's failures. /auth/login and /auth/login_token are
+// the same credential check reached two ways, so keying both on a bare
+// clientIP(r) let an attacker pace four wrong passwords, clear the row with one
+// correct login_token against an account they hold, and guess forever without
+// the counter ever reaching five. Measured before the fix: 40 of 40 guesses
+// reached bcrypt against a documented budget of 5.
+//
+// The generated test proves the behaviour; this one proves the TEMPLATE cannot
+// regress to emitting it, which the generated test cannot do — a scaffold_auth
+// re-run overwrites the generated files with whatever these templates say.
+func TestAuthHandlerTemplates_NamespaceTheirRateLimitBuckets(t *testing.T) {
+	for _, c := range []struct{ tmpl, want string }{
+		{"auth_handler.go.tmpl", "ip := loginBucket(clientIP(r))"},
+		{"mobile_auth_handler.go.tmpl", "ip := loginTokenBucket(clientIP(r))"},
+	} {
+		out := renderAndParse(t, c.tmpl, newData("user", nil))
+		if !strings.Contains(out, c.want) {
+			t.Errorf("%s must key its limiter with %q", c.tmpl, c.want)
+		}
+		if strings.Contains(out, "ip := clientIP(r)") {
+			t.Errorf("%s keys its rate limiter on a bare clientIP(r) — that is one shared bucket "+
+				"with the other login endpoint, and a success on either erases both", c.tmpl)
+		}
+	}
+}
+
+// TestAuthHandlerTemplate_DoesNotDefineClientIP keeps the trusted-proxy logic in
+// the file that carries its reasoning.
+//
+// clientIP used to be eleven lines inside auth_handler.go.tmpl, where it read as
+// a logging convenience. It is the rate limiter's bucket key: it decides whether
+// a caller can mint unlimited buckets by setting a header, and whether every
+// caller behind the proxy shares one. A re-run of scaffold_auth truncates
+// auth.go, so a decision left in there is a decision with no guard.
+func TestAuthHandlerTemplate_DoesNotDefineClientIP(t *testing.T) {
+	out := renderAndParse(t, "auth_handler.go.tmpl", newData("user", nil))
+	if strings.Contains(out, "func clientIP(") {
+		t.Error("clientIP belongs in clientip.go.tmpl, with its trusted-proxy reasoning and its own tests")
+	}
+}
+
+// TestClientIPTemplate_HasATrustedPeerNotion pins the three properties the two
+// old lines lacked, at the template level.
+func TestClientIPTemplate_HasATrustedPeerNotion(t *testing.T) {
+	out := renderAndParse(t, "clientip.go.tmpl", newData("user", nil))
+	for _, want := range []string{
+		// A direct caller does not get to name itself with a header.
+		"if !isTrustedProxy(peer) {",
+		// The header is validated as an address, not taken as a string.
+		"net.ParseIP(cf) != nil",
+		// The fallback that stops every caller sharing the proxy's bucket.
+		`forwardedFor(r.Header.Get("X-Forwarded-For"))`,
+		// Headers are per-request, so the fail-safe has to be too.
+		"warnMissingForwardedIP(peer)",
+		// IPv6: "[::1]:5432" is not split on the last colon.
+		"net.SplitHostPort(remoteAddr)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("clientip.go.tmpl is missing %q", want)
+		}
+	}
+}
+
+// TestModelTemplate_TimestampFieldIsModelsTime pins the field type that exists
+// to stop a model putting two timestamp formats on one JSON object.
+//
+// Generated models have always given created_at the models.Time treatment
+// (RFC3339, second precision) — but there was no way to DECLARE any other
+// timestamp column, so every author wrote `updated_at:string` and got a Go
+// string carrying SQLite's native "2026-08-15 19:40:07". Confirmed across four
+// models in one project, because it is the generator and not any one model.
+// Invisible in a browser, and fatal to a typed client: a Swift .iso8601 decoder
+// rejects the row. A wire defect only the SECOND client finds.
+func TestModelTemplate_TimestampFieldIsModelsTime(t *testing.T) {
+	out := renderAndParse(t, "model.go.tmpl", newData("widget", []Field{
+		{Name: "updated_at", Type: "timestamp", Nullable: false},
+		{Name: "archived_at", Type: "timestamp", Nullable: true},
+	}))
+	if !strings.Contains(out, "UpdatedAt Time `json:\"updated_at\"`") {
+		t.Errorf("a NOT NULL timestamp must be models.Time:\n%s", out)
+	}
+	if !strings.Contains(out, "ArchivedAt *Time `json:\"archived_at\"`") {
+		t.Errorf("a nullable timestamp must be *models.Time:\n%s", out)
+	}
+	if strings.Contains(out, "UpdatedAt string") || strings.Contains(out, "ArchivedAt *string") {
+		t.Errorf("a timestamp field fell back to string — the defect this type exists to close:\n%s", out)
+	}
+	// The nullable scan path goes through models.NullTime, whose payload is a
+	// Time. sql.NullTime's payload is a bare time.Time and would put a
+	// *time.Time on the struct — RFC3339Nano, the thing models.Time prevents.
+	if !strings.Contains(out, "var archived_atNull NullTime") {
+		t.Errorf("a nullable timestamp must scan through models.NullTime:\n%s", out)
+	}
+	if strings.Contains(out, "sql.NullTime") {
+		t.Errorf("sql.NullTime puts a bare time.Time on the struct:\n%s", out)
+	}
+}
+
+// TestUserModelTemplate_CreatedAtIsModelsTime is §A8: the template broke the
+// wire contract it ships with.
+//
+// CreatedAt was a bare time.Time here while every create_model output correctly
+// used models.Time — and the contract's own words are "never use a bare
+// time.Time in a model struct". Latent only while nothing serializes a User
+// wholesale; the first endpoint returning the struct emits RFC3339Nano.
+func TestUserModelTemplate_CreatedAtIsModelsTime(t *testing.T) {
+	out := renderAndParse(t, "user_model.go.tmpl", newData("user", nil))
+	if !strings.Contains(out, "CreatedAt Time `json:\"created_at\"`") {
+		t.Errorf("User.CreatedAt must be models.Time:\n%s", out)
+	}
+	if strings.Contains(out, "CreatedAt    time.Time") {
+		t.Error("User.CreatedAt is a bare time.Time — RFC3339Nano on the wire")
+	}
+}
+
+// TestValidateFieldTypes_RejectsUnknown keeps a typo from silently becoming a
+// string column.
+//
+// parseFields has no error return and goTypeFor's default is "string", so
+// `updated_at:timestmap` used to generate exactly the defect the timestamp type
+// was added to remove — arriving by typo instead of by necessity.
+func TestValidateFieldTypes_RejectsUnknown(t *testing.T) {
+	if err := validateFieldTypes([]Field{{Name: "updated_at", Type: "timestmap"}}); err == nil {
+		t.Fatal("an unknown field type must be an error, not a silent string")
+	}
+	for _, ok := range []string{"string", "int", "float", "boolean", "password", "timestamp"} {
+		if err := validateFieldTypes([]Field{{Name: "f", Type: ok}}); err != nil {
+			t.Errorf("%s should be accepted: %v", ok, err)
+		}
+	}
+}
+
+// TestAcceptedSQLTypes_TimestampTakesBothSpellings — SQLite has no date type,
+// so DATETIME is a convention and the same column is spelled DATETIME by one
+// author and TEXT by another. Both store identical bytes and both scan into
+// models.Time; refusing one would push the author back to declaring the field a
+// string, which is the defect.
+func TestAcceptedSQLTypes_TimestampTakesBothSpellings(t *testing.T) {
+	got := acceptedSQLTypes("timestamp")
+	for _, want := range []string{"DATETIME", "TEXT"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("timestamp should accept a %s column, got %v", want, got)
+		}
+	}
+	if slices.Contains(acceptedSQLTypes("string"), "DATETIME") {
+		t.Error("a string field must not silently sit on a DATETIME column")
 	}
 }

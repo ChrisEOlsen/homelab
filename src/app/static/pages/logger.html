@@ -3,16 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Logger &middot; Homelab</title>
-  <script>
-    (function() {
-      try {
-        var t = localStorage.getItem('theme');
-        if (t !== 'light' && t !== 'dark') t = 'dark';
-        document.documentElement.dataset.theme = t;
-      } catch (e) {}
-    })();
-  </script>
+  <title>Logger · Homelab</title>
+  <script src="/static/js/lib/theme-init.js"></script>
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="bg-canvas text-ink min-h-screen flex flex-col font-sans antialiased">

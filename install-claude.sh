@@ -2,101 +2,52 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_DIR="$HOME/.claude"
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
-warn() { echo -e "  ${YELLOW}!${NC} $1"; }
-fail() { echo -e "  ${RED}✗${NC} $1"; exit 1; }
-step() { echo -e "\n${BOLD}▶ $1${NC}"; }
+# shellcheck source=install-common.sh
+source "$SCRIPT_DIR/install-common.sh"
 
 echo ""
 echo -e "${BOLD}GOVA Monolith — Claude Code Setup${NC}"
 echo "======================================"
 
-step "Checking prerequisites"
-command -v docker >/dev/null 2>&1 || fail "docker not found — install Docker Desktop"
-command -v git    >/dev/null 2>&1 || fail "git not found"
-command -v curl   >/dev/null 2>&1 || fail "curl not found"
-ok "docker, git, curl present"
-
-command -v stripe >/dev/null 2>&1 \
-    && ok "stripe CLI present" \
-    || warn "stripe CLI not found — install for local webhook testing: https://stripe.com/docs/stripe-cli"
-
-step "Setting up .env"
-
-ENV_FILE="$SCRIPT_DIR/.env"
-EXAMPLE_FILE="$SCRIPT_DIR/env.example"
-
-set_env_var() {
-    local file="$1" key="$2" value="$3"
-    python3 - "$file" "$key" "$value" <<'PYEOF'
-import sys
-path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    lines = f.readlines()
-lines = [f"{key}={value}\n" if l.startswith(f"{key}=") else l for l in lines]
-with open(path, "w") as f:
-    f.writelines(lines)
-PYEOF
-}
-
-if [ ! -f "$ENV_FILE" ]; then
-    cp "$EXAMPLE_FILE" "$ENV_FILE"
-    ok "Copied env.example → .env"
-else
-    ok ".env already exists"
-fi
-
-CURRENT_APP_NAME=$(grep -E '^APP_NAME=' "$ENV_FILE" | head -1 | cut -d= -f2 | tr -d '"' | tr -d "'")
-CURRENT_APP_NAME="${CURRENT_APP_NAME:-my-gova-app}"
-printf "  App name [%s]: " "$CURRENT_APP_NAME"
-read -r INPUT_APP_NAME </dev/tty
-APP_NAME="${INPUT_APP_NAME:-$CURRENT_APP_NAME}"
-set_env_var "$ENV_FILE" "APP_NAME" "$APP_NAME"
-ok "APP_NAME set to: $APP_NAME"
-
-CURRENT_SECRET=$(grep -E '^SESSION_SECRET=' "$ENV_FILE" | head -1 | cut -d= -f2 | tr -d '"' | tr -d "'")
-if [ "$CURRENT_SECRET" = "change-me-to-32-random-bytes-before-use" ] || [ -z "$CURRENT_SECRET" ]; then
-    SESSION_SECRET=$(openssl rand -hex 32)
-    set_env_var "$ENV_FILE" "SESSION_SECRET" "$SESSION_SECRET"
-    ok "SESSION_SECRET generated and written to .env"
-else
-    ok "SESSION_SECRET already set"
-fi
-
-CONTAINER_NAME="${APP_NAME}-mcp-1"
-ok "MCP container: $CONTAINER_NAME"
+gova_check_prereqs
+gova_setup_env "$SCRIPT_DIR"
 
 step "Configuring ~/.claude/settings.json"
 
 python3 - <<'PYEOF'
-import json, os
+import json, os, sys
 
 settings_path = os.path.expanduser("~/.claude/settings.json")
-try:
-    with open(settings_path) as f:
-        settings = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    settings = {}
-
-settings.setdefault("enabledPlugins", {})
-if "superpowers@claude-plugins-official" not in settings["enabledPlugins"]:
-    settings["enabledPlugins"]["superpowers@claude-plugins-official"] = True
-    print("  + superpowers@claude-plugins-official added")
-else:
-    print("  - superpowers already registered")
+settings = {}
+if os.path.exists(settings_path):
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+    except json.JSONDecodeError as e:
+        # Abort rather than overwrite -- see the same guard in the MCP step.
+        # Falling back to {} here would have replaced the user's global Claude
+        # settings (permissions, hooks, env, model) with an empty object because
+        # the file had a typo in it.
+        sys.exit(
+            f"  x ~/.claude/settings.json is not valid JSON ({e}).\n"
+            f"    Refusing to overwrite it - fix or move the file, then re-run."
+        )
 
 if "mcpServers" in settings:
     del settings["mcpServers"]
     print("  ~ removed stale mcpServers from settings.json")
 
+# This installer used to register the third-party ui-ux-pro-max plugin. It no
+# longer does -- UI work is driven by the design bar in .claude/commands/build.md
+# instead. Remove the stale entries so a machine that ran an older version of
+# this script doesn't keep the plugin enabled.
+if settings.get("extraKnownMarketplaces", {}).pop("ui-ux-pro-max-skill", None) is not None:
+    print("  ~ removed stale ui-ux-pro-max-skill marketplace")
+if settings.get("enabledPlugins", {}).pop("ui-ux-pro-max@ui-ux-pro-max-skill", None) is not None:
+    print("  ~ removed stale ui-ux-pro-max plugin")
+
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
@@ -104,46 +55,60 @@ PYEOF
 
 ok "~/.claude/settings.json updated"
 
-step "Registering Stripe MCP"
+step "Registering remote MCP servers"
 
 python3 - <<'PYEOF'
-import json, os
+import json, os, sys
+
+# The remote MCP servers a GOVA build expects to be able to reach.
+#   stripe   - /build Step 5b uses it when SEED.md checks Payments.
+#   context7 - /build Step 5 tells every subagent to look up external API docs
+#              with it. It used to be named there and registered nowhere, so an
+#              agent that followed the instruction reached for a tool that did
+#              not exist.
+# These go in ~/.claude.json (user scope). The project's own .mcp.json is
+# generated further down for gova-builder and is rewritten per project.
+# install-opencode.sh registers the same two servers in .opencode/opencode.json,
+# which is project-scoped -- opencode has no user-scope equivalent of this file.
+REMOTE_SERVERS = {
+    "stripe": {"type": "http", "url": "https://mcp.stripe.com/"},
+    "context7": {"type": "http", "url": "https://mcp.context7.com/mcp"},
+}
 
 claude_json_path = os.path.expanduser("~/.claude.json")
-try:
-    with open(claude_json_path) as f:
-        config = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    config = {}
+config = {}
+if os.path.exists(claude_json_path):
+    try:
+        with open(claude_json_path) as f:
+            config = json.load(f)
+    except json.JSONDecodeError as e:
+        # ABORT RATHER THAN OVERWRITE. This used to fall back to config = {} and
+        # then write that back out, which turned "your file has a typo in it"
+        # into "your entire Claude configuration is gone" - projects, history,
+        # every other MCP server. A file we cannot parse is a file we must not
+        # replace.
+        sys.exit(
+            f"  x ~/.claude.json is not valid JSON ({e}).\n"
+            f"    Refusing to overwrite it - fix or move the file, then re-run."
+        )
 
 config.setdefault("mcpServers", {})
-if "stripe" not in config["mcpServers"]:
-    config["mcpServers"]["stripe"] = {"type": "http", "url": "https://mcp.stripe.com/"}
-    print("  + stripe MCP registered in ~/.claude.json")
-else:
-    print("  - stripe MCP already registered")
+for name, spec in REMOTE_SERVERS.items():
+    if name not in config["mcpServers"]:
+        config["mcpServers"][name] = spec
+        print(f"  + {name} MCP registered in ~/.claude.json")
+    else:
+        print(f"  - {name} MCP already registered")
 
 with open(claude_json_path, "w") as f:
     json.dump(config, f, indent=2)
     f.write("\n")
 PYEOF
 
-ok "Stripe MCP registered"
+ok "Remote MCP servers registered"
 
-step "Building Docker image"
-
-cd "$SCRIPT_DIR"
-docker compose up -d --build
-ok "Container up"
-
-step "Verifying MCP server binary"
-
-sleep 2
-if docker exec "$CONTAINER_NAME" /usr/local/bin/mcp-server </dev/null >/dev/null 2>&1; then
-    ok "MCP server binary present at /usr/local/bin/mcp-server"
-else
-    fail "MCP server binary not found. Run: docker compose logs mcp"
-fi
+gova_build_containers "$SCRIPT_DIR"
+gova_verify_mcp_binary "$CONTAINER_NAME"
 
 step "Generating .mcp.json"
 
@@ -181,4 +146,7 @@ echo "  2. Add API keys to .env if needed"
 echo "  3. Open Claude Code:  claude"
 echo "  4. Verify MCP tools:  /mcp"
 echo "  5. Start building:    /build"
+echo ""
+echo "  Using opencode too? Run ./install-opencode.sh — it shares this .env,"
+echo "  these containers, and the same /build and /launch commands."
 echo ""
