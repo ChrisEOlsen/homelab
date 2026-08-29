@@ -1,5 +1,5 @@
 import { get, post, put, del } from '/static/js/lib/api.js';
-import { confirmAction, playDialogEntrance } from '/static/js/lib/modal.js';
+import { confirmAction, createModal, playDialogEntrance } from '/static/js/lib/modal.js';
 import { collapseRowsOut, prefersReducedMotion } from '/static/js/lib/motion.js';
 
 // Opens or closes a todo's inline subtasks panel.
@@ -246,10 +246,13 @@ let lists = [];
 let todos = [];
 let activeListId = null;
 
-// List form state (shared between create and rename modes)
+// List modal state (title input + submit button reused between create and
+// rename modes — same elements as the former inline form, just mounted in
+// a modal now).
 let editingListId = null;
 let editingListSortOrder = 0;
 let listFormTitleEl, listTitleInput, listSubmitBtn, listCancelBtn, listErrEl;
+let listModal;
 
 // Todo form state (shared between create and edit modes)
 let editingTodoId = null;
@@ -259,7 +262,7 @@ let editingTodoSortOrder = 0;
 let todoFormTitleEl, todoListSelect, todoTitleInput, todoSubmitBtn, todoCancelBtn, todoErrEl;
 
 // Todo modal state (backdrop/panel built once in setupTodosCreateForm, then
-// shown/hidden — mirrors openEditSubtaskModal's visual pattern but persists
+// shown/hidden — mirrors the subtask modal's visual pattern but persists
 // the same form/select elements so populate/reset functions above keep working).
 let todoModalBackdrop, todoModalPanel, todoModalTriggerEl;
 
@@ -333,6 +336,7 @@ function renderSidebar() {
     p.className = 'text-sm text-ink-dim';
     p.textContent = 'No lists yet.';
     body.appendChild(p);
+    body.appendChild(makeAddListButton());
     return details;
   }
 
@@ -389,7 +393,23 @@ function renderSidebar() {
   });
 
   body.appendChild(ul);
+  body.appendChild(makeAddListButton());
   return details;
+}
+
+// The sidebar's "+ New List" button — opens the shared Add/Edit List modal
+// in create mode.
+function makeAddListButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className =
+    'w-full mt-2 px-3 py-1.5 text-xs border border-hairline text-ink-dim hover:text-ink hover:bg-surface-raised transition-colors';
+  btn.textContent = '+ New List';
+  btn.addEventListener('click', (e) => {
+    resetListFormToCreateMode();
+    openListModal(e.currentTarget);
+  });
+  return btn;
 }
 
 function renderMain() {
@@ -556,30 +576,14 @@ function renderMain() {
     });
     actions.appendChild(subtasksBtn);
 
-    // The inline add-subtask form is desktop-only (see renderInlineSubtasks)
-    // — on mobile, adding a subtask happens through this menu instead, since
-    // there's no room for both an always-open form and a real mobile layout.
+    // Adding a subtask happens through the "⋯" menu on every width now —
+    // the former inline form was desktop-only and replaced a prompt on
+    // mobile, both of which are collapsed into this single modal flow.
     const todoActions = [];
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      todoActions.push({
-        label: 'Add Subtask',
-        onClick: async () => {
-          const title = window.prompt('New subtask title:');
-          if (!title || !title.trim()) return;
-          deleteErrEl.classList.add('hidden');
-          const res = await post('/api/v1/subtasks', { todo_id: item.id, title });
-          if (res.ok) {
-            // subWrap is already in the DOM (see below) — no full render()
-            // needed, just refresh this one todo's scoped subtasks block.
-            expandedTodoIds.add(item.id);
-            await loadSubtasks(item.id);
-          } else {
-            deleteErrEl.textContent = res.error ?? 'Failed to add subtask.';
-            deleteErrEl.classList.remove('hidden');
-          }
-        },
-      });
-    }
+    todoActions.push({
+      label: 'Add Subtask',
+      onClick: () => openSubtaskModal({ todoId: item.id }),
+    });
     todoActions.push(
       { label: 'Edit', onClick: () => populateTodoFormForEdit(item) },
       {
@@ -657,81 +661,70 @@ async function loadSubtasks(todoId) {
   render();
 }
 
-// A real modal for editing a subtask's title, replacing window.prompt()'s
-// single-line box (which truncates/cramps long text and forces horizontal
-// scrolling to see or edit the end of it). A wrapping <textarea> shows the
-// whole thing at once. Closes on Escape, backdrop click, or Cancel.
-function openEditSubtaskModal(sub, todoId) {
-  const backdrop = document.createElement('div');
-  backdrop.className = 'fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4';
-
-  const modal = document.createElement('div');
-  modal.className = 'bg-surface border border-hairline p-5 w-full max-w-md space-y-3 dialog-enter';
-  modal.setAttribute('role', 'dialog');
-  modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-labelledby', 'edit-subtask-title');
-  modal.addEventListener('click', (e) => e.stopPropagation());
-  backdrop.appendChild(modal);
+// A real modal for adding or editing a subtask, replacing both the former
+// desktop-only inline form and window.prompt()'s single-line box (which
+// truncates/cramps long text and forces horizontal scrolling to see or edit
+// the end of it). A wrapping <textarea> shows the whole thing at once.
+// Closes on Escape, backdrop click, or Cancel; autoDestroy removes the
+// backdrop on close since a fresh modal is built per open.
+function openSubtaskModal({ sub = null, todoId, trigger = null } = {}) {
+  const editing = sub !== null;
+  const titleId = editing ? 'edit-subtask-title' : 'add-subtask-title';
+  const modal = createModal(titleId, { autoDestroy: true });
+  const { panel } = modal;
 
   const heading = document.createElement('h3');
-  heading.id = 'edit-subtask-title';
+  heading.id = titleId;
   heading.className = 'text-sm font-semibold text-ink';
-  heading.textContent = 'Edit Subtask';
-  modal.appendChild(heading);
+  heading.textContent = editing ? 'Edit Subtask' : 'New Subtask';
+  panel.appendChild(heading);
 
   const textarea = document.createElement('textarea');
   textarea.rows = 4;
-  textarea.value = sub.title;
+  if (editing) textarea.value = sub.title;
+  textarea.placeholder = 'New subtask';
   textarea.className =
-    'w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent';
-  modal.appendChild(textarea);
+    'w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+  panel.appendChild(textarea);
 
   const errEl = document.createElement('p');
   errEl.className = 'text-xs text-danger hidden';
-  modal.appendChild(errEl);
+  panel.appendChild(errEl);
 
   const btnRow = document.createElement('div');
   btnRow.className = 'flex items-center justify-end gap-2';
-  modal.appendChild(btnRow);
-
-  function close() {
-    document.removeEventListener('keydown', onKeydown);
-    backdrop.remove();
-  }
-  function onKeydown(e) {
-    if (e.key === 'Escape') close();
-  }
-  backdrop.addEventListener('click', close);
-  document.addEventListener('keydown', onKeydown);
+  panel.appendChild(btnRow);
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className =
     'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
   cancelBtn.textContent = 'Cancel';
-  cancelBtn.addEventListener('click', close);
+  cancelBtn.addEventListener('click', () => modal.close());
   btnRow.appendChild(cancelBtn);
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.className =
     'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
-  saveBtn.textContent = 'Save';
+  saveBtn.textContent = editing ? 'Save' : 'Add Subtask';
   saveBtn.addEventListener('click', async () => {
-    const newTitle = textarea.value.trim();
-    if (!newTitle) {
+    const title = textarea.value.trim();
+    if (!title) {
       errEl.textContent = 'Title is required.';
       errEl.classList.remove('hidden');
       return;
     }
-    if (newTitle === sub.title) {
-      close();
+    if (editing && title === sub.title) {
+      modal.close();
       return;
     }
     saveBtn.disabled = true;
-    const res = await put('/api/v1/subtasks/' + sub.id, { title: newTitle });
+    const res = editing
+      ? await put('/api/v1/subtasks/' + sub.id, { title })
+      : await post('/api/v1/subtasks', { todo_id: todoId, title });
     if (res.ok) {
-      close();
+      modal.close();
       await loadSubtasks(todoId);
     } else {
       saveBtn.disabled = false;
@@ -741,9 +734,7 @@ function openEditSubtaskModal(sub, todoId) {
   });
   btnRow.appendChild(saveBtn);
 
-  document.body.appendChild(backdrop);
-  textarea.focus();
-  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  modal.open(trigger);
 }
 
 function renderInlineSubtasks(todoId) {
@@ -782,7 +773,7 @@ function renderInlineSubtasks(todoId) {
         makeActionsMenu([
           {
             label: 'Edit',
-            onClick: () => openEditSubtaskModal(sub, todoId),
+            onClick: () => openSubtaskModal({ sub, todoId }),
           },
           {
             label: 'Delete',
@@ -806,43 +797,16 @@ function renderInlineSubtasks(todoId) {
 
     wrap.appendChild(list);
   } else {
-    // Hidden on mobile: adding the first subtask there happens via the
-    // todo's own "⋯" menu ("Add Subtask") instead of this inline form —
-    // see the mobile-only branch in renderMain's actions menu below.
+    // With the inline add-form gone (adding happens via the todo's "⋯" menu
+    // -> "Add Subtask" modal now), a bare "No subtasks yet." reads fine on
+    // desktop; on mobile it stays hidden because the subtasks panel with
+    // nothing in it should render as nothing at all.
     const p = document.createElement('p');
     p.className = 'hidden md:block text-sm text-ink-dim';
     p.textContent = 'No subtasks yet.';
     wrap.appendChild(p);
   }
 
-  // Hidden on mobile for the same reason — desktop keeps this inline form.
-  const form = document.createElement('form');
-  form.className = 'hidden md:flex items-center gap-2';
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'New subtask';
-  input.className =
-    'flex-1 bg-canvas border border-hairline px-2 py-1 text-sm text-ink focus:outline-none focus:border-accent';
-  form.appendChild(input);
-
-  const addBtn = document.createElement('button');
-  addBtn.type = 'submit';
-  addBtn.className = 'px-3 py-1 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors';
-  addBtn.textContent = 'Add';
-  form.appendChild(addBtn);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!input.value.trim()) return;
-    addBtn.disabled = true;
-    await post('/api/v1/subtasks', { todo_id: todoId, title: input.value });
-    input.value = '';
-    addBtn.disabled = false;
-    await loadSubtasks(todoId);
-  });
-
-  wrap.appendChild(form);
   return wrap;
 }
 
@@ -900,9 +864,9 @@ function populateListFormForEdit(list) {
   editingListSortOrder = list.sort_order;
   listFormTitleEl.textContent = 'Edit List';
   listSubmitBtn.textContent = 'Save Changes';
-  listCancelBtn.classList.remove('hidden');
   listTitleInput.value = list.title;
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  listErrEl.classList.add('hidden');
+  openListModal();
 }
 
 function resetListFormToCreateMode() {
@@ -910,26 +874,30 @@ function resetListFormToCreateMode() {
   editingListSortOrder = 0;
   listFormTitleEl.textContent = 'New List';
   listSubmitBtn.textContent = 'Add List';
-  listCancelBtn.classList.add('hidden');
   listTitleInput.value = '';
+  listErrEl.classList.add('hidden');
 }
 
-setupTodoListsCreateForm(document.getElementById('forms-container'));
-setupTodosCreateForm();
-// @inject-forms
+setupListModal();
 
 async function init() {
   await loadList();
 }
-
 init();
 
-function setupTodoListsCreateForm(container) {
-  const { details, body, labelEl } = makeCollapsibleSection(
-    'New List',
-    'border border-hairline bg-surface p-5 space-y-3 mt-4'
-  );
-  listFormTitleEl = labelEl;
+// Builds the Add/Edit List modal once (backdrop/panel appended to body,
+// hidden until opened — same pattern as the todo modal). The sidebar's
+// "+ New List" button and each list's kebab "Edit" action share it.
+function setupListModal() {
+  listModal = createModal('list-modal-title');
+  const { panel } = listModal;
+
+  const heading = document.createElement('h3');
+  heading.id = 'list-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New List';
+  panel.appendChild(heading);
+  listFormTitleEl = heading;
 
   const form = document.createElement('form');
   form.className = 'space-y-3';
@@ -947,21 +915,24 @@ function setupTodoListsCreateForm(container) {
   form.appendChild(listTitleInput);
 
   const btnRow = document.createElement('div');
-  btnRow.className = 'flex items-center gap-2';
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  listCancelBtn = document.createElement('button');
+  listCancelBtn.type = 'button';
+  listCancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  listCancelBtn.textContent = 'Cancel';
+  listCancelBtn.addEventListener('click', () => {
+    resetListFormToCreateMode();
+    listModal.close();
+  });
+  btnRow.appendChild(listCancelBtn);
 
   listSubmitBtn = document.createElement('button');
   listSubmitBtn.type = 'submit';
   listSubmitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
   listSubmitBtn.textContent = 'Add List';
   btnRow.appendChild(listSubmitBtn);
-
-  listCancelBtn = document.createElement('button');
-  listCancelBtn.type = 'button';
-  listCancelBtn.className =
-    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors hidden';
-  listCancelBtn.textContent = 'Cancel';
-  listCancelBtn.addEventListener('click', resetListFormToCreateMode);
-  btnRow.appendChild(listCancelBtn);
 
   form.appendChild(btnRow);
 
@@ -982,6 +953,7 @@ function setupTodoListsCreateForm(container) {
     listSubmitBtn.disabled = false;
     if (res.ok) {
       resetListFormToCreateMode();
+      listModal.close();
       await loadList();
     } else {
       listErrEl.textContent = res.error ?? 'Something went wrong.';
@@ -989,8 +961,14 @@ function setupTodoListsCreateForm(container) {
     }
   });
 
-  body.appendChild(form);
-  container.appendChild(details);
+  panel.appendChild(form);
+}
+
+// Opens the Add/Edit List modal. `trigger` is the element focus returns to
+// on close.
+function openListModal(trigger) {
+  listModal.open(trigger);
+  playDialogEntrance(listModal.panel);
 }
 
 // Opens the Add/Edit Todo modal. `trigger` is the element focus should

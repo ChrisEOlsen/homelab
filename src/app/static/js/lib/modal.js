@@ -1,8 +1,11 @@
 // Centered dialog: dark scrim backdrop, bg-surface panel, Escape/backdrop
 // click to close, minimal Tab focus trap, focus returns to the trigger on
 // close. Shared by any page that needs an add/edit modal instead of an
-// inline form (Bookmarks, Logger, ...).
-export function createModal(titleId) {
+// inline form (Bookmarks, Logger, ...). Pass { autoDestroy: true } for a
+// one-shot dialog whose backdrop is removed from the DOM on close — used
+// when a fresh modal is built per open (per-row add/edit dialogs), so they
+// don't accumulate hidden backdrops.
+export function createModal(titleId, { autoDestroy = false } = {}) {
   const backdrop = document.createElement('div');
   backdrop.className = 'fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4';
 
@@ -48,6 +51,7 @@ export function createModal(titleId) {
     document.removeEventListener('keydown', onKeydown);
     if (triggerEl instanceof HTMLElement) triggerEl.focus();
     triggerEl = null;
+    if (autoDestroy) backdrop.remove();
   }
 
   backdrop.addEventListener('click', close);

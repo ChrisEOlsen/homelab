@@ -415,6 +415,94 @@ function renderSidebar() {
   return details;
 }
 
+// ---- Entry modal (dynamic fields per the category's schema) ----
+// Replaces the former always-open inline "New Entry" form. A fresh modal
+// is built per open so its fields always match the selected category's
+// current schema; autoDestroy removes the backdrop on close.
+function openEntryModal(category, schema, trigger) {
+  const modal = createModal('entry-modal-title', { autoDestroy: true });
+  const { panel } = modal;
+
+  const heading = document.createElement('h3');
+  heading.id = 'entry-modal-title';
+  heading.className = 'text-sm font-semibold text-ink';
+  heading.textContent = 'New ' + category.title + ' Entry';
+  panel.appendChild(heading);
+
+  const form = document.createElement('form');
+  form.className = 'space-y-3';
+
+  const fieldInputs = {};
+
+  schema.forEach((field) => {
+    const label = document.createElement('label');
+    label.className = 'block text-xs font-medium text-ink-dim mb-1';
+    label.textContent = field.name;
+
+    const input = document.createElement('input');
+    input.type = field.type === 'date' || field.type === 'time' ? field.type : 'text';
+    input.name = field.name;
+    input.className =
+      'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
+
+    form.appendChild(label);
+    form.appendChild(input);
+
+    fieldInputs[field.name] = input;
+  });
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'flex items-center justify-end gap-2';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className =
+    'px-4 py-2 border border-hairline text-ink-dim text-xs font-medium hover:text-ink hover:bg-surface-raised transition-colors';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => modal.close());
+  btnRow.appendChild(cancelBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
+  submitBtn.textContent = 'Add Entry';
+  btnRow.appendChild(submitBtn);
+
+  form.appendChild(btnRow);
+
+  const errEl = document.createElement('p');
+  errEl.className = 'text-sm text-danger mt-2 hidden';
+  form.appendChild(errEl);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    errEl.classList.add('hidden');
+
+    const data = {};
+    schema.forEach((field) => {
+      data[field.name] = fieldInputs[field.name].value;
+    });
+
+    const res = await post('/api/v1/log_entries', {
+      category_id: category.id,
+      data,
+    });
+
+    submitBtn.disabled = false;
+    if (res.ok) {
+      modal.close();
+      await loadEntries();
+    } else {
+      errEl.textContent = res.error ?? 'Something went wrong.';
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  panel.appendChild(form);
+  modal.open(trigger);
+}
+
 function renderMain() {
   const section = document.createElement('section');
   section.className = 'flex-1 space-y-4 min-w-0';
@@ -431,12 +519,27 @@ function renderMain() {
 
   const schema = parseSchema(selected);
 
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-between gap-4';
+
   const heading = document.createElement('h2');
   heading.className = 'text-lg font-semibold text-ink';
   heading.textContent = selected.title;
-  section.appendChild(heading);
+  header.appendChild(heading);
 
-  section.appendChild(renderEntryForm(selected, schema));
+  // The "+ New Entry" button replaces the former always-open inline form.
+  // Disabled when the category has no fields — there's nothing to fill in.
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className =
+    'px-3 py-1.5 text-xs border border-accent text-accent hover:bg-accent hover:text-canvas transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-accent';
+  addBtn.textContent = '+ New Entry';
+  addBtn.disabled = schema.length === 0;
+  if (schema.length === 0) addBtn.title = 'Add fields to this category to start logging entries.';
+  addBtn.addEventListener('click', (e) => openEntryModal(selected, schema, e.currentTarget));
+  header.appendChild(addBtn);
+
+  section.appendChild(header);
   section.appendChild(renderEntryTable(schema));
 
   return section;
@@ -531,78 +634,6 @@ function renderEntryTable(schema) {
   table.appendChild(tbody);
   wrap.appendChild(table);
   return wrap;
-}
-
-function renderEntryForm(category, schema) {
-  const { details, body } = makeCollapsibleSection('New Entry', 'border border-hairline bg-surface p-5 space-y-3');
-
-  if (schema.length === 0) {
-    const p = document.createElement('p');
-    p.className = 'text-sm text-ink-dim';
-    p.textContent = 'Add fields to this category to start logging entries.';
-    body.appendChild(p);
-    return details;
-  }
-
-  const form = document.createElement('form');
-  form.className = 'space-y-3';
-
-  const fieldInputs = {};
-
-  schema.forEach((field) => {
-    const label = document.createElement('label');
-    label.className = 'block text-xs font-medium text-ink-dim mb-1';
-    label.textContent = field.name;
-
-    const input = document.createElement('input');
-    input.type = field.type === 'date' || field.type === 'time' ? field.type : 'text';
-    input.name = field.name;
-    input.className =
-      'mt-1 block w-full bg-canvas border border-hairline px-3 py-2 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:border-accent';
-
-    form.appendChild(label);
-    form.appendChild(input);
-
-    fieldInputs[field.name] = input;
-  });
-
-  const submitBtn = document.createElement('button');
-  submitBtn.type = 'submit';
-  submitBtn.className = 'px-4 py-2 border border-accent text-accent text-xs font-medium hover:bg-accent hover:text-canvas transition-colors';
-  submitBtn.textContent = 'Add Entry';
-  form.appendChild(submitBtn);
-
-  const errEl = document.createElement('p');
-  errEl.className = 'text-sm text-danger mt-2 hidden';
-  form.appendChild(errEl);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    submitBtn.disabled = true;
-    errEl.classList.add('hidden');
-
-    const data = {};
-    schema.forEach((field) => {
-      data[field.name] = fieldInputs[field.name].value;
-    });
-
-    const res = await post('/api/v1/log_entries', {
-      category_id: category.id,
-      data,
-    });
-
-    submitBtn.disabled = false;
-    if (res.ok) {
-      form.reset();
-      await loadEntries();
-    } else {
-      errEl.textContent = res.error ?? 'Something went wrong.';
-      errEl.classList.remove('hidden');
-    }
-  });
-
-  body.appendChild(form);
-  return details;
 }
 
 buildCategoryModal();
